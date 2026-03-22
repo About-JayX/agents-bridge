@@ -12,6 +12,13 @@ import {
 
 let claudePty: ClaudePty | null = null;
 
+/** Send a message to the running Claude PTY as user input. */
+export function sendToClaudePty(text: string) {
+  if (!claudePty?.running) return false;
+  claudePty.write(text + "\n");
+  return true;
+}
+
 interface GuiServerDeps {
   codex: CodexAdapter;
   tuiState: TuiConnectionState;

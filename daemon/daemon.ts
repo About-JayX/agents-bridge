@@ -5,7 +5,7 @@ import { CodexAdapter } from "./adapters/codex-adapter";
 import { TuiConnectionState } from "./tui-connection-state";
 import { state, broadcastToGui } from "./daemon-state";
 import { startControlServer, emitToClaude } from "./control-server";
-import { startGuiServer } from "./gui-server";
+import { startGuiServer, sendToClaudePty } from "./gui-server";
 import type { BridgeMessage } from "./types";
 
 // ── Config ─────────────────────────────────────────────────
@@ -128,7 +128,13 @@ codex.on("agentMessage", (msg: BridgeMessage) => {
   if (msg.source !== "codex") return;
   log(`Forwarding Codex -> Claude (${msg.content.length} chars)`);
   emitToClaude(msg);
-  // Final complete message — GUI uses this to finalize the streamed message
+
+  // Forward to Claude PTY if running
+  const sent = sendToClaudePty(
+    `[Codex message received] Review and respond:\n${msg.content}`,
+  );
+  if (sent) log("Injected Codex message into Claude PTY");
+
   broadcastToGui({
     type: "agent_message",
     payload: msg,
