@@ -22,6 +22,7 @@ paths:
 - 公共类型定义放 `daemon/types.ts`、`daemon/control-protocol.ts`、`daemon/adapters/codex-types.ts`
 - 工具函数和可复用逻辑抽为独立模块
 - 服务器模块通过依赖注入（deps 参数）获取共享依赖，不直接 import daemon.ts 中的变量
+- 新 session 的启动副作用（如协议注入、首次状态广播）只能有一个权威入口，禁止在 `ready` 事件和 GUI 成功回调里重复触发
 
 ## 性能优化
 - 避免高频广播：同类型状态变更做节流（如 rateLimits 更新）
@@ -31,6 +32,7 @@ paths:
 ## 代码检查
 - 每次修改后必须执行 `npx tsc --noEmit -p tsconfig.daemon.json` 确保零类型错误
 - 不允许未处理的 Promise rejection，异步操作必须有 catch 或 try/catch
+- GUI/daemon 的 `.then()` 链必须以 `.catch()` 收口，并向 GUI 写入可见错误日志
 
 ## 测试与重启
 - Daemon 代码（`daemon/**/*.ts`）没有 HMR，修改后**必须重启**：`pkill -f "bun run daemon"; sleep 1; bun run daemon/index.ts &`

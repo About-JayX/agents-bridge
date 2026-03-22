@@ -89,7 +89,7 @@ function broadcastStatus() {
   });
 }
 
-/** Inject collaboration protocol into Codex — called after every new session. */
+/** Inject collaboration protocol into Codex exactly once for each new session. */
 function injectCodexProtocol() {
   codex.injectMessage(
     `AgentBridge is active. You are connected to Claude Code via a bridge.
@@ -97,7 +97,12 @@ function injectCodexProtocol() {
 ## Collaboration Protocol:
 - When you need Claude to review code, fix bugs, or take action, include "@claude" in your response.
 - When your task is complete and no review is needed, respond normally WITHOUT "@claude".
-- Only use "@claude" when human-level review or a different perspective is genuinely needed.`,
+- Only use "@claude" when human-level review or a different perspective is genuinely needed.
+${
+  state.attachedClaude
+    ? "- Claude Code is currently online. You can ask for review immediately with @claude."
+    : "- Claude Code is currently offline. Wait until it reconnects before requesting @claude."
+}`,
   );
 }
 
@@ -108,7 +113,6 @@ const serverDeps = {
   broadcastStatus,
   log,
   attachCmd,
-  injectCodexProtocol,
 };
 
 // ── Codex events ───────────────────────────────────────────
@@ -178,12 +182,6 @@ codex.on("ready", (threadId: string) => {
     timestamp: Date.now(),
   });
   injectCodexProtocol();
-
-  if (state.attachedClaude) {
-    codex.injectMessage(
-      "AgentBridge connected to Claude Code. You can now communicate with Claude bidirectionally.",
-    );
-  }
 });
 
 codex.on("tuiConnected", (connId: number) => {

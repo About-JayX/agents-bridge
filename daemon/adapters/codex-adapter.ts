@@ -197,7 +197,6 @@ export class CodexAdapter extends EventEmitter {
             const tid = msg.result?.thread?.id;
             if (tid) {
               this.handler.setActiveThreadId(tid, "initSession");
-              this.emit("ready", tid);
               resolve({ success: true });
             } else {
               resolve({

@@ -125,3 +125,5 @@ GUI 内一键注册，或手动添加到 `~/.claude/mcp.json`:
 | node-pty 在 Bun 中 spawn 失败 | Bun 不兼容 node-pty native addon | 用 Node.js 子进程运行 PTY helper (claude-pty-helper.cjs) | daemon.md |
 | node-pty 在 Node v24 中崩溃 | 预编译 binary 不兼容 | `npx node-gyp rebuild --directory=node_modules/node-pty` | — |
 | xterm.js 终端黑屏 | PTY 数据在 xterm 初始化前到达被丢弃 | 缓冲 PTY 数据，xterm open 后回放 | frontend.md |
+| `@claude` 协议被重复注入 | `ready` 事件和 GUI 成功回调都在注入协议，`initSession` 还重复发了 `ready` | 统一由 `ready` 事件单点注入，移除重复 `ready`/重复注入 | daemon.md |
+| 配置重连失败时静默丢错 | GUI 的 Promise 链没有 `.catch()`，异常只会变成未处理 rejection | 所有 GUI 重连链路补 `.catch()`，同时广播可见错误日志 | daemon.md |
