@@ -34,6 +34,11 @@ export class ClaudePty {
       new URL("./claude-pty-helper.cjs", import.meta.url),
     );
 
+    const nodePath = new URL("../node_modules", import.meta.url).pathname;
+    this.log(
+      `Helper: ${helperPath}, NODE_PATH: ${nodePath}, CLAUDE: ${process.env.CLAUDE_PATH || "claude"}`,
+    );
+
     this.proc = spawn("node", [helperPath], {
       cwd: dir,
       stdio: ["pipe", "pipe", "pipe"],
@@ -41,9 +46,13 @@ export class ClaudePty {
         ...process.env,
         PTY_COLS: String(cols),
         PTY_ROWS: String(rows),
-        NODE_PATH: new URL("../node_modules", import.meta.url).pathname,
+        NODE_PATH: nodePath,
         CLAUDE_PATH: process.env.CLAUDE_PATH || "claude",
       },
+    });
+
+    this.proc.on("error", (err) => {
+      this.log(`Helper spawn error: ${err.message}`);
     });
 
     // Read JSON messages from helper stdout

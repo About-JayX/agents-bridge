@@ -25,6 +25,7 @@ interface BridgeState {
     rateLimitType: string;
     resetsAt: number;
   } | null;
+  claudePtyRunning: boolean;
 
   sendToCodex: (content: string) => void;
   clearMessages: () => void;
@@ -166,6 +167,9 @@ export const useBridgeStore = create<BridgeState>((set, get) => {
                 threadId,
               },
             },
+            ...(agent === "claude" && status === "disconnected"
+              ? { claudePtyRunning: false }
+              : {}),
           }));
           break;
         }
@@ -221,6 +225,7 @@ export const useBridgeStore = create<BridgeState>((set, get) => {
     codexPhase: "idle" as CodexPhase,
     terminalLines: [],
     claudeRateLimit: null,
+    claudePtyRunning: false,
 
     sendToCodex: (content) => sendWs({ type: "send_to_codex", content }),
     clearMessages: () => set({ messages: [] }),
@@ -231,11 +236,16 @@ export const useBridgeStore = create<BridgeState>((set, get) => {
       reasoningEffort?: string;
       cwd?: string;
     }) => sendWs({ type: "apply_config", ...config }),
-    launchClaude: (cwd?, cols?, rows?) =>
-      sendWs({ type: "launch_claude", cwd, cols, rows }),
+    launchClaude: (cwd?, cols?, rows?) => {
+      sendWs({ type: "launch_claude", cwd, cols, rows });
+      set({ claudePtyRunning: true });
+    },
     sendPtyInput: (data) => sendWs({ type: "pty_input", data }),
     resizePty: (cols, rows) => sendWs({ type: "pty_resize", cols, rows }),
-    stopClaude: () => sendWs({ type: "stop_claude" }),
+    stopClaude: () => {
+      sendWs({ type: "stop_claude" });
+      set({ claudePtyRunning: false });
+    },
     onPtyData: null,
   };
 });

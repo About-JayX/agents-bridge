@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { invoke } from "@tauri-apps/api/core";
-import { useBridgeStore, type TerminalLine } from "@/stores/bridge-store";
+import { useBridgeStore } from "@/stores/bridge-store";
 import { useCodexAccountStore } from "@/stores/codex-account-store";
 
 function shortenPath(p: string): string {
@@ -87,20 +87,12 @@ interface ClaudePanelProps {
 
 export function ClaudePanel({ connected }: ClaudePanelProps) {
   const [mcpRegistered, setMcpRegistered] = useState<boolean | null>(null);
-  const [inputText, setInputText] = useState("");
   const [cwd, setCwd] = useState("");
 
-  const allLines = useBridgeStore((s) => s.terminalLines);
+  const isRunning = useBridgeStore((s) => s.claudePtyRunning);
   const launchClaude = useBridgeStore((s) => s.launchClaude);
-  const sendPtyInput = useBridgeStore((s) => s.sendPtyInput);
   const stopClaude = useBridgeStore((s) => s.stopClaude);
   const pickDirectory = useCodexAccountStore((s) => s.pickDirectory);
-
-  const statusLines: TerminalLine[] = [];
-  for (const l of allLines) {
-    if (l.agent === "claude") statusLines.push(l);
-  }
-  const isRunning = statusLines.length > 0;
 
   useEffect(() => {
     invoke<boolean>("check_mcp_registered")
@@ -120,16 +112,10 @@ export function ClaudePanel({ connected }: ClaudePanelProps) {
         setMcpRegistered(true);
       } catch {}
     }
-    if (!cwd) return; // Must select project first
+    if (!cwd) return;
     launchClaude(cwd);
+    window.dispatchEvent(new CustomEvent("switch-to-terminal"));
   }, [mcpRegistered, launchClaude, cwd]);
-
-  const handleSend = useCallback(() => {
-    const text = inputText.trim();
-    if (!text) return;
-    sendPtyInput(text);
-    setInputText("");
-  }, [inputText, sendPtyInput]);
 
   return (
     <div className="rounded-lg border border-input bg-card p-3">
@@ -178,36 +164,16 @@ export function ClaudePanel({ connected }: ClaudePanelProps) {
       {/* Quota (when connected or running) */}
       {(connected || isRunning) && <ClaudeQuota />}
 
-      {/* Input (when running) */}
+      {/* Stop button (when running) */}
       {(isRunning || connected) && (
-        <>
-          <div className="mt-2 flex gap-1.5">
-            <input
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              placeholder="Send to Claude..."
-              className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-[11px] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring"
-            />
-            <Button size="xs" variant="secondary" onClick={handleSend}>
-              Send
-            </Button>
-          </div>
-          <Button
-            size="xs"
-            variant="destructive"
-            className="w-full mt-1.5"
-            onClick={stopClaude}
-          >
-            Stop Claude
-          </Button>
-        </>
+        <Button
+          size="xs"
+          variant="destructive"
+          className="w-full mt-2"
+          onClick={stopClaude}
+        >
+          Stop Claude
+        </Button>
       )}
 
       {/* Launch (when not running) */}

@@ -50,6 +50,7 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
   const xtermContainerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const ptyBufferRef = useRef<string[]>([]);
 
   const clearMessages = useBridgeStore((s) => s.clearMessages);
   const codexPhase = useBridgeStore((s) => s.codexPhase);
@@ -64,9 +65,30 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
     if (l.kind === "error") errorLines.push(l);
   }
 
-  // Initialize xterm.js
+  // Buffer PTY data immediately (before xterm is ready)
   useEffect(() => {
-    if (!xtermContainerRef.current || xtermRef.current) return;
+    useBridgeStore.setState({
+      onPtyData: (data: string) => {
+        if (xtermRef.current) {
+          xtermRef.current.write(data);
+        } else {
+          ptyBufferRef.current.push(data);
+        }
+      },
+    });
+    return () => {
+      useBridgeStore.setState({ onPtyData: null });
+    };
+  }, []);
+
+  // Initialize xterm.js when terminal tab becomes visible
+  useEffect(() => {
+    if (tab !== "terminal" || !xtermContainerRef.current || xtermRef.current) {
+      if (tab === "terminal" && xtermRef.current) {
+        setTimeout(() => fitAddonRef.current?.fit(), 50);
+      }
+      return;
+    }
 
     const term = new Terminal({
       theme: {
@@ -78,51 +100,43 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
       fontFamily: "'Menlo', 'Monaco', 'Courier New', monospace",
       fontSize: 13,
       cursorBlink: true,
-      convertEol: true,
+      scrollback: 5000,
+      allowProposedApi: true,
     });
 
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(xtermContainerRef.current);
-    fitAddon.fit();
+    setTimeout(() => fitAddon.fit(), 100);
 
-    // Forward keystrokes to PTY
     term.onData((data) => sendPtyInput(data));
-
-    // Notify PTY of resize
     term.onResize(({ cols, rows }) => resizePty(cols, rows));
 
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    // Subscribe to PTY data
-    useBridgeStore.setState({
-      onPtyData: (data: string) => term.write(data),
-    });
-
-    return () => {
-      useBridgeStore.setState({ onPtyData: null });
-      term.dispose();
-      xtermRef.current = null;
-      fitAddonRef.current = null;
-    };
-  }, [sendPtyInput, resizePty]);
-
-  // Fit terminal when switching to terminal tab
-  useEffect(() => {
-    if (tab === "terminal") {
-      setTimeout(() => fitAddonRef.current?.fit(), 50);
+    // Flush buffered PTY data
+    for (const chunk of ptyBufferRef.current) {
+      term.write(chunk);
     }
-  }, [tab]);
+    ptyBufferRef.current = [];
+  }, [tab, sendPtyInput, resizePty]);
 
-  // Handle resize
+  // Handle resize (debounced)
   useEffect(() => {
-    if (!fitAddonRef.current) return;
+    if (!fitAddonRef.current || !xtermContainerRef.current) return;
+    let timer: ReturnType<typeof setTimeout>;
     const observer = new ResizeObserver(() => {
-      if (tab === "terminal") fitAddonRef.current?.fit();
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (tab === "terminal") fitAddonRef.current?.fit();
+      }, 100);
     });
-    if (xtermContainerRef.current) observer.observe(xtermContainerRef.current);
-    return () => observer.disconnect();
+    observer.observe(xtermContainerRef.current);
+    return () => {
+      clearTimeout(timer);
+      observer.disconnect();
+    };
   }, [tab]);
 
   // Scroll messages
