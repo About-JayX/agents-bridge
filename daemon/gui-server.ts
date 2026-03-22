@@ -25,6 +25,7 @@ interface GuiServerDeps {
   currentStatus: () => any;
   broadcastStatus: () => void;
   log: (msg: string) => void;
+  codexDevInstructions: string;
 }
 
 export function startGuiServer(port: number, deps: GuiServerDeps) {
@@ -150,51 +151,54 @@ function handleGuiMessage(
         timestamp: Date.now(),
       });
 
-      codex.initSession().then((result) => {
-        if (result.success) {
-          log("Codex session initialized successfully");
-          tuiState.markBridgeReady();
-          broadcastToGui({
-            type: "agent_status",
-            payload: {
-              agent: "codex",
-              status: "connected",
-              threadId: codex.activeThreadId,
-            },
-            timestamp: Date.now(),
-          });
-          broadcastToGui({
-            type: "system_log",
-            payload: {
-              level: "info",
-              message: `Codex connected! Thread: ${codex.activeThreadId}`,
-            },
-            timestamp: Date.now(),
-          });
-          broadcastStatus();
-        } else {
-          log(`Codex session init failed: ${result.error}`);
+      codex
+        .initSession({ developerInstructions: deps.codexDevInstructions })
+        .then((result) => {
+          if (result.success) {
+            log("Codex session initialized successfully");
+            tuiState.markBridgeReady();
+            broadcastToGui({
+              type: "agent_status",
+              payload: {
+                agent: "codex",
+                status: "connected",
+                threadId: codex.activeThreadId,
+              },
+              timestamp: Date.now(),
+            });
+            broadcastToGui({
+              type: "system_log",
+              payload: {
+                level: "info",
+                message: `Codex connected! Thread: ${codex.activeThreadId}`,
+              },
+              timestamp: Date.now(),
+            });
+            broadcastStatus();
+          } else {
+            log(`Codex session init failed: ${result.error}`);
+            broadcastToGui({
+              type: "system_log",
+              payload: {
+                level: "error",
+                message: `Codex connection failed: ${result.error}`,
+              },
+              timestamp: Date.now(),
+            });
+          }
+        })
+        .catch((err: any) => {
+          const error = err instanceof Error ? err.message : String(err);
+          log(`Codex session init threw: ${error}`);
           broadcastToGui({
             type: "system_log",
             payload: {
               level: "error",
-              message: `Codex connection failed: ${result.error}`,
+              message: `Codex connection failed: ${error}`,
             },
             timestamp: Date.now(),
           });
-        }
-      }).catch((err: any) => {
-        const error = err instanceof Error ? err.message : String(err);
-        log(`Codex session init threw: ${error}`);
-        broadcastToGui({
-          type: "system_log",
-          payload: {
-            level: "error",
-            message: `Codex connection failed: ${error}`,
-          },
-          timestamp: Date.now(),
         });
-      });
       return;
     }
     case "apply_config": {
@@ -216,7 +220,12 @@ function handleGuiMessage(
       codex
         .ensureConnected()
         .then(() => {
-          return codex.initSession({ model, reasoningEffort, cwd });
+          return codex.initSession({
+            model,
+            reasoningEffort,
+            cwd,
+            developerInstructions: deps.codexDevInstructions,
+          });
         })
         .then((result) => {
           if (result.success) {

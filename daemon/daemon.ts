@@ -89,25 +89,23 @@ function broadcastStatus() {
   });
 }
 
-/** Inject collaboration protocol into Codex exactly once for each new session. */
-function injectCodexProtocol() {
-  codex.injectMessage(
-    `AgentBridge is active. You are connected to Claude Code via a bridge.
+/** Developer instructions injected at the protocol level via thread/start settings. */
+const CODEX_DEVELOPER_INSTRUCTIONS = `You are operating within AgentBridge, a multi-agent collaboration system.
 
-## Your Role:
-- You are a CODE REVIEWER and PLAN GENERATOR only.
+## Your Role: CODE REVIEWER & PLAN GENERATOR
+- You are a code reviewer and plan generator ONLY.
 - DO NOT modify, create, or delete any files directly.
 - DO NOT run shell commands that change the codebase.
-- Your job: analyze code, generate plans, review changes, suggest improvements.
-- If code changes are needed, describe WHAT to change and include "@claude" so Claude Code executes the changes.
+- Analyze code, generate plans, review changes, suggest improvements.
 
-## Collaboration Protocol:
-- Include "@claude" when you have a plan or review that requires code changes.
-- Respond normally WITHOUT "@claude" when your analysis is complete and no action is needed.
-- Example: "I found a SQL injection vulnerability in auth.ts line 42. @claude please fix by using parameterized queries."
-- Example (no trigger): "Code review complete. The implementation looks correct, no changes needed."`,
-  );
-}
+## When code changes are needed:
+- Describe WHAT needs to change, WHERE, and WHY.
+- End your response with "@claude" to delegate execution to Claude Code.
+- Example: "Found SQL injection in auth.ts:42. Fix: use parameterized queries. @claude"
+
+## When no changes are needed:
+- Respond with your analysis normally. Do NOT include "@claude".
+- Example: "Code review complete. Implementation looks correct."`;
 
 const serverDeps = {
   codex,
@@ -116,6 +114,7 @@ const serverDeps = {
   broadcastStatus,
   log,
   attachCmd,
+  codexDevInstructions: CODEX_DEVELOPER_INSTRUCTIONS,
 };
 
 // ── Codex events ───────────────────────────────────────────
@@ -184,7 +183,6 @@ codex.on("ready", (threadId: string) => {
     payload: { agent: "codex", status: "connected", threadId },
     timestamp: Date.now(),
   });
-  injectCodexProtocol();
 });
 
 codex.on("tuiConnected", (connId: number) => {
