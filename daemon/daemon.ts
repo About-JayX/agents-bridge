@@ -129,11 +129,17 @@ codex.on("agentMessage", (msg: BridgeMessage) => {
   log(`Forwarding Codex -> Claude (${msg.content.length} chars)`);
   emitToClaude(msg);
 
-  // Forward to Claude PTY if running
-  const sent = sendToClaudePty(
-    `[Codex message received] Review and respond:\n${msg.content}`,
-  );
-  if (sent) log("Injected Codex message into Claude PTY");
+  // Only forward to Claude PTY if Codex explicitly requests it.
+  // Codex includes "@claude" or "[need_review]" to signal Claude should act.
+  // Otherwise the message is display-only — prevents infinite conversation loops.
+  const needsClaude =
+    /(@claude|@Claude|\[need_review\]|\[needs_action\])/i.test(msg.content);
+  if (needsClaude) {
+    const sent = sendToClaudePty(
+      `[Codex requests your review] Respond, then stop:\n${msg.content}`,
+    );
+    if (sent) log("Forwarded Codex message to Claude PTY (explicit request)");
+  }
 
   broadcastToGui({
     type: "agent_message",
