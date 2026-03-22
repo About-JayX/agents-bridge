@@ -45,8 +45,9 @@
 
 **数据流:**
 - **Codex 消息**: codex-adapter → daemon → GUI WS → MessagePanel (流式 delta)
+- **Codex→Claude 自动转发**: daemon agentMessage → sendToClaudePty() → Claude PTY stdin
 - **Claude 终端**: claude-pty-helper.cjs (Node + node-pty) → daemon → WS → xterm.js
-- **Claude MCP**: bridge.ts (MCP tools: reply/check_messages/get_status) ← Claude CLI
+- **Claude MCP**: bridge.ts (3 tools: reply/check_messages/get_status) ← Claude CLI
 - **账号/用量**: Tauri Rust invoke → codex-account-store
 - **配置切换**: GUI → daemon apply_config → Codex reconnect with new params
 
