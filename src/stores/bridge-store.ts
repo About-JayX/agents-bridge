@@ -122,17 +122,26 @@ export const useBridgeStore = create<BridgeState>((set) => {
           break;
 
         case "terminal_output":
-          set((s) => ({
-            terminalLines: [
-              ...s.terminalLines.slice(-200),
-              {
-                agent: guiEvent.payload.agent,
-                kind: guiEvent.payload.kind ?? "text",
-                line: guiEvent.payload.line,
-                timestamp: guiEvent.timestamp,
-              },
-            ],
-          }));
+          if (guiEvent.payload.agent === "claude_clear") {
+            set((s) => ({
+              terminalLines: s.terminalLines.filter(
+                (l) => l.agent !== "claude",
+              ),
+              claudeRateLimit: null,
+            }));
+          } else {
+            set((s) => ({
+              terminalLines: [
+                ...s.terminalLines.slice(-200),
+                {
+                  agent: guiEvent.payload.agent,
+                  kind: guiEvent.payload.kind ?? "text",
+                  line: guiEvent.payload.line ?? "",
+                  timestamp: guiEvent.timestamp,
+                },
+              ],
+            }));
+          }
           break;
 
         case "agent_status": {

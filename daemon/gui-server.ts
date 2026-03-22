@@ -259,17 +259,6 @@ function handleGuiMessage(
             },
             timestamp: Date.now(),
           });
-        } else if (event.kind === "tool_use") {
-          broadcastToGui({
-            type: "agent_message",
-            payload: {
-              id: `claude_tool_${Date.now()}`,
-              source: "system",
-              content: `Claude → ${event.content}`,
-              timestamp: Date.now(),
-            },
-            timestamp: Date.now(),
-          });
         } else if (event.kind === "rate_limit" && event.rateLimit) {
           broadcastToGui({
             type: "claude_rate_limit",
@@ -323,8 +312,20 @@ function handleGuiMessage(
     case "stop_claude": {
       if (claudeProcess?.running) {
         claudeProcess.stop();
-        log("Claude stopped from GUI");
       }
+      claudeProcess = null;
+      log("Claude stopped from GUI");
+      broadcastToGui({
+        type: "terminal_output",
+        payload: { agent: "claude_clear" },
+        timestamp: Date.now(),
+      });
+      broadcastToGui({
+        type: "agent_status",
+        payload: { agent: "claude", status: "disconnected" },
+        timestamp: Date.now(),
+      });
+      broadcastStatus();
       return;
     }
     case "stop_codex_tui": {

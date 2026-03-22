@@ -85,6 +85,38 @@ fn check_mcp_registered() -> bool {
     config.pointer("/mcpServers/agentbridge").is_some()
 }
 
+#[tauri::command]
+fn launch_claude_terminal(cwd: Option<String>) -> Result<(), String> {
+    let dir = cwd.unwrap_or_else(|| ".".to_string());
+
+    #[cfg(target_os = "macos")]
+    {
+        let script = format!(
+            r#"tell application "Terminal"
+                activate
+                do script "cd '{}' && claude"
+            end tell"#,
+            dir.replace("'", "'\\''")
+        );
+        std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(&script)
+            .spawn()
+            .map_err(|e| format!("failed: {e}"))?;
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        std::process::Command::new("sh")
+            .arg("-c")
+            .arg(format!("cd '{}' && claude", dir))
+            .spawn()
+            .map_err(|e| format!("failed: {e}"))?;
+    }
+
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -96,6 +128,7 @@ fn main() {
             pick_directory,
             register_mcp,
             check_mcp_registered,
+            launch_claude_terminal,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

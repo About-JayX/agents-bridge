@@ -120,7 +120,8 @@ export function ClaudePanel({ connected }: ClaudePanelProps) {
         setMcpRegistered(true);
       } catch {}
     }
-    launchClaude(cwd || undefined);
+    if (!cwd) return; // Must select project first
+    launchClaude(cwd);
   }, [mcpRegistered, launchClaude, cwd]);
 
   const handleSend = useCallback(() => {
@@ -147,6 +148,30 @@ export function ClaudePanel({ connected }: ClaudePanelProps) {
         <span className="flex-1 text-[13px] font-medium text-card-foreground">
           Claude Code
         </span>
+        {(connected || isRunning) && (
+          <button
+            type="button"
+            onClick={() => {
+              try {
+                invoke("launch_claude_terminal", { cwd: cwd || undefined });
+              } catch {}
+            }}
+            className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            title="Open terminal"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.3"
+            >
+              <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+              <path d="M4.5 7l2 1.5-2 1.5M8.5 11h3" />
+            </svg>
+          </button>
+        )}
         <span className="text-[11px] uppercase text-secondary-foreground">
           {connected ? "connected" : isRunning ? "starting" : "disconnected"}
         </span>
@@ -157,31 +182,38 @@ export function ClaudePanel({ connected }: ClaudePanelProps) {
 
       {/* Input (when running) */}
       {(isRunning || connected) && (
-        <div className="mt-2 flex gap-1.5">
-          <input
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            placeholder="Send to Claude..."
-            className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-[11px] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring"
-          />
-          <Button size="xs" variant="secondary" onClick={handleSend}>
-            Send
+        <>
+          <div className="mt-2 flex gap-1.5">
+            <input
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder="Send to Claude..."
+              className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-[11px] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring"
+            />
+            <Button size="xs" variant="secondary" onClick={handleSend}>
+              Send
+            </Button>
+          </div>
+          <Button
+            size="xs"
+            variant="destructive"
+            className="w-full mt-1.5"
+            onClick={stopClaude}
+          >
+            Stop Claude
           </Button>
-          <Button size="xs" variant="destructive" onClick={stopClaude}>
-            Stop
-          </Button>
-        </div>
+        </>
       )}
 
       {/* Launch (when not running) */}
-      {!isRunning && !connected && (
+      {!isRunning && (
         <div className="mt-2 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-muted-foreground">Project</span>
@@ -204,16 +236,22 @@ export function ClaudePanel({ connected }: ClaudePanelProps) {
                   strokeWidth="1.2"
                 />
               </svg>
-              {cwd ? shortenPath(cwd) : "Select..."}
+              {cwd ? shortenPath(cwd) : "Select project..."}
             </button>
           </div>
           <Button
             size="sm"
             className="w-full bg-claude text-white hover:bg-claude/80"
+            disabled={!cwd}
             onClick={handleLaunch}
           >
             Connect Claude
           </Button>
+          {!cwd && (
+            <div className="text-[10px] text-muted-foreground text-center">
+              Please select a project directory first
+            </div>
+          )}
         </div>
       )}
     </div>
