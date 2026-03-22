@@ -1,6 +1,9 @@
+import { useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { CodexAccountPanel } from "@/components/CodexAccountPanel";
 import { useBridgeStore } from "@/stores/bridge-store";
+import { useCodexAccountStore } from "@/stores/codex-account-store";
 import type { AgentInfo, DaemonStatus } from "@/types";
 
 interface AgentStatusProps {
@@ -34,13 +37,27 @@ export function AgentStatusPanel({
 }: AgentStatusProps) {
   const launchCodexTui = useBridgeStore((s) => s.launchCodexTui);
   const stopCodexTui = useBridgeStore((s) => s.stopCodexTui);
+  const profile = useCodexAccountStore((s) => s.profile);
+  const usage = useCodexAccountStore((s) => s.usage);
+  const refreshing = useCodexAccountStore((s) => s.refreshing);
+  const fetchProfile = useCodexAccountStore((s) => s.fetchProfile);
+  const fetchUsage = useCodexAccountStore((s) => s.fetchUsage);
+  const refreshUsage = useCodexAccountStore((s) => s.refreshUsage);
 
   const codexTuiRunning = daemonStatus?.codexTuiRunning ?? false;
   const codexReady = daemonStatus?.codexBootstrapped ?? false;
   const claudeConnected = daemonStatus?.claudeConnected ?? false;
 
+  // Fetch profile on mount, usage when codex connects
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
+  useEffect(() => {
+    if (codexTuiRunning) fetchUsage();
+  }, [codexTuiRunning, fetchUsage]);
+
   return (
-    <div className="flex flex-1 flex-col gap-3 p-4">
+    <div className="flex flex-1 flex-col gap-3 p-4 overflow-y-auto min-h-0">
       {/* Daemon connection */}
       <div className="flex items-center gap-2 pb-3 border-b border-border">
         <h3 className="flex-1 m-0 text-sm font-semibold text-foreground">
@@ -130,6 +147,14 @@ export function AgentStatusPanel({
               </Button>
             )}
           </div>
+
+          <CodexAccountPanel
+            profile={profile}
+            usage={usage}
+            refreshing={refreshing}
+            onRefresh={refreshUsage}
+            protocolData={daemonStatus?.codexAccount}
+          />
 
           {!codexReady && (
             <div className="mt-1.5 text-[11px] text-muted-foreground">

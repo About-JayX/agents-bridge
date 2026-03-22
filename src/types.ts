@@ -17,6 +17,31 @@ export interface AgentInfo {
   threadId?: string;
 }
 
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
+/** Protocol-derived data from daemon WS (model, reasoning, tokens). */
+export interface CodexAccountInfo {
+  initialized: boolean;
+  userAgent?: string;
+  platformOs?: string;
+  platformFamily?: string;
+  model?: string;
+  modelProvider?: string;
+  serviceTier?: string;
+  reasoningEffort?: string;
+  cwd?: string;
+  approvalPolicy?: string;
+  sandbox?: string;
+  planType?: string;
+  usage?: TokenUsage;
+  cumulativeUsage?: TokenUsage;
+  lastUpdated: number;
+}
+
 export interface DaemonStatus {
   bridgeReady: boolean;
   tuiConnected: boolean;
@@ -28,6 +53,7 @@ export interface DaemonStatus {
   codexBootstrapped: boolean;
   codexTuiRunning: boolean;
   claudeConnected: boolean;
+  codexAccount?: CodexAccountInfo;
 }
 
 export interface GuiEvent {

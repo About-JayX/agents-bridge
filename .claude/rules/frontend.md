@@ -28,3 +28,26 @@ paths:
 - shadcn/ui 组件优先，不重复造轮子
 - 自定义组件放 `src/components/`，shadcn 组件在 `src/components/ui/`
 - TypeScript 配置用 tsconfig.app.json
+
+## 文件规模
+- **每个文件最多 500 行**，超过必须拆分为独立模块/组件
+
+## 封装与抽离
+- 可复用的 UI 单元必须抽为独立组件（如 `UsageBar`、`StatusDot`、`SourceBadge`）
+- 业务逻辑与展示分离：store 负责状态和 side-effect，组件只做渲染
+- 类型定义集中在 `src/types.ts`，不在组件内重复声明
+
+## 层级与布局
+- 弹出层（下拉菜单、Popover、Tooltip）使用 `z-50` 且父容器**禁止** `overflow-hidden`，否则弹出层会被截断
+- 需要圆角裁剪时在子元素上单独加 `rounded-*`，不要用父级 `overflow-hidden` 兜底
+- 每个可滚动区域独立设置 `overflow-y-auto min-h-0`，避免整个页面滚动
+
+## 性能优化
+- Zustand selector 按字段订阅，避免整个 store 重渲染
+- 大列表使用 `React.memo` 或虚拟滚动
+- 避免在 render 中创建新对象/函数，用 `useMemo`/`useCallback` 保持引用稳定
+- 条件渲染优先于 `display:none`
+
+## 代码检查
+- 每次修改后必须执行 `npx tsc --noEmit -p tsconfig.app.json` 确保零类型错误
+- 不允许 `any` 类型逃逸到组件 props，daemon 边界数据用明确类型断言

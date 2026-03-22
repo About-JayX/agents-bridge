@@ -14,6 +14,11 @@ interface BridgeState {
   clearMessages: () => void;
   launchCodexTui: () => void;
   stopCodexTui: () => void;
+  applyConfig: (config: {
+    model?: string;
+    reasoningEffort?: string;
+    cwd?: string;
+  }) => void;
 }
 
 let ws: WebSocket | null = null;
@@ -125,5 +130,10 @@ export const useBridgeStore = create<BridgeState>((set) => {
     clearMessages: () => set({ messages: [] }),
     launchCodexTui: () => sendWs({ type: "launch_codex_tui" }),
     stopCodexTui: () => sendWs({ type: "stop_codex_tui" }),
+    applyConfig: (config: {
+      model?: string;
+      reasoningEffort?: string;
+      cwd?: string;
+    }) => sendWs({ type: "apply_config", ...config }),
   };
 });
