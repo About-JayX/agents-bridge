@@ -4,11 +4,14 @@ import type { GuiEvent, BridgeMessage, AgentInfo, DaemonStatus } from "@/types";
 const GUI_WS_URL = "ws://127.0.0.1:4503";
 const RECONNECT_INTERVAL = 3000;
 
+export type CodexPhase = "thinking" | "streaming" | "idle";
+
 interface BridgeState {
   connected: boolean;
   messages: BridgeMessage[];
   agents: Record<string, AgentInfo>;
   daemonStatus: DaemonStatus | null;
+  codexPhase: CodexPhase;
 
   sendToCodex: (content: string) => void;
   clearMessages: () => void;
@@ -53,10 +56,49 @@ export const useBridgeStore = create<BridgeState>((set) => {
       }
 
       switch (guiEvent.type) {
-        case "agent_message":
+        case "agent_message_started":
           set((s) => ({
-            messages: [...s.messages, guiEvent.payload as BridgeMessage],
+            messages: [
+              ...s.messages,
+              {
+                id: guiEvent.payload.id,
+                source: guiEvent.payload.source as BridgeMessage["source"],
+                content: "",
+                timestamp: guiEvent.payload.timestamp,
+              },
+            ],
           }));
+          break;
+
+        case "agent_message_delta":
+          set((s) => ({
+            messages: s.messages.map((m) =>
+              m.id === guiEvent.payload.id
+                ? { ...m, content: m.content + guiEvent.payload.delta }
+                : m,
+            ),
+          }));
+          break;
+
+        case "agent_message":
+          // Final complete message — replace the streaming placeholder or add new
+          set((s) => {
+            const idx = s.messages.findIndex(
+              (m) => m.id === guiEvent.payload.id,
+            );
+            if (idx >= 0) {
+              const updated = [...s.messages];
+              updated[idx] = guiEvent.payload as BridgeMessage;
+              return { messages: updated };
+            }
+            return {
+              messages: [...s.messages, guiEvent.payload as BridgeMessage],
+            };
+          });
+          break;
+
+        case "codex_phase":
+          set({ codexPhase: guiEvent.payload.phase as CodexPhase });
           break;
 
         case "agent_status": {
@@ -125,6 +167,7 @@ export const useBridgeStore = create<BridgeState>((set) => {
       codex: { name: "codex", displayName: "Codex", status: "disconnected" },
     },
     daemonStatus: null,
+    codexPhase: "idle" as CodexPhase,
 
     sendToCodex: (content) => sendWs({ type: "send_to_codex", content }),
     clearMessages: () => set({ messages: [] }),

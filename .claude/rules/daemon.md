@@ -31,3 +31,9 @@ paths:
 ## 代码检查
 - 每次修改后必须执行 `npx tsc --noEmit -p tsconfig.daemon.json` 确保零类型错误
 - 不允许未处理的 Promise rejection，异步操作必须有 catch 或 try/catch
+
+## 测试与重启
+- Daemon 代码（`daemon/**/*.ts`）没有 HMR，修改后**必须重启**：`pkill -f "bun run daemon"; sleep 1; bun run daemon/index.ts &`
+- Rust 代码（`src-tauri/**`）修改后需要重新编译，**必须重启 Tauri**：`pkill -f "target/debug/agent-bridge"; bun run tauri dev &`
+- 前端代码（`src/**/*.{ts,tsx}`）有 Vite HMR，修改后无需手动重启
+- 每次改动后必须验证生效：改了 daemon 就重启 daemon，改了 Rust 就重启 Tauri，改了前端确认 HMR 热更新成功

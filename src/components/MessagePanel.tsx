@@ -36,6 +36,7 @@ interface MessagePanelProps {
 export function MessagePanel({ messages }: MessagePanelProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const clearMessages = useBridgeStore((s) => s.clearMessages);
+  const codexPhase = useBridgeStore((s) => s.codexPhase);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -72,6 +73,14 @@ export function MessagePanel({ messages }: MessagePanelProps) {
             </div>
           </div>
         ))}
+        {codexPhase !== "idle" && (
+          <div className="flex items-center gap-2 py-2 text-[12px] text-muted-foreground">
+            <span className="inline-block size-1.5 rounded-full bg-codex animate-pulse" />
+            {codexPhase === "thinking"
+              ? "Codex is thinking…"
+              : "Codex is responding…"}
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
     </div>

@@ -51,3 +51,8 @@ paths:
 ## 代码检查
 - 每次修改后必须执行 `npx tsc --noEmit -p tsconfig.app.json` 确保零类型错误
 - 不允许 `any` 类型逃逸到组件 props，daemon 边界数据用明确类型断言
+
+## 热更新
+- 前端 `src/**` 修改由 Vite HMR 自动生效，无需手动重启
+- 如果 HMR 失败（页面白屏或样式异常），在 Tauri 窗口 Cmd+R 刷新
+- 修改 store 的结构/初始值时 HMR 可能不完整，建议 Cmd+R 刷新确认

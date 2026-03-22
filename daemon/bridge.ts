@@ -5,10 +5,14 @@ import { appendFileSync, readFileSync, unlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { ClaudeAdapter } from "./adapters/claude-adapter";
 import { DaemonClient } from "./daemon-client";
-import type { BridgeMessage } from "./types";
 
-const CONTROL_PORT = parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4502", 10);
-const PID_FILE = process.env.AGENTBRIDGE_PID_FILE ?? `/tmp/agentbridge-daemon-${CONTROL_PORT}.pid`;
+const CONTROL_PORT = parseInt(
+  process.env.AGENTBRIDGE_CONTROL_PORT ?? "4502",
+  10,
+);
+const PID_FILE =
+  process.env.AGENTBRIDGE_PID_FILE ??
+  `/tmp/agentbridge-daemon-${CONTROL_PORT}.pid`;
 const CONTROL_HEALTH_URL = `http://127.0.0.1:${CONTROL_PORT}/healthz`;
 const CONTROL_WS_URL = `ws://127.0.0.1:${CONTROL_PORT}/ws`;
 const LOG_FILE = "/tmp/agentbridge.log";
@@ -19,56 +23,38 @@ const daemonClient = new DaemonClient(CONTROL_WS_URL);
 
 let shuttingDown = false;
 
-claude.setReplySender(async (msg: BridgeMessage) => {
-  if (msg.source !== "claude") {
-    return { success: false, error: "Invalid message source" };
-  }
-  return daemonClient.sendReply(msg);
+// Wire up tools → daemon
+claude.setReplySender(async (msg) => daemonClient.sendReply(msg));
+claude.setMessageFetcher(async () => daemonClient.fetchMessages());
+claude.setStatusFetcher(async () => {
+  const res = await fetch(CONTROL_HEALTH_URL).catch(() => null);
+  if (!res?.ok)
+    return { bridgeReady: false, codexTuiRunning: false, threadId: null };
+  return res.json();
 });
 
+// Also buffer pushed messages (for check_messages to pick up)
 daemonClient.on("codexMessage", (message) => {
-  log(`Forwarding daemon -> Claude (${message.content.length} chars)`);
-  void claude.pushNotification(message);
-});
-
-daemonClient.on("status", (status) => {
-  log(
-    `Daemon status: ready=${status.bridgeReady} tui=${status.tuiConnected} thread=${status.threadId ?? "none"} queued=${status.queuedMessageCount}`,
-  );
+  log(`Buffered Codex message (${message.content.length} chars)`);
 });
 
 daemonClient.on("disconnect", () => {
-  if (shuttingDown) return;
-  log("Daemon control connection closed");
-  void claude.pushNotification(systemMessage(
-    "system_daemon_disconnected",
-    "AgentBridge daemon control connection lost.",
-  ));
+  if (!shuttingDown) log("Daemon control connection closed");
 });
 
 claude.on("ready", async () => {
   log("MCP server ready - ensuring AgentBridge daemon...");
-
   try {
     await ensureDaemonRunning();
     await daemonClient.connect();
     daemonClient.attachClaude();
+    log("Connected to daemon, tools ready");
   } catch (err: any) {
     log(`Failed to connect to daemon: ${err.message}`);
-    await claude.pushNotification(
-      systemMessage("system_daemon_connect_failed", `AgentBridge daemon failed: ${err.message}`),
-    );
   }
 });
 
-function systemMessage(idPrefix: string, content: string): BridgeMessage {
-  return {
-    id: `${idPrefix}_${Date.now()}`,
-    source: "codex",
-    content,
-    timestamp: Date.now(),
-  };
-}
+// ── Daemon lifecycle ───────────────────────────────────────
 
 async function ensureDaemonRunning() {
   if (await isDaemonHealthy()) return;
@@ -80,7 +66,9 @@ async function ensureDaemonRunning() {
         await waitForDaemonHealthy(12, 250);
         return;
       } catch {
-        throw new Error(`Found existing daemon process ${existingPid}, but control port ${CONTROL_PORT} never became healthy.`);
+        throw new Error(
+          `Daemon process ${existingPid} exists but port ${CONTROL_PORT} not healthy.`,
+        );
       }
     }
     removeStalePidFile();
@@ -103,25 +91,25 @@ function launchDaemon() {
 
 async function isDaemonHealthy() {
   try {
-    const response = await fetch(CONTROL_HEALTH_URL);
-    return response.ok;
+    return (await fetch(CONTROL_HEALTH_URL)).ok;
   } catch {
     return false;
   }
 }
 
 async function waitForDaemonHealthy(maxRetries = 40, delayMs = 250) {
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
+  for (let i = 0; i < maxRetries; i++) {
     if (await isDaemonHealthy()) return;
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    await new Promise((r) => setTimeout(r, delayMs));
   }
-  throw new Error(`Timed out waiting for AgentBridge daemon health on ${CONTROL_HEALTH_URL}`);
+  throw new Error(
+    `Timed out waiting for daemon health on ${CONTROL_HEALTH_URL}`,
+  );
 }
 
 function readDaemonPid() {
   try {
     const raw = readFileSync(PID_FILE, "utf-8").trim();
-    if (!raw) return null;
     const pid = Number.parseInt(raw, 10);
     return Number.isFinite(pid) ? pid : null;
   } catch {
@@ -139,18 +127,18 @@ function isProcessAlive(pid: number) {
 }
 
 function removeStalePidFile() {
-  try { unlinkSync(PID_FILE); } catch {}
+  try {
+    unlinkSync(PID_FILE);
+  } catch {}
 }
+
+// ── Shutdown ───────────────────────────────────────────────
 
 function shutdown(reason: string) {
   if (shuttingDown) return;
   shuttingDown = true;
-  log(`Shutting down Claude frontend (${reason})...`);
-  const hardExit = setTimeout(() => {
-    log("Shutdown timed out; forcing exit");
-    process.exit(0);
-  }, 3000);
-
+  log(`Shutting down bridge (${reason})...`);
+  const hardExit = setTimeout(() => process.exit(0), 3000);
   void daemonClient.disconnect().finally(() => {
     clearTimeout(hardExit);
     process.exit(0);
@@ -162,28 +150,22 @@ process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.stdin.on("end", () => shutdown("stdin closed"));
 process.stdin.on("close", () => shutdown("stdin closed"));
 process.on("exit", () => {
-  if (shuttingDown) return;
-  void daemonClient.disconnect();
+  if (!shuttingDown) void daemonClient.disconnect();
 });
-process.on("uncaughtException", (err) => {
-  log(`UNCAUGHT EXCEPTION: ${err.stack ?? err.message}`);
-});
-process.on("unhandledRejection", (reason: any) => {
-  log(`UNHANDLED REJECTION: ${reason?.stack ?? reason}`);
-});
+process.on("uncaughtException", (err) =>
+  log(`UNCAUGHT: ${err.stack ?? err.message}`),
+);
+process.on("unhandledRejection", (reason: any) =>
+  log(`UNHANDLED: ${reason?.stack ?? reason}`),
+);
 
 function log(msg: string) {
-  const line = `[${new Date().toISOString()}] [AgentBridgeFrontend] ${msg}\n`;
+  const line = `[${new Date().toISOString()}] [Bridge] ${msg}\n`;
   process.stderr.write(line);
-  try { appendFileSync(LOG_FILE, line); } catch {}
+  try {
+    appendFileSync(LOG_FILE, line);
+  } catch {}
 }
 
-log(`Starting AgentBridge frontend (daemon ws ${CONTROL_WS_URL})`);
-
-(async () => {
-  try {
-    await claude.start();
-  } catch (err: any) {
-    log(`Fatal: failed to start MCP server: ${err.message}`);
-  }
-})();
+log(`Starting bridge (daemon ws ${CONTROL_WS_URL})`);
+void claude.start().catch((err: any) => log(`Fatal: ${err.message}`));

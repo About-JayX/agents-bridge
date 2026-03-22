@@ -2,9 +2,14 @@ import type { BridgeMessage, CodexItem } from "../types";
 import type { CodexAccountInfo, PendingRequest } from "./codex-types";
 import { TRACKED_REQUEST_METHODS } from "./codex-types";
 
+export type CodexPhase = "thinking" | "streaming" | "idle";
+
 export interface MessageHandlerCallbacks {
   log: (msg: string) => void;
   emitAgentMessage: (msg: BridgeMessage) => void;
+  emitAgentMessageStarted: (id: string) => void;
+  emitAgentMessageDelta: (id: string, delta: string) => void;
+  emitPhaseChanged: (phase: CodexPhase) => void;
   emitTurnCompleted: () => void;
   emitReady: (threadId: string) => void;
   emitAccountInfoUpdated: (info: CodexAccountInfo) => void;
@@ -100,16 +105,25 @@ export class CodexMessageHandler {
       case "turn/started":
         this.markTurnStarted(params?.turn?.id);
         this.captureTurnMetadata(params?.turn);
+        this.cb.emitPhaseChanged("thinking");
         break;
       case "item/started": {
         const item: CodexItem = params?.item;
-        if (item?.type === "agentMessage")
+        if (item?.type === "reasoning") {
+          this.cb.emitPhaseChanged("thinking");
+        } else if (item?.type === "agentMessage") {
+          this.cb.emitPhaseChanged("streaming");
           this.agentMessageBuffers.set(item.id, []);
+          this.cb.emitAgentMessageStarted(item.id);
+        }
         break;
       }
       case "item/agentMessage/delta": {
         const buf = this.agentMessageBuffers.get(params?.itemId);
-        if (buf && params?.delta) buf.push(params.delta);
+        if (buf && params?.delta) {
+          buf.push(params.delta);
+          this.cb.emitAgentMessageDelta(params.itemId, params.delta);
+        }
         break;
       }
       case "item/completed": {
@@ -132,6 +146,7 @@ export class CodexMessageHandler {
       case "turn/completed":
         this.markTurnCompleted(params?.turn?.id);
         this.captureTurnMetadata(params?.turn);
+        this.cb.emitPhaseChanged("idle");
         this.cb.emitTurnCompleted();
         break;
     }

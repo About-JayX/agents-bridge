@@ -1,6 +1,10 @@
 import { EventEmitter } from "node:events";
 import type { BridgeMessage } from "./types";
-import type { ControlClientMessage, ControlServerMessage, DaemonStatus } from "./control-protocol";
+import type {
+  ControlClientMessage,
+  ControlServerMessage,
+  DaemonStatus,
+} from "./control-protocol";
 
 interface DaemonClientEvents {
   codexMessage: [BridgeMessage];
@@ -40,13 +44,19 @@ export class DaemonClient extends EventEmitter<DaemonClientEvents> {
       ws.onerror = () => {
         if (settled) return;
         settled = true;
-        reject(new Error(`Failed to connect to AgentBridge daemon at ${this.url}`));
+        reject(
+          new Error(`Failed to connect to AgentBridge daemon at ${this.url}`),
+        );
       };
 
       ws.onclose = () => {
         if (settled) return;
         settled = true;
-        reject(new Error(`AgentBridge daemon closed the connection during startup (${this.url})`));
+        reject(
+          new Error(
+            `AgentBridge daemon closed the connection during startup (${this.url})`,
+          ),
+        );
       };
     });
   }
@@ -70,7 +80,27 @@ export class DaemonClient extends EventEmitter<DaemonClientEvents> {
     this.rejectPendingReplies("Daemon connection closed");
   }
 
-  async sendReply(message: BridgeMessage): Promise<{ success: boolean; error?: string }> {
+  async fetchMessages(): Promise<BridgeMessage[]> {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return [];
+
+    const requestId = `fetch_${Date.now()}_${this.nextRequestId++}`;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingReplies.delete(requestId);
+        resolve([]);
+      }, 10000);
+
+      this.pendingReplies.set(requestId, {
+        resolve: (result) => resolve((result as any).messages ?? []),
+        timer,
+      });
+      this.send({ type: "fetch_messages", requestId });
+    });
+  }
+
+  async sendReply(
+    message: BridgeMessage,
+  ): Promise<{ success: boolean; error?: string }> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return { success: false, error: "AgentBridge daemon is not connected." };
     }
@@ -79,7 +109,10 @@ export class DaemonClient extends EventEmitter<DaemonClientEvents> {
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.pendingReplies.delete(requestId);
-        resolve({ success: false, error: "Timed out waiting for AgentBridge daemon reply." });
+        resolve({
+          success: false,
+          error: "Timed out waiting for AgentBridge daemon reply.",
+        });
       }, 15000);
 
       this.pendingReplies.set(requestId, { resolve, timer });
@@ -93,7 +126,8 @@ export class DaemonClient extends EventEmitter<DaemonClientEvents> {
 
   private attachSocketHandlers(ws: WebSocket) {
     ws.onmessage = (event) => {
-      const raw = typeof event.data === "string" ? event.data : event.data.toString();
+      const raw =
+        typeof event.data === "string" ? event.data : event.data.toString();
 
       let message: ControlServerMessage;
       try {
@@ -112,6 +146,14 @@ export class DaemonClient extends EventEmitter<DaemonClientEvents> {
           clearTimeout(pending.timer);
           this.pendingReplies.delete(message.requestId);
           pending.resolve({ success: message.success, error: message.error });
+          return;
+        }
+        case "fetch_messages_result": {
+          const pending = this.pendingReplies.get(message.requestId);
+          if (!pending) return;
+          clearTimeout(pending.timer);
+          this.pendingReplies.delete(message.requestId);
+          pending.resolve({ messages: message.messages } as any);
           return;
         }
         case "status":

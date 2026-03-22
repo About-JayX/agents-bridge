@@ -186,6 +186,15 @@ function handleControlMessage(
     case "status":
       sendStatus(ws, deps);
       return;
+    case "fetch_messages": {
+      const messages = state.flushBufferedMessages();
+      sendProtocolMessage(ws, {
+        type: "fetch_messages_result",
+        requestId: message.requestId,
+        messages,
+      });
+      return;
+    }
     case "claude_to_codex": {
       if (message.message.source !== "claude") {
         sendProtocolMessage(ws, {

@@ -100,10 +100,35 @@ const serverDeps = {
 
 // ── Codex events ───────────────────────────────────────────
 
+codex.on("phaseChanged", (phase: string) => {
+  broadcastToGui({
+    type: "codex_phase",
+    payload: { phase },
+    timestamp: Date.now(),
+  });
+});
+
+codex.on("agentMessageStarted", (id: string) => {
+  broadcastToGui({
+    type: "agent_message_started",
+    payload: { id, source: "codex", content: "", timestamp: Date.now() },
+    timestamp: Date.now(),
+  });
+});
+
+codex.on("agentMessageDelta", (id: string, delta: string) => {
+  broadcastToGui({
+    type: "agent_message_delta",
+    payload: { id, delta },
+    timestamp: Date.now(),
+  });
+});
+
 codex.on("agentMessage", (msg: BridgeMessage) => {
   if (msg.source !== "codex") return;
   log(`Forwarding Codex -> Claude (${msg.content.length} chars)`);
   emitToClaude(msg);
+  // Final complete message — GUI uses this to finalize the streamed message
   broadcastToGui({
     type: "agent_message",
     payload: msg,

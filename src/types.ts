@@ -57,7 +57,14 @@ export interface DaemonStatus {
 }
 
 export interface GuiEvent {
-  type: "agent_message" | "agent_status" | "system_log" | "daemon_status";
+  type:
+    | "agent_message"
+    | "agent_message_started"
+    | "agent_message_delta"
+    | "codex_phase"
+    | "agent_status"
+    | "system_log"
+    | "daemon_status";
   payload: any;
   timestamp: number;
 }

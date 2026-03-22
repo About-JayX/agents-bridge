@@ -39,6 +39,10 @@ export class CodexAdapter extends EventEmitter {
     this.handler = new CodexMessageHandler(() => this.tuiConnId, {
       log: (msg) => this.log(msg),
       emitAgentMessage: (msg) => this.emit("agentMessage", msg),
+      emitAgentMessageStarted: (id) => this.emit("agentMessageStarted", id),
+      emitAgentMessageDelta: (id, delta) =>
+        this.emit("agentMessageDelta", id, delta),
+      emitPhaseChanged: (phase) => this.emit("phaseChanged", phase),
       emitTurnCompleted: () => this.emit("turnCompleted"),
       emitReady: (tid) => this.emit("ready", tid),
       emitAccountInfoUpdated: (info) => this.emit("accountInfoUpdated", info),
@@ -302,9 +306,15 @@ export class CodexAdapter extends EventEmitter {
     try {
       const parsed = JSON.parse(data);
 
-      // Protocol discovery: log method/result keys for debugging
+      // Protocol discovery: log method + key params
       if (parsed.method) {
-        this.log(`[proto] notification: ${parsed.method}`);
+        const extra =
+          parsed.method === "item/started"
+            ? ` type=${parsed.params?.item?.type}`
+            : parsed.method === "item/agentMessage/delta"
+              ? ` itemId=${parsed.params?.itemId} len=${parsed.params?.delta?.length}`
+              : "";
+        this.log(`[proto] notification: ${parsed.method}${extra}`);
       } else if (parsed.result) {
         this.log(
           `[proto] response id=${parsed.id} keys=${Object.keys(parsed.result).join(",")}`,
