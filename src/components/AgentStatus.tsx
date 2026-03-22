@@ -12,7 +12,13 @@ const ROLE_OPTIONS = [
   { value: "tester", label: "Tester" },
 ];
 
-function RoleSelect({ agent }: { agent: "claude" | "codex" }) {
+function RoleSelect({
+  agent,
+  disabled,
+}: {
+  agent: "claude" | "codex";
+  disabled?: boolean;
+}) {
   const role = useBridgeStore((s) =>
     agent === "claude" ? s.claudeRole : s.codexRole,
   );
@@ -21,7 +27,11 @@ function RoleSelect({ agent }: { agent: "claude" | "codex" }) {
     <select
       value={role}
       onChange={(e) => setRole(agent, e.target.value)}
-      className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground border border-input outline-none cursor-pointer"
+      disabled={disabled}
+      className={cn(
+        "rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground border border-input outline-none",
+        disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
+      )}
     >
       {ROLE_OPTIONS.map((o) => (
         <option key={o.value} value={o.value}>
@@ -122,7 +132,7 @@ export function AgentStatusPanel({
             <span className="flex-1 text-[13px] font-medium text-card-foreground">
               Codex
             </span>
-            <RoleSelect agent="codex" />
+            <RoleSelect agent="codex" disabled={codexTuiRunning} />
             <span className="text-[11px] uppercase text-secondary-foreground">
               {codexTuiRunning
                 ? "connected"

@@ -189,7 +189,7 @@ export class CodexAdapter extends EventEmitter {
                   }),
                   ...(opts?.cwd && { cwd: opts.cwd }),
                   ...(opts?.sandboxMode && {
-                    sandbox: { type: opts.sandboxMode },
+                    sandbox: opts.sandboxMode,
                   }),
                   ...(opts?.approvalPolicy && {
                     approvalPolicy: opts.approvalPolicy,
