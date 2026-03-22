@@ -16,6 +16,7 @@ export interface GuiEvent {
     | "agent_message_started"
     | "agent_message_delta"
     | "codex_phase"
+    | "terminal_output"
     | "agent_status"
     | "system_log"
     | "daemon_status";

@@ -6,12 +6,19 @@ const RECONNECT_INTERVAL = 3000;
 
 export type CodexPhase = "thinking" | "streaming" | "idle";
 
+export interface TerminalLine {
+  agent: string;
+  line: string;
+  timestamp: number;
+}
+
 interface BridgeState {
   connected: boolean;
   messages: BridgeMessage[];
   agents: Record<string, AgentInfo>;
   daemonStatus: DaemonStatus | null;
   codexPhase: CodexPhase;
+  terminalLines: TerminalLine[];
 
   sendToCodex: (content: string) => void;
   clearMessages: () => void;
@@ -22,6 +29,9 @@ interface BridgeState {
     reasoningEffort?: string;
     cwd?: string;
   }) => void;
+  launchClaude: (cwd?: string) => void;
+  sendClaudeInput: (text: string) => void;
+  stopClaude: () => void;
 }
 
 let ws: WebSocket | null = null;
@@ -101,6 +111,19 @@ export const useBridgeStore = create<BridgeState>((set) => {
           set({ codexPhase: guiEvent.payload.phase as CodexPhase });
           break;
 
+        case "terminal_output":
+          set((s) => ({
+            terminalLines: [
+              ...s.terminalLines.slice(-200),
+              {
+                agent: guiEvent.payload.agent,
+                line: guiEvent.payload.line,
+                timestamp: guiEvent.timestamp,
+              },
+            ],
+          }));
+          break;
+
         case "agent_status": {
           const { agent, status, error, threadId } = guiEvent.payload;
           set((s) => ({
@@ -168,6 +191,7 @@ export const useBridgeStore = create<BridgeState>((set) => {
     },
     daemonStatus: null,
     codexPhase: "idle" as CodexPhase,
+    terminalLines: [],
 
     sendToCodex: (content) => sendWs({ type: "send_to_codex", content }),
     clearMessages: () => set({ messages: [] }),
@@ -178,5 +202,8 @@ export const useBridgeStore = create<BridgeState>((set) => {
       reasoningEffort?: string;
       cwd?: string;
     }) => sendWs({ type: "apply_config", ...config }),
+    launchClaude: (cwd?) => sendWs({ type: "launch_claude", cwd }),
+    sendClaudeInput: (text) => sendWs({ type: "claude_input", text }),
+    stopClaude: () => sendWs({ type: "stop_claude" }),
   };
 });

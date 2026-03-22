@@ -33,26 +33,19 @@ async fn pick_directory(app: tauri::AppHandle) -> Result<Option<String>, String>
 
 #[tauri::command]
 fn register_mcp() -> Result<bool, String> {
-    let bridge_path = std::env::current_exe()
-        .map_err(|e| format!("cannot resolve exe path: {e}"))?
-        .parent()
-        .ok_or("cannot resolve parent dir")?
-        .join("../Resources/bridge")
-        .to_string_lossy()
-        .to_string();
-
-    // In dev mode, use the source path
     let bridge_cmd = if cfg!(debug_assertions) {
-        // Find the project root daemon/bridge.ts
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let project_root = std::path::Path::new(manifest_dir).parent().unwrap_or(std::path::Path::new("."));
         let bridge_ts = project_root.join("daemon").join("bridge.ts");
         if bridge_ts.exists() {
             return write_mcp_config("bun", &["run", &bridge_ts.to_string_lossy()]);
         }
-        bridge_path
+        "agentbridge-bridge".to_string()
     } else {
-        bridge_path
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        exe.parent().unwrap_or(std::path::Path::new("."))
+            .join("../Resources/bridge")
+            .to_string_lossy().to_string()
     };
 
     write_mcp_config(&bridge_cmd, &[])
@@ -70,43 +63,25 @@ fn write_mcp_config(command: &str, args: &[&str]) -> Result<bool, String> {
         serde_json::json!({})
     };
 
-    let servers = config
-        .as_object_mut()
-        .ok_or("invalid mcp.json")?
-        .entry("mcpServers")
-        .or_insert_with(|| serde_json::json!({}));
+    let servers = config.as_object_mut().ok_or("invalid mcp.json")?
+        .entry("mcpServers").or_insert_with(|| serde_json::json!({}));
 
     let mut entry = serde_json::json!({ "command": command });
-    if !args.is_empty() {
-        entry["args"] = serde_json::json!(args);
-    }
+    if !args.is_empty() { entry["args"] = serde_json::json!(args); }
 
-    servers
-        .as_object_mut()
-        .ok_or("invalid mcpServers")?
+    servers.as_object_mut().ok_or("invalid mcpServers")?
         .insert("agentbridge".to_string(), entry);
 
     let json = serde_json::to_string_pretty(&config).map_err(|e| format!("serialize error: {e}"))?;
     std::fs::write(&mcp_path, json).map_err(|e| format!("write error: {e}"))?;
-
     Ok(true)
 }
 
 #[tauri::command]
 fn check_mcp_registered() -> bool {
-    let home = match dirs::home_dir() {
-        Some(h) => h,
-        None => return false,
-    };
-    let mcp_path = home.join(".claude").join("mcp.json");
-    let raw = match std::fs::read_to_string(&mcp_path) {
-        Ok(r) => r,
-        Err(_) => return false,
-    };
-    let config: serde_json::Value = match serde_json::from_str(&raw) {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
+    let home = match dirs::home_dir() { Some(h) => h, None => return false };
+    let raw = match std::fs::read_to_string(home.join(".claude").join("mcp.json")) { Ok(r) => r, Err(_) => return false };
+    let config: serde_json::Value = match serde_json::from_str(&raw) { Ok(c) => c, Err(_) => return false };
     config.pointer("/mcpServers/agentbridge").is_some()
 }
 

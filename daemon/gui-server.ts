@@ -1,6 +1,7 @@
 import type { ServerWebSocket } from "bun";
 import type { CodexAdapter } from "./adapters/codex-adapter";
 import type { TuiConnectionState } from "./tui-connection-state";
+import { ClaudeProcess } from "./claude-process";
 import {
   state,
   sendGuiEvent,
@@ -8,6 +9,8 @@ import {
   type GuiSocketData,
   type GuiEvent,
 } from "./daemon-state";
+
+let claudeProcess: ClaudeProcess | null = null;
 
 interface GuiServerDeps {
   codex: CodexAdapter;
@@ -229,6 +232,67 @@ function handleGuiMessage(
             });
           }
         });
+      return;
+    }
+    case "launch_claude": {
+      if (claudeProcess?.running) {
+        sendGuiEvent(ws, {
+          type: "system_log",
+          payload: { level: "warn", message: "Claude is already running." },
+          timestamp: Date.now(),
+        });
+        return;
+      }
+      const cwd = message.cwd ?? process.cwd();
+      log(`Launching Claude process in ${cwd}`);
+
+      claudeProcess = new ClaudeProcess((line) => {
+        broadcastToGui({
+          type: "terminal_output",
+          payload: { agent: "claude", line },
+          timestamp: Date.now(),
+        });
+      });
+
+      claudeProcess.setOnExit((code) => {
+        broadcastToGui({
+          type: "agent_status",
+          payload: { agent: "claude", status: "disconnected" },
+          timestamp: Date.now(),
+        });
+        broadcastToGui({
+          type: "system_log",
+          payload: { level: "info", message: `Claude exited (code ${code})` },
+          timestamp: Date.now(),
+        });
+        broadcastStatus();
+      });
+
+      claudeProcess.start(cwd);
+      broadcastToGui({
+        type: "system_log",
+        payload: { level: "info", message: "Claude starting..." },
+        timestamp: Date.now(),
+      });
+      return;
+    }
+    case "claude_input": {
+      if (!claudeProcess?.running) {
+        sendGuiEvent(ws, {
+          type: "system_log",
+          payload: { level: "error", message: "Claude is not running." },
+          timestamp: Date.now(),
+        });
+        return;
+      }
+      claudeProcess.sendInput(message.text);
+      return;
+    }
+    case "stop_claude": {
+      if (claudeProcess?.running) {
+        claudeProcess.stop();
+        log("Claude stopped from GUI");
+      }
       return;
     }
     case "stop_codex_tui": {
