@@ -29,76 +29,71 @@ function SourceBadge({ source }: { source: MessageSource }) {
   );
 }
 
+type Tab = "messages" | "terminal" | "logs";
+
 interface MessagePanelProps {
   messages: BridgeMessage[];
 }
 
 export function MessagePanel({ messages }: MessagePanelProps) {
-  const [tab, setTab] = useState<"messages" | "logs">("messages");
+  const [tab, setTab] = useState<Tab>("messages");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const termRef = useRef<HTMLDivElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const clearMessages = useBridgeStore((s) => s.clearMessages);
   const codexPhase = useBridgeStore((s) => s.codexPhase);
   const allTerminalLines = useBridgeStore((s) => s.terminalLines);
 
-  // Split: system messages with "Claude →" go to logs, rest to messages
   const chatMessages = messages.filter((m) => m.source !== "system");
-  const logLines: TerminalLine[] = [];
-  for (const l of allTerminalLines) logLines.push(l);
-  // Also add system messages from the message stream
-  for (const m of messages) {
-    if (m.source === "system") {
-      logLines.push({
-        agent: "system",
-        kind: "text",
-        line: m.content,
-        timestamp: m.timestamp,
-      });
-    }
+
+  // Terminal: all claude terminal output
+  const termLines: TerminalLine[] = [];
+  for (const l of allTerminalLines) {
+    if (l.agent === "claude") termLines.push(l);
+  }
+
+  // Logs: errors only
+  const errorLines: TerminalLine[] = [];
+  for (const l of allTerminalLines) {
+    if (l.kind === "error") errorLines.push(l);
   }
 
   useEffect(() => {
     if (tab === "messages")
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    else if (logRef.current)
+    else if (tab === "terminal" && termRef.current)
+      termRef.current.scrollTop = termRef.current.scrollHeight;
+    else if (tab === "logs" && logRef.current)
       logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [messages, allTerminalLines, tab]);
 
+  // Listen for switch-to-terminal event from ClaudePanel
+  useEffect(() => {
+    const handler = () => setTab("terminal");
+    window.addEventListener("switch-to-terminal", handler);
+    return () => window.removeEventListener("switch-to-terminal", handler);
+  }, []);
+
   return (
     <div className="flex flex-1 flex-col min-h-0">
-      {/* Tab header */}
+      {/* Tabs */}
       <div className="flex items-center px-4 py-2 border-b border-border gap-3">
-        <button
-          type="button"
-          onClick={() => setTab("messages")}
-          className={cn(
-            "text-sm font-semibold transition-colors",
-            tab === "messages"
-              ? "text-foreground"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
+        <TabBtn active={tab === "messages"} onClick={() => setTab("messages")}>
           Messages ({chatMessages.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("logs")}
-          className={cn(
-            "text-sm font-semibold transition-colors",
-            tab === "logs"
-              ? "text-foreground"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          Logs ({logLines.length})
-        </button>
+        </TabBtn>
+        <TabBtn active={tab === "terminal"} onClick={() => setTab("terminal")}>
+          Terminal {termLines.length > 0 && `(${termLines.length})`}
+        </TabBtn>
+        <TabBtn active={tab === "logs"} onClick={() => setTab("logs")}>
+          Logs {errorLines.length > 0 && `(${errorLines.length})`}
+        </TabBtn>
         <div className="flex-1" />
         <Button variant="secondary" size="xs" onClick={clearMessages}>
           Clear
         </Button>
       </div>
 
-      {/* Messages tab */}
+      {/* Messages */}
       {tab === "messages" && (
         <div className="flex-1 overflow-y-auto px-4 py-2">
           {chatMessages.length === 0 && (
@@ -131,26 +126,57 @@ export function MessagePanel({ messages }: MessagePanelProps) {
         </div>
       )}
 
-      {/* Logs tab */}
+      {/* Terminal (Claude process output) */}
+      {tab === "terminal" && (
+        <div
+          ref={termRef}
+          className="flex-1 overflow-y-auto px-4 py-2 font-mono text-[11px] leading-relaxed bg-background"
+        >
+          {termLines.length === 0 && (
+            <div className="py-10 text-center text-[13px] text-muted-foreground font-sans">
+              Claude not started. Connect Claude to see terminal output.
+            </div>
+          )}
+          {termLines.map((l, i) => (
+            <div key={i} className={cn("py-0.5", termKindColor(l.kind))}>
+              <span className="text-muted-foreground/50 mr-2">
+                {new Date(l.timestamp).toLocaleTimeString()}
+              </span>
+              {l.kind === "tool_use" && (
+                <span className="text-yellow-500 mr-1">⚡</span>
+              )}
+              {l.kind === "tool_result" && (
+                <span className="text-muted-foreground mr-1">→</span>
+              )}
+              {l.kind === "status" && (
+                <span className="text-blue-400 mr-1">●</span>
+              )}
+              {l.kind === "error" && (
+                <span className="text-destructive mr-1">✕</span>
+              )}
+              {l.line}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Logs (errors only) */}
       {tab === "logs" && (
         <div
           ref={logRef}
           className="flex-1 overflow-y-auto px-4 py-2 font-mono text-[11px] leading-relaxed"
         >
-          {logLines.length === 0 && (
+          {errorLines.length === 0 && (
             <div className="py-10 text-center text-[13px] text-muted-foreground font-sans">
-              No logs yet.
+              No errors.
             </div>
           )}
-          {logLines.map((l, i) => (
-            <div
-              key={i}
-              className={cn("py-0.5", logKindColor(l.kind, l.agent))}
-            >
-              <span className="text-muted-foreground mr-2">
+          {errorLines.map((l, i) => (
+            <div key={i} className="py-0.5 text-destructive">
+              <span className="text-destructive/50 mr-2">
                 {new Date(l.timestamp).toLocaleTimeString()}
               </span>
-              <span className="text-muted-foreground mr-1">[{l.agent}]</span>
+              <span className="mr-1">[{l.agent}]</span>
               {l.line}
             </div>
           ))}
@@ -160,11 +186,44 @@ export function MessagePanel({ messages }: MessagePanelProps) {
   );
 }
 
-function logKindColor(kind: string, agent: string): string {
-  if (kind === "error") return "text-destructive";
-  if (kind === "tool_use") return "text-yellow-500/80";
-  if (kind === "tool_result") return "text-muted-foreground";
-  if (kind === "status") return "text-blue-400";
-  if (agent === "claude") return "text-claude/70";
-  return "text-foreground/60";
+function TabBtn({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "text-sm font-semibold transition-colors",
+        active
+          ? "text-foreground"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function termKindColor(kind: string): string {
+  switch (kind) {
+    case "text":
+      return "text-foreground/80";
+    case "tool_use":
+      return "text-yellow-500/80";
+    case "tool_result":
+      return "text-muted-foreground";
+    case "status":
+      return "text-blue-400";
+    case "error":
+      return "text-destructive";
+    default:
+      return "text-foreground/60";
+  }
 }

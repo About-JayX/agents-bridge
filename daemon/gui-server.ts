@@ -247,8 +247,15 @@ function handleGuiMessage(
       log(`Launching Claude process in ${cwd}`);
 
       claudeProcess = new ClaudeProcess((event) => {
-        // Text and tool results → main message panel
-        if (event.kind === "text" || event.kind === "tool_result") {
+        // Everything goes to Logs (terminal_output)
+        broadcastToGui({
+          type: "terminal_output",
+          payload: { agent: "claude", kind: event.kind, line: event.content },
+          timestamp: Date.now(),
+        });
+
+        // Text and tool results also go to main message panel
+        if (event.kind === "text") {
           broadcastToGui({
             type: "agent_message",
             payload: {
@@ -263,13 +270,6 @@ function handleGuiMessage(
           broadcastToGui({
             type: "claude_rate_limit",
             payload: event.rateLimit,
-            timestamp: Date.now(),
-          });
-        } else {
-          // status/error → terminal panel
-          broadcastToGui({
-            type: "terminal_output",
-            payload: { agent: "claude", kind: event.kind, line: event.content },
             timestamp: Date.now(),
           });
         }

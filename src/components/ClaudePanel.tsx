@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { invoke } from "@tauri-apps/api/core";
@@ -81,32 +81,6 @@ function ClaudeQuota() {
   );
 }
 
-const TerminalView = React.forwardRef<
-  HTMLDivElement,
-  { lines: TerminalLine[] }
->(({ lines }, ref) => {
-  useEffect(() => {
-    const el = (ref as React.RefObject<HTMLDivElement>)?.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [lines, ref]);
-
-  return (
-    <div
-      ref={ref}
-      className="mt-2 max-h-48 overflow-y-auto rounded-md bg-background p-2 font-mono text-[10px] leading-relaxed text-foreground/70"
-    >
-      {lines.map((l, i) => (
-        <div key={i} className="whitespace-pre-wrap py-0.5">
-          <span className="text-muted-foreground mr-1">
-            {new Date(l.timestamp).toLocaleTimeString()}
-          </span>
-          {l.line}
-        </div>
-      ))}
-    </div>
-  );
-});
-
 interface ClaudePanelProps {
   connected: boolean;
 }
@@ -115,8 +89,6 @@ export function ClaudePanel({ connected }: ClaudePanelProps) {
   const [mcpRegistered, setMcpRegistered] = useState<boolean | null>(null);
   const [inputText, setInputText] = useState("");
   const [cwd, setCwd] = useState("");
-  const [showTerminal, setShowTerminal] = useState(false);
-  const terminalRef = useRef<HTMLDivElement>(null);
 
   const allLines = useBridgeStore((s) => s.terminalLines);
   const launchClaude = useBridgeStore((s) => s.launchClaude);
@@ -179,14 +151,11 @@ export function ClaudePanel({ connected }: ClaudePanelProps) {
         {(connected || isRunning) && (
           <button
             type="button"
-            onClick={() => setShowTerminal(!showTerminal)}
-            className={cn(
-              "p-0.5 rounded transition-colors",
-              showTerminal
-                ? "text-foreground bg-accent"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent",
-            )}
-            title="Toggle terminal"
+            onClick={() =>
+              window.dispatchEvent(new CustomEvent("switch-to-terminal"))
+            }
+            className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            title="View terminal"
           >
             <svg
               width="14"
@@ -208,11 +177,6 @@ export function ClaudePanel({ connected }: ClaudePanelProps) {
 
       {/* Quota (when connected or running) */}
       {(connected || isRunning) && <ClaudeQuota />}
-
-      {/* Terminal output (toggle) */}
-      {showTerminal && statusLines.length > 0 && (
-        <TerminalView lines={statusLines} ref={terminalRef} />
-      )}
 
       {/* Input (when running) */}
       {(isRunning || connected) && (
