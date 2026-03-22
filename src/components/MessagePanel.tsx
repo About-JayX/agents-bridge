@@ -33,10 +33,15 @@ type Tab = "messages" | "terminal" | "logs";
 
 interface MessagePanelProps {
   messages: BridgeMessage[];
+  onTabChange?: (tab: "messages" | "terminal" | "logs") => void;
 }
 
-export function MessagePanel({ messages }: MessagePanelProps) {
-  const [tab, setTab] = useState<Tab>("messages");
+export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
+  const [tab, setTabState] = useState<Tab>("messages");
+  const setTab = (t: Tab) => {
+    setTabState(t);
+    onTabChange?.(t);
+  };
   const bottomRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<HTMLDivElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -44,12 +49,16 @@ export function MessagePanel({ messages }: MessagePanelProps) {
   const codexPhase = useBridgeStore((s) => s.codexPhase);
   const allTerminalLines = useBridgeStore((s) => s.terminalLines);
 
+  const [termInput, setTermInput] = useState("");
+  const sendClaudeInput = useBridgeStore((s) => s.sendClaudeInput);
+
   const chatMessages = messages.filter((m) => m.source !== "system");
 
-  // Terminal: all claude terminal output
+  // Terminal: raw + user_input lines from claude
   const termLines: TerminalLine[] = [];
   for (const l of allTerminalLines) {
-    if (l.agent === "claude") termLines.push(l);
+    if (l.agent === "claude" && (l.kind === "raw" || l.kind === "user_input"))
+      termLines.push(l);
   }
 
   // Logs: errors only
@@ -126,37 +135,53 @@ export function MessagePanel({ messages }: MessagePanelProps) {
         </div>
       )}
 
-      {/* Terminal (Claude process output) */}
+      {/* Terminal (Claude process raw output + input) */}
       {tab === "terminal" && (
-        <div
-          ref={termRef}
-          className="flex-1 overflow-y-auto px-4 py-2 font-mono text-[11px] leading-relaxed bg-background"
-        >
-          {termLines.length === 0 && (
-            <div className="py-10 text-center text-[13px] text-muted-foreground font-sans">
-              Claude not started. Connect Claude to see terminal output.
-            </div>
-          )}
-          {termLines.map((l, i) => (
-            <div key={i} className={cn("py-0.5", termKindColor(l.kind))}>
-              <span className="text-muted-foreground/50 mr-2">
-                {new Date(l.timestamp).toLocaleTimeString()}
-              </span>
-              {l.kind === "tool_use" && (
-                <span className="text-yellow-500 mr-1">⚡</span>
-              )}
-              {l.kind === "tool_result" && (
-                <span className="text-muted-foreground mr-1">→</span>
-              )}
-              {l.kind === "status" && (
-                <span className="text-blue-400 mr-1">●</span>
-              )}
-              {l.kind === "error" && (
-                <span className="text-destructive mr-1">✕</span>
-              )}
-              {l.line}
-            </div>
-          ))}
+        <div className="flex flex-1 flex-col min-h-0">
+          <div
+            ref={termRef}
+            className="flex-1 overflow-y-auto px-4 py-2 font-mono text-[11px] leading-relaxed bg-[#0d0d0d]"
+          >
+            {termLines.length === 0 && (
+              <div className="py-10 text-center text-[13px] text-muted-foreground font-sans">
+                Claude not started. Connect Claude to see terminal output.
+              </div>
+            )}
+            {termLines.map((l, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "py-px whitespace-pre-wrap",
+                  l.kind === "user_input" ? "text-codex" : "text-foreground/70",
+                )}
+              >
+                {l.kind === "user_input" && (
+                  <span className="text-codex mr-1">❯</span>
+                )}
+                {l.line}
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-1.5 px-3 py-2 border-t border-border bg-[#0d0d0d]">
+            <span className="text-codex font-mono text-[12px] py-1">❯</span>
+            <input
+              type="text"
+              value={termInput}
+              onChange={(e) => setTermInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  const text = termInput.trim();
+                  if (text) {
+                    sendClaudeInput(text);
+                    setTermInput("");
+                  }
+                }
+              }}
+              placeholder="Type here..."
+              className="flex-1 bg-transparent font-mono text-[12px] text-foreground outline-none placeholder:text-muted-foreground/40"
+            />
+          </div>
         </div>
       )}
 
@@ -209,21 +234,4 @@ function TabBtn({
       {children}
     </button>
   );
-}
-
-function termKindColor(kind: string): string {
-  switch (kind) {
-    case "text":
-      return "text-foreground/80";
-    case "tool_use":
-      return "text-yellow-500/80";
-    case "tool_result":
-      return "text-muted-foreground";
-    case "status":
-      return "text-blue-400";
-    case "error":
-      return "text-destructive";
-    default:
-      return "text-foreground/60";
-  }
 }

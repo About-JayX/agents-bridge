@@ -13,7 +13,15 @@ export interface ClaudeRateLimitInfo {
 }
 
 export interface ClaudeTerminalEvent {
-  kind: "text" | "tool_use" | "tool_result" | "status" | "error" | "rate_limit";
+  kind:
+    | "text"
+    | "tool_use"
+    | "tool_result"
+    | "status"
+    | "error"
+    | "rate_limit"
+    | "raw"
+    | "user_input";
   content: string;
   rateLimit?: ClaudeRateLimitInfo;
 }
@@ -84,14 +92,22 @@ export class ClaudeProcess {
 
     if (this.proc.stdout) {
       const rl = createInterface({ input: this.proc.stdout });
-      rl.on("line", (raw) => this.parseStreamJson(raw));
+      rl.on("line", (raw) => {
+        // Forward raw line to terminal tab
+        this.onEvent({ kind: "raw", content: raw });
+        // Also parse for structured events (messages, rate limits)
+        this.parseStreamJson(raw);
+      });
     }
 
     if (this.proc.stderr) {
       const rl = createInterface({ input: this.proc.stderr });
       rl.on("line", (raw) => {
         const clean = raw.trim();
-        if (clean) this.onEvent({ kind: "error", content: clean });
+        if (clean) {
+          this.onEvent({ kind: "raw", content: clean });
+          this.onEvent({ kind: "error", content: clean });
+        }
       });
     }
 
@@ -120,6 +136,7 @@ export class ClaudeProcess {
       message: { role: "user", content: text },
     });
     this.proc.stdin.write(msg + "\n");
+    this.onEvent({ kind: "user_input", content: text });
     this.log(`Sent input to Claude (${text.length} chars)`);
   }
 
