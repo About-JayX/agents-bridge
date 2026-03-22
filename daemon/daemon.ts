@@ -126,22 +126,16 @@ codex.on("agentMessageDelta", (id: string, delta: string) => {
   });
 });
 
+// Buffer the last agentMessage per turn — only forward to Claude on turnCompleted
+let lastCodexMessage: BridgeMessage | null = null;
+
 codex.on("agentMessage", (msg: BridgeMessage) => {
   if (msg.source !== "codex") return;
-  log(`Forwarding Codex -> Claude (${msg.content.length} chars)`);
+  log(
+    `Codex agentMessage (${msg.content.length} chars) — buffered for turn end`,
+  );
   emitToClaude(msg);
-
-  // Role-driven hard-forward: send concise summary to Claude PTY
-  const codexRole = ROLES[state.codexRole];
-  // Truncate to avoid flooding Claude's input — send first 500 chars as summary
-  const summary =
-    msg.content.length > 500
-      ? msg.content.slice(0, 500) +
-        "\n...(truncated, see Messages tab for full output)"
-      : msg.content;
-  const sent = sendToClaudePty(`${codexRole.forwardPrompt}\n${summary}`);
-  if (sent)
-    log(`Hard-forwarded Codex (${state.codexRole}) message to Claude PTY`);
+  lastCodexMessage = msg; // Overwrite: only the last one matters
 
   broadcastToGui({
     type: "agent_message",
@@ -150,7 +144,25 @@ codex.on("agentMessage", (msg: BridgeMessage) => {
   });
 });
 
-codex.on("turnCompleted", () => log("Codex turn completed"));
+codex.on("turnCompleted", () => {
+  log("Codex turn completed");
+
+  // Forward only the final conclusion to Claude PTY
+  if (lastCodexMessage) {
+    const codexRole = ROLES[state.codexRole];
+    const summary =
+      lastCodexMessage.content.length > 500
+        ? lastCodexMessage.content.slice(0, 500) +
+          "\n...(truncated, see Messages tab for full output)"
+        : lastCodexMessage.content;
+    const sent = sendToClaudePty(`${codexRole.forwardPrompt}\n${summary}`);
+    if (sent)
+      log(
+        `Forwarded Codex final conclusion (${state.codexRole}) to Claude PTY`,
+      );
+    lastCodexMessage = null;
+  }
+});
 
 codex.on("ready", (threadId: string) => {
   tuiState.markBridgeReady();
