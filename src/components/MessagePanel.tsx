@@ -1,60 +1,75 @@
 import { useEffect, useRef } from "react";
-import type { BridgeMessage } from "../types";
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useBridgeStore } from "@/stores/bridge-store";
+import type { BridgeMessage, MessageSource } from "@/types";
+
+const sourceStyle: Record<string, { label: string; className: string }> = {
+  claude: {
+    label: "Claude",
+    className: "border-claude/40 bg-claude/10 text-claude",
+  },
+  codex: {
+    label: "Codex",
+    className: "border-codex/40 bg-codex/10 text-codex",
+  },
+  system: {
+    label: "System",
+    className: "border-system/40 bg-system/10 text-system",
+  },
+};
+
+function SourceBadge({ source }: { source: MessageSource }) {
+  const style = sourceStyle[source] ?? sourceStyle.system;
+  return (
+    <Badge variant="outline" className={cn("uppercase", style.className)}>
+      {style.label}
+    </Badge>
+  );
+}
 
 interface MessagePanelProps {
   messages: BridgeMessage[];
-  onClear: () => void;
 }
 
-const sourceColors: Record<string, string> = {
-  claude: "#8b5cf6",
-  codex: "#22c55e",
-  system: "#6b7280",
-};
-
-const sourceLabels: Record<string, string> = {
-  claude: "Claude",
-  codex: "Codex",
-  system: "System",
-};
-
-export function MessagePanel({ messages, onClear }: MessagePanelProps) {
+export function MessagePanel({ messages }: MessagePanelProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const clearMessages = useBridgeStore((s) => s.clearMessages);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <h3 style={styles.title}>Messages ({messages.length})</h3>
-        <button style={styles.clearBtn} onClick={onClear}>Clear</button>
+    <div className="flex flex-1 flex-col min-h-0">
+      <div className="flex items-center px-4 py-3 border-b border-border">
+        <h3 className="flex-1 m-0 text-sm font-semibold text-foreground">
+          Messages ({messages.length})
+        </h3>
+        <Button variant="secondary" size="xs" onClick={clearMessages}>
+          Clear
+        </Button>
       </div>
 
-      <div style={styles.messageList}>
+      <div className="flex-1 overflow-y-auto px-4 py-2">
         {messages.length === 0 && (
-          <div style={styles.empty}>
+          <div className="py-10 text-center text-[13px] text-muted-foreground">
             No messages yet. Connect Claude Code and Codex to start bridging.
           </div>
         )}
 
         {messages.map((msg) => (
-          <div key={msg.id} style={styles.messageRow}>
-            <div style={styles.messageMeta}>
-              <span style={{
-                ...styles.sourceTag,
-                backgroundColor: `${sourceColors[msg.source] ?? "#6b7280"}20`,
-                color: sourceColors[msg.source] ?? "#6b7280",
-                borderColor: `${sourceColors[msg.source] ?? "#6b7280"}40`,
-              }}>
-                {sourceLabels[msg.source] ?? msg.source}
-              </span>
-              <span style={styles.timestamp}>
+          <div key={msg.id} className="py-2.5 border-b border-card">
+            <div className="flex items-center gap-2 mb-1">
+              <SourceBadge source={msg.source} />
+              <span className="font-mono text-[11px] text-muted-foreground">
                 {new Date(msg.timestamp).toLocaleTimeString()}
               </span>
             </div>
-            <div style={styles.messageContent}>{msg.content}</div>
+            <div className="text-[13px] leading-relaxed text-foreground/90 whitespace-pre-wrap wrap-break-word">
+              {msg.content}
+            </div>
           </div>
         ))}
         <div ref={bottomRef} />
@@ -62,75 +77,3 @@ export function MessagePanel({ messages, onClear }: MessagePanelProps) {
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: "flex",
-    flexDirection: "column",
-    flex: 1,
-    minHeight: 0,
-  },
-  header: {
-    display: "flex",
-    alignItems: "center",
-    padding: "12px 16px",
-    borderBottom: "1px solid #2d2d2d",
-  },
-  title: {
-    margin: 0,
-    fontSize: "14px",
-    fontWeight: 600,
-    color: "#e5e5e5",
-    flex: 1,
-  },
-  clearBtn: {
-    padding: "4px 12px",
-    fontSize: "12px",
-    backgroundColor: "#2d2d2d",
-    color: "#a3a3a3",
-    border: "1px solid #404040",
-    borderRadius: "4px",
-    cursor: "pointer",
-  },
-  messageList: {
-    flex: 1,
-    overflowY: "auto",
-    padding: "8px 16px",
-  },
-  empty: {
-    padding: "40px 0",
-    textAlign: "center",
-    color: "#525252",
-    fontSize: "13px",
-  },
-  messageRow: {
-    padding: "10px 0",
-    borderBottom: "1px solid #1e1e1e",
-  },
-  messageMeta: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    marginBottom: "4px",
-  },
-  sourceTag: {
-    fontSize: "11px",
-    fontWeight: 600,
-    padding: "2px 8px",
-    borderRadius: "4px",
-    border: "1px solid",
-    textTransform: "uppercase" as const,
-  },
-  timestamp: {
-    fontSize: "11px",
-    color: "#525252",
-    fontFamily: "monospace",
-  },
-  messageContent: {
-    fontSize: "13px",
-    color: "#d4d4d4",
-    lineHeight: 1.5,
-    whiteSpace: "pre-wrap",
-    wordBreak: "break-word",
-  },
-};

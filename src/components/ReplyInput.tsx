@@ -1,19 +1,21 @@
 import { useState, useCallback } from "react";
+import { Button } from "@/components/ui/button";
+import { useBridgeStore } from "@/stores/bridge-store";
 
 interface ReplyInputProps {
-  onSend: (content: string) => void;
   disabled: boolean;
 }
 
-export function ReplyInput({ onSend, disabled }: ReplyInputProps) {
+export function ReplyInput({ disabled }: ReplyInputProps) {
   const [text, setText] = useState("");
+  const sendToCodex = useBridgeStore((s) => s.sendToCodex);
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    onSend(trimmed);
+    sendToCodex(trimmed);
     setText("");
-  }, [text, onSend]);
+  }, [text, sendToCodex]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -26,59 +28,23 @@ export function ReplyInput({ onSend, disabled }: ReplyInputProps) {
   );
 
   return (
-    <div style={styles.container}>
+    <div className="flex items-end gap-2 px-4 py-3 border-t border-border">
       <textarea
-        style={styles.textarea}
+        className="flex-1 resize-none rounded-md border border-input bg-card px-3 py-2 text-[13px] text-foreground font-[inherit] outline-none placeholder:text-muted-foreground focus:border-ring"
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder={disabled ? "Connect daemon to send messages..." : "Send message to Codex (Enter to send)"}
+        placeholder={
+          disabled
+            ? "Connect daemon to send messages..."
+            : "Send message to Codex (Enter to send)"
+        }
         disabled={disabled}
         rows={2}
       />
-      <button
-        style={{
-          ...styles.sendBtn,
-          opacity: disabled || !text.trim() ? 0.4 : 1,
-        }}
-        onClick={handleSend}
-        disabled={disabled || !text.trim()}
-      >
+      <Button disabled={disabled || !text.trim()} onClick={handleSend}>
         Send
-      </button>
+      </Button>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: "flex",
-    gap: "8px",
-    padding: "12px 16px",
-    borderTop: "1px solid #2d2d2d",
-    alignItems: "flex-end",
-  },
-  textarea: {
-    flex: 1,
-    padding: "8px 12px",
-    fontSize: "13px",
-    backgroundColor: "#1e1e1e",
-    color: "#e5e5e5",
-    border: "1px solid #333",
-    borderRadius: "6px",
-    resize: "none",
-    fontFamily: "inherit",
-    outline: "none",
-  },
-  sendBtn: {
-    padding: "8px 20px",
-    fontSize: "13px",
-    fontWeight: 500,
-    backgroundColor: "#8b5cf6",
-    color: "#fff",
-    border: "none",
-    borderRadius: "6px",
-    cursor: "pointer",
-    whiteSpace: "nowrap",
-  },
-};

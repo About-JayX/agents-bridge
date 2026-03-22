@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Tauri
+src-tauri/target/
+
+# Logs
+*.log
+/tmp/agentbridge*.log
+
+# Editor
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Agent skills (installed via npx skills, not project source)
+.agents/
+.agent/
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Lock files (bun)
+*.lockb

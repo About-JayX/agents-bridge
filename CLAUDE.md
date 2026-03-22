@@ -5,7 +5,7 @@
 ## 技术栈
 
 - **桌面壳**: Tauri 2 (Rust)
-- **前端**: React 19 + Vite + TypeScript
+- **前端**: React 19 + Vite + TypeScript + Tailwind CSS v4 + shadcn/ui + Zustand
 - **后端 daemon**: Bun + TypeScript
 - **通信协议**: MCP + WebSocket + JSON-RPC 2.0
 
