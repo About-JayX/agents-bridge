@@ -45,11 +45,17 @@
 
 **数据流:**
 - **Codex 消息**: codex-adapter → daemon → GUI WS → MessagePanel (流式 delta)
-- **Codex→Claude 自动转发**: daemon agentMessage → sendToClaudePty() → Claude PTY stdin
+- **Codex→Claude 触发**: Codex 消息含 `@claude` → daemon 拦截 → 注入 Claude PTY stdin
+- **Codex 协作协议**: 每次新 session（首次/重连/切换配置）自动注入 `@claude` 协议指令
 - **Claude 终端**: claude-pty-helper.cjs (Node + node-pty) → daemon → WS → xterm.js
 - **Claude MCP**: bridge.ts (3 tools: reply/check_messages/get_status) ← Claude CLI
 - **账号/用量**: Tauri Rust invoke → codex-account-store
 - **配置切换**: GUI → daemon apply_config → Codex reconnect with new params
+
+**防无限对话:**
+- Codex 消息仅在包含 `@claude`/`[need_review]`/`[needs_action]` 时才转发给 Claude
+- Claude 收到的 prompt 包含 "Respond, then stop" 指令
+- 普通 Codex 回复不触发 Claude → 对话自然结束
 
 ## 常用命令
 
