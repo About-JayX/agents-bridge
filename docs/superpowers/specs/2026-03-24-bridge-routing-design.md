@@ -14,10 +14,13 @@
 ## Message Format
 
 ```typescript
+// daemon/types.ts
+type MessageSource = "claude" | "codex" | "user" | "system";
+
 interface BridgeMessage {
   id: string;
-  from: string;           // 发送者角色: "lead" | "coder" | "reviewer" | "tester" | "user"
-  to: string;             // 目标角色: "lead" | "coder" | ... | "all"
+  from: string;           // 发送者角色: "lead" | "coder" | "reviewer" | "tester" | "user" | "system"
+  to: string;             // 目标角色: "lead" | "coder" | ... | "user"
   content: string;        // 消息体（GUI 只渲染这个）
   timestamp: number;
   type?: "task" | "review" | "result" | "question" | "system";
@@ -26,7 +29,9 @@ interface BridgeMessage {
 }
 ```
 
-**Breaking change**: `source` 字段改名为 `from`。
+**Breaking changes**:
+- `source` 字段改名为 `from`
+- `daemon/types.ts` `MessageSource` 从 `"claude" | "codex"` 扩展为 `"claude" | "codex" | "user" | "system"`
 
 ## Routing Logic
 
@@ -36,27 +41,34 @@ Bridge (daemon) 维护一个角色→agent 映射表，基于已有的 `claudeRo
 
 ```typescript
 function resolveTarget(to: string): {
-  target: "claude" | "codex" | null;
-  online: boolean;
+  targets: Array<{ agent: "claude" | "codex"; online: boolean }>;
 } {
-  if (to === "all") return { target: null, online: true }; // 特殊处理
+  if (to === "user") return { targets: [] }; // GUI only, no agent forwarding
+  const matches: Array<{ agent: "claude" | "codex"; online: boolean }> = [];
   if (state.claudeRole === to) {
-    return { target: "claude", online: state.attachedClaude !== null };
+    matches.push({ agent: "claude", online: state.attachedClaude !== null });
   }
   if (state.codexRole === to) {
-    return { target: "codex", online: codex.activeThreadId !== null };
+    matches.push({ agent: "codex", online: codex.activeThreadId !== null });
   }
-  return { target: null, online: false };
+  return { targets: matches };
 }
 ```
 
 ### 路由规则
 
-1. `to` 匹配 `claudeRole` → 发给 Claude（PTY inject 或 MCP push）
+1. `to` 匹配 `claudeRole` → 发给 Claude（PTY inject + MCP push）
 2. `to` 匹配 `codexRole` → 发给 Codex（injectMessage）
-3. `to === "all"` → 广播给所有在线 agent
-4. 无匹配 → bridge 返回 system 消息: `"{to} 角色不在线"`
-5. 匹配但不在线 → 同上
+3. `claudeRole === codexRole` → 两个都匹配 → 发给两个（广播）
+4. `to === "user"` → 只发给 GUI（不转发给任何 agent）
+5. 无匹配 → bridge 返回 system 消息: `"{to} 角色不在线"`
+6. 匹配但不在线 → 同上
+
+**注意**: 不支持 `to: "all"`。初始版本不需要广播，角色执行模式通过显式 `to` 定向通信。如果 `claudeRole === codexRole` 时两个 agent 同角色是合法的（并行思考模式），消息会发给两个。
+
+### Sender Validation
+
+`route_message` 处理时验证 `message.from` 必须等于 `state.claudeRole`（因为只有 Claude 通过 control protocol 发消息）。不匹配则拒绝。
 
 ### System 消息格式
 
@@ -74,36 +86,38 @@ function resolveTarget(to: string): {
 
 ## Data Flow
 
-### Claude → Codex (via MCP reply tool)
+### Claude → Target (via MCP reply tool)
 
 ```
-Claude 调用 reply(to: "coder", text: "请修复第42行")
-  → bridge.ts → daemonClient.routeMessage({ from: "lead", to: "coder", ... })
-  → daemon control-server → resolveTarget("coder")
+Claude (lead) 调用 reply(to: "coder", text: "请修复第42行")
+  → bridge.ts → daemonClient.routeMessage({ from: claudeRole, to: "coder", ... })
+  → daemon control-server → 验证 from === claudeRole → resolveTarget("coder")
     → codexRole === "coder" && online → codex.injectMessage(content)
     → GUI 广播 agent_message（只渲染 content）
-  → 返回给 Claude: "Message routed to coder (codex)."
+  → 返回给 Claude: "Message routed to coder."
+  → 不在线 → 返回 system 消息 "coder 角色不在线"
 ```
 
-### Codex → Claude (via turnCompleted)
+### Codex → Target (via turnCompleted)
 
 ```
 Codex turn 完成
-  → daemon codex-events → 构建 BridgeMessage { from: codexRole, to: "lead", ... }
+  → notification-handler.ts 构建 BridgeMessage { from: "codex", ... }
+  → codex-events.ts 收到 agentMessage → 设置 from: state.codexRole, to: "lead"
   → resolveTarget("lead")
     → claudeRole === "lead" && online → emitToClaude + PTY inject（只注入 content）
     → GUI 广播 agent_message（只渲染 content）
     → 不在线 → system 消息广播到 GUI
 ```
 
-**关键变更**: Codex turnCompleted 不再无条件注入 Claude PTY，而是按 `to` 路由。默认 `to: "lead"`（Codex 输出默认发给 Lead 审核）。
+**Codex `from`/`to` 字段设置位置**: `notification-handler.ts` 构建原始消息时设置 `from: "codex"`（占位），`codex-events.ts` 在 `agentMessage` 事件中覆盖为 `from: state.codexRole, to: "lead"`（因为只有这里能访问 `state.codexRole`）。
 
 ### GUI 用户 → Codex
 
 ```
 用户在 GUI 输入消息
   → send_to_codex { content: "..." }
-  → daemon 构建 { from: "user", to: codexRole, content, type: "task" }
+  → daemon 构建 { from: "user", to: state.codexRole, content, type: "task" }
   → codex.injectMessage(content)
   → GUI 广播（只渲染 content）
 ```
@@ -115,12 +129,14 @@ Codex turn 完成
 ```typescript
 // Before
 reply({ text: string })
+// Description: "Send a message to Codex."
 
 // After
 reply({ to: string, text: string, type?: string, replyTo?: string, priority?: string })
+// Description: "Send a message to a target agent role. Use get_status to see available roles."
 ```
 
-- `to` — 必填，目标角色
+- `to` — 必填，目标角色（"lead" | "coder" | "reviewer" | "tester" | "user"）
 - `text` — 必填，消息内容
 - `type` — 可选，消息意图
 - `replyTo` — 可选，关联消息 id
@@ -129,10 +145,17 @@ reply({ to: string, text: string, type?: string, replyTo?: string, priority?: st
 ### check_messages
 
 无参数变更。返回的消息格式从 `source` 改为 `from`，包含新字段。
+格式化输出: `[time] ${m.from}: ${m.content}`（`from` 现在是角色名，更有意义）。
 
 ### get_status
 
-新增：返回当前角色分配（`claudeRole`/`codexRole`）和在线状态，让 Claude 知道能发给谁。
+新增返回：当前角色分配（`claudeRole`/`codexRole`）和在线状态，让 Claude 知道能发给谁。
+
+```
+Available roles:
+  lead (claude) - online
+  coder (codex) - online
+```
 
 ## Control Protocol Changes
 
@@ -160,7 +183,7 @@ type ControlServerMessage =
 
 **只渲染 `content`**。`from`/`to`/`type`/`replyTo`/`priority` 不显示在消息气泡中。
 
-- `SourceBadge` 用 `from` 字段显示来源标签（Claude/Codex/System/User）
+- `SourceBadge` 用 `from` 字段显示来源标签（角色名）
 - `MessagePanel` 渲染 `content`
 - 新字段对 GUI 完全透明
 
@@ -168,20 +191,27 @@ type ControlServerMessage =
 
 | File | Change |
 |------|--------|
-| `daemon/types.ts` | `BridgeMessage`: `source` → `from`, 新增 `to`/`type`/`replyTo`/`priority` |
-| `daemon/adapters/claude-adapter/claude-adapter.ts` | reply tool 加 `to`/`type`/`replyTo`/`priority` 参数 |
-| `daemon/control-protocol.ts` | `claude_to_codex` → `route_message`, `codex_to_claude` → `routed_message` |
-| `daemon/control-server/handler.ts` | `route_message` 处理 + `resolveTarget` |
-| `daemon/control-server/message-routing.ts` | `emitToClaude` → `routeToAgent`, 新增路由逻辑 |
-| `daemon/codex-events.ts` | turnCompleted: 构建带 `from`/`to` 的消息, 按角色路由而非全量转发 |
-| `daemon/gui-server/handlers.ts` | `send_to_codex`: 构建 `from: "user"` 消息 |
-| `daemon/daemon-state.ts` | `systemMessage` 方法适配新格式 |
-| `daemon/bridge.ts` | replySender 传完整 BridgeMessage（含 to） |
-| `daemon/daemon-client/` | 适配新协议名 |
-| `src/types.ts` | `BridgeMessage`: `source` → `from`, 新增可选字段 |
-| `src/stores/bridge-store/message-handler.ts` | 适配 `from` 字段 |
-| `src/components/MessagePanel/SourceBadge.tsx` | `source` → `from` |
-| `src/components/MessagePanel/index.tsx` | 消息过滤逻辑适配 |
+| **daemon/types.ts** | `MessageSource` 扩展为 4 值; `BridgeMessage`: `source` → `from`, 新增 `to`/`type`/`replyTo`/`priority` |
+| **daemon/daemon-state.ts** | `systemMessage()`: `source: "codex"` → `from: "system"`, 加 `to` 参数 |
+| **daemon/adapters/claude-adapter/claude-adapter.ts** | reply tool: 加 `to` 参数, 更新 description; check_messages: `m.source` → `m.from`; get_status: 加角色信息 |
+| **daemon/adapters/codex-message-handler/notification-handler.ts** | `source: "codex"` → `from: "codex"` (占位), 加 `to: ""` 占位 |
+| **daemon/adapters/codex-message-handler/types.ts** | `emitAgentMessage` 签名跟随 BridgeMessage 变更 |
+| **daemon/adapters/claude-adapter/base-adapter.ts** | BridgeMessage 接口引用跟随变更 |
+| **daemon/control-protocol.ts** | `claude_to_codex` → `route_message`, `codex_to_claude` → `routed_message`, `claude_to_codex_result` → `route_result` |
+| **daemon/control-server/handler.ts** | `route_message` 处理 + `resolveTarget` + sender validation |
+| **daemon/control-server/message-routing.ts** | `emitToClaude` → `routeToAgent`, `sendBridgeMessage` 适配; `codex_to_claude` → `routed_message` |
+| **daemon/control-server/claude-session.ts** | `state.systemMessage()` 调用加 `to` 参数 |
+| **daemon/codex-events.ts** | `agentMessage`: 覆盖 `from: state.codexRole, to: "lead"`; `agentMessageStarted` payload: `source` → `from`; turnCompleted: 按角色路由 |
+| **daemon/gui-server/handlers.ts** | `send_to_codex`: `source: "user"` → `from: "user"`, 加 `to: state.codexRole` |
+| **daemon/bridge.ts** | `replySender` 传完整 BridgeMessage（含 `to`） |
+| **daemon/daemon-client/index.ts** | `sendReply`: `claude_to_codex` → `route_message` |
+| **daemon/daemon-client/connection.ts** | `codex_to_claude` → `routed_message`, `claude_to_codex_result` → `route_result` |
+| **daemon/daemon-client/types.ts** | `codexMessage` 事件考虑改名 `routedMessage` |
+| **src/types.ts** | `MessageSource` 扩展; `BridgeMessage`: `source` → `from`, 新增可选字段 |
+| **src/stores/bridge-store/message-handler.ts** | `source` → `from` (agent_message_started, agent_message, system_log) |
+| **src/components/MessagePanel/SourceBadge.tsx** | `source` → `from` |
+| **src/components/MessagePanel/index.tsx** | 消息过滤逻辑: `source` → `from` |
+| **.claude/rules/daemon.md** | 更新反循环规则: "不回传给 source" → "按 to 字段路由" |
 
 ## Not Changed
 
@@ -194,6 +224,7 @@ type ControlServerMessage =
 ## Migration
 
 `source` → `from` 是 breaking change。需要同步更新：
-- daemon 所有构建 BridgeMessage 的地方
-- 前端所有读取 `source` 的地方（SourceBadge, message-handler, 条件渲染）
-- `MessageSource` type 保持值不变（"claude" | "codex" | "user" | "system"），只改字段名
+- daemon 所有构建 BridgeMessage 的地方（types.ts, notification-handler.ts, codex-events.ts, gui-server/handlers.ts, daemon-state.ts, claude-session.ts）
+- 前端所有读取 `source` 的地方（SourceBadge, message-handler, MessagePanel）
+- `MessageSource` type 值保持不变（"claude" | "codex" | "user" | "system"），只改字段名
+- daemon 侧 `MessageSource` 从 2 值扩展到 4 值
