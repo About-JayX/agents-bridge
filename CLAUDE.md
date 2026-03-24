@@ -108,7 +108,7 @@ function buildMcpConfigJson(controlPort: number): string {
 ### 角色定义
 
 角色配置分两处：
-- `daemon/role-config.ts` — Codex 侧配置（developer_instructions、sandbox、approval）+ Claude agent 定义
+- `daemon/role-config/` — Codex 侧配置（developer_instructions、sandbox、approval）+ Claude agent 定义 + Starlark 规则 + MCP 配置 + 指令合并
 - `src/lib/agent-roles.ts` — 前端可访问的 Claude `--agents` JSON 生成器（ClaudePanel 启动 PTY 时使用）
 
 | 角色 | 定位 | Codex 硬限制 | Claude 硬限制 |
@@ -361,30 +361,66 @@ src-tauri/src/
 ### Daemon (Bun)
 ```
 daemon/
-├── daemon.ts              # 入口: 配置/事件绑定/角色转发
+├── daemon.ts              # 入口: 配置/事件绑定/启动关闭
 ├── daemon-state.ts        # 共享状态 + 广播 helper
-├── daemon-client.ts       # bridge→daemon WS 客户端
-├── gui-server.ts          # GUI WS 服务 + apply_config
-├── control-server.ts      # 控制 WS + Claude MCP 管理
-├── role-config.ts         # 角色定义 + developer_instructions + Claude agent 配置
-├── claude-pty.ts          # Claude PTY 注入逻辑
-├── session-manager.ts     # 🆕 CODEX_HOME 临时目录生命周期
-├── orchestrator.ts        # 🆕 三模式编排器 (并行/顺序/角色)
-├── mcp-register.ts        # 🆕 MCP register/unregister CLI 入口
+├── codex-events.ts        # Codex 事件处理 (从 daemon.ts 抽离)
+├── session-manager.ts     # CODEX_HOME 临时目录生命周期
+├── mcp-register.ts        # MCP register/unregister CLI 入口
 ├── tui-connection-state.ts
 ├── bridge.ts              # MCP bridge server (Claude spawn)
 ├── index.ts               # 导出入口
 ├── types.ts               # 共享类型
 ├── control-protocol.ts
+├── daemon-client/         # bridge→daemon WS 客户端
+│   ├── types.ts
+│   ├── connection.ts
+│   └── index.ts
+├── gui-server/            # GUI WS 服务 + apply_config
+│   ├── types.ts
+│   ├── pty-bridge.ts
+│   ├── server.ts
+│   ├── handlers.ts
+│   ├── codex-actions.ts
+│   ├── role-actions.ts
+│   └── index.ts
+├── control-server/        # 控制 WS + Claude MCP 管理
+│   ├── types.ts
+│   ├── claude-session.ts
+│   ├── message-routing.ts
+│   ├── handler.ts
+│   ├── server.ts
+│   └── index.ts
+├── role-config/           # 角色定义 + Starlark + MCP + 指令合并
+│   ├── types.ts
+│   ├── roles.ts
+│   ├── starlark.ts
+│   ├── mcp-config.ts
+│   ├── instructions.ts
+│   └── index.ts
+├── orchestrator/          # 三模式编排器 (并行/顺序/角色)
+│   ├── types.ts
+│   ├── modes.ts
+│   └── index.ts
 └── adapters/
-    ├── base-adapter.ts           # AgentAdapter 接口定义
-    ├── claude-adapter.ts         # Claude MCP 工具注册
-    ├── codex-adapter.ts          # 编排: 生命周期/WS/代理
-    ├── codex-message-handler.ts  # 通知解析/turn 追踪/账号捕获
-    ├── codex-response-patcher.ts # 响应兼容 patch
-    ├── codex-port-utils.ts       # 端口检查
-    ├── codex-types.ts            # 类型定义
-    └── gemini-adapter.ts         # 🆕 v2 Gemini CLI 适配器
+    ├── claude-adapter/         # Claude MCP 工具注册
+    │   ├── base-adapter.ts
+    │   ├── claude-adapter.ts
+    │   └── index.ts
+    ├── codex-adapter/          # 编排: 生命周期/WS/代理
+    │   ├── types.ts
+    │   ├── lifecycle.ts
+    │   ├── app-server.ts
+    │   ├── session.ts
+    │   ├── proxy.ts
+    │   ├── codex-types.ts
+    │   ├── codex-port-utils.ts
+    │   ├── codex-response-patcher.ts
+    │   └── index.ts
+    └── codex-message-handler/  # 通知解析/turn 追踪/账号捕获
+        ├── types.ts
+        ├── account-capture.ts
+        ├── notification-handler.ts
+        └── index.ts
 ```
 
 ### Frontend (React)
@@ -392,15 +428,37 @@ daemon/
 src/
 ├── lib/
 │   ├── utils.ts                # cn() 工具函数
-│   └── agent-roles.ts          # Claude --agents JSON 生成 (前端用)
+│   └── agent-roles.ts          # Claude --agents JSON + MCP 配置 (前端用)
 ├── stores/
-│   ├── bridge-store.ts         # daemon WS 状态 (消息/agent/角色)
+│   ├── bridge-store/           # daemon WS 状态 (消息/agent/角色)
+│   │   ├── types.ts
+│   │   ├── ws-connection.ts
+│   │   ├── message-handler.ts
+│   │   └── index.ts
 │   └── codex-account-store.ts  # Tauri invoke 状态 (profile/usage/models)
 ├── components/
-│   ├── AgentStatus.tsx         # 侧边栏面板 + 角色下拉
-│   ├── ClaudePanel.tsx         # Claude PTY 启停 (Tauri invoke) + 配额/角色
-│   ├── CodexAccountPanel.tsx   # 可折叠配置面板 (model/reasoning)
-│   ├── MessagePanel.tsx        # Messages | Terminal (xterm.js) | Logs
+│   ├── AgentStatus/            # 侧边栏面板 + 角色下拉
+│   │   ├── RoleSelect.tsx
+│   │   ├── StatusDot.tsx
+│   │   ├── CodexPanel.tsx
+│   │   └── index.tsx
+│   ├── ClaudePanel/            # Claude PTY 启停 (Tauri invoke) + 配额/角色
+│   │   ├── helpers.ts
+│   │   ├── ClaudeRoleSelect.tsx
+│   │   ├── ClaudeQuota.tsx
+│   │   └── index.tsx
+│   ├── CodexAccountPanel/      # 可折叠配置面板 (model/reasoning)
+│   │   ├── types.ts
+│   │   ├── helpers.ts
+│   │   ├── InlineSelect.tsx
+│   │   ├── MiniMeter.tsx
+│   │   ├── ExpandedDetails.tsx
+│   │   └── index.tsx
+│   ├── MessagePanel/           # Messages | Terminal (xterm.js) | Logs
+│   │   ├── SourceBadge.tsx
+│   │   ├── TabBtn.tsx
+│   │   ├── TerminalView.tsx
+│   │   └── index.tsx
 │   ├── MessageMarkdown.tsx     # 消息 Markdown 渲染
 │   ├── ReplyInput.tsx          # 输入框
 │   └── ui/                    # shadcn 组件
