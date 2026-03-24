@@ -39,6 +39,14 @@ export function startGuiServer(port: number, deps: GuiServerDeps) {
           payload: currentStatus(),
           timestamp: Date.now(),
         });
+        sendGuiEvent(ws, {
+          type: "role_sync",
+          payload: {
+            claudeRole: state.claudeRole,
+            codexRole: state.codexRole,
+          },
+          timestamp: Date.now(),
+        });
       },
       close: (ws: ServerWebSocket<GuiSocketData>) => {
         state.guiClients.delete(ws);

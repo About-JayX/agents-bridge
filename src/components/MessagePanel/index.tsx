@@ -52,7 +52,7 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
   return (
     <div className="flex flex-1 flex-col min-h-0">
       {/* Tabs */}
-      <div className="flex items-center px-4 py-2 border-b border-border gap-3">
+      <div className="flex items-center px-4 py-2 border-b border-border/50 gap-3 relative">
         <TabBtn active={tab === "messages"} onClick={() => setTab("messages")}>
           Messages ({chatMessages.length})
         </TabBtn>
@@ -66,30 +66,50 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
         <Button variant="secondary" size="xs" onClick={clearMessages}>
           Clear
         </Button>
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-primary/15 to-transparent" />
       </div>
 
       {/* Messages */}
       {tab === "messages" && (
         <div className="flex-1 overflow-y-auto px-4 py-2">
           {chatMessages.length === 0 && (
-            <div className="py-10 text-center text-[13px] text-muted-foreground">
+            <div className="py-10 text-center text-[13px] text-muted-foreground animate-in fade-in duration-500">
               No messages yet. Connect Claude and Codex to start bridging.
             </div>
           )}
-          {chatMessages.map((msg) => (
-            <div key={msg.id} className="py-2.5 border-b border-card">
-              <div className="flex items-center gap-2 mb-1">
-                <SourceBadge source={msg.source} />
-                <span className="font-mono text-[11px] text-muted-foreground">
-                  {new Date(msg.timestamp).toLocaleTimeString()}
-                </span>
+          {chatMessages.map((msg) => {
+            const isUser = msg.source === "user";
+            return (
+              <div
+                key={msg.id}
+                className={`flex py-2.5 msg-enter ${isUser ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className={`max-w-[80%] rounded-xl px-3 py-2 ${
+                    isUser
+                      ? "bg-sky-500/15 border border-sky-500/30"
+                      : "bg-card/60 border border-border/50"
+                  }`}
+                >
+                  <div
+                    className={`flex items-center gap-2 mb-1 ${isUser ? "justify-end" : ""}`}
+                  >
+                    <SourceBadge source={msg.source} />
+                    <span className="font-mono text-[11px] text-muted-foreground">
+                      {new Date(msg.timestamp).toLocaleTimeString()}
+                    </span>
+                  </div>
+                  <MessageMarkdown content={msg.content} />
+                </div>
               </div>
-              <MessageMarkdown content={msg.content} />
-            </div>
-          ))}
+            );
+          })}
           {codexPhase !== "idle" && (
-            <div className="flex items-center gap-2 py-2 text-[12px] text-muted-foreground">
-              <span className="inline-block size-1.5 rounded-full bg-codex animate-pulse" />
+            <div className="flex items-center gap-2 py-2 text-[12px] text-muted-foreground msg-enter">
+              <span className="relative inline-flex size-1.5">
+                <span className="absolute inset-0 rounded-full bg-codex animate-ping opacity-40" />
+                <span className="relative inline-block size-1.5 rounded-full bg-codex shadow-[0_0_6px_#22c55e]" />
+              </span>
               {codexPhase === "thinking"
                 ? "Codex is thinking\u2026"
                 : "Codex is responding\u2026"}

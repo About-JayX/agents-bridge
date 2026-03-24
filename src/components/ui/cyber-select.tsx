@@ -1,18 +1,27 @@
 import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import type { DropdownOption } from "./types";
 
-export function InlineSelect({
+export interface CyberSelectOption {
+  value: string;
+  label: string;
+  description?: string;
+}
+
+interface CyberSelectProps {
+  value: string;
+  options: CyberSelectOption[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+}
+
+export function CyberSelect({
   value,
   options,
-  onSelect,
+  onChange,
   disabled = false,
-}: {
-  value: string;
-  options: DropdownOption[];
-  onSelect: (value: string) => void;
-  disabled?: boolean;
-}) {
+  placeholder,
+}: CyberSelectProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -26,27 +35,30 @@ export function InlineSelect({
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
+  const selected = options.find((o) => o.value === value);
+  const displayLabel = selected?.label ?? placeholder ?? value;
+
   return (
     <div ref={ref} className="relative inline-flex">
       <button
         type="button"
         onClick={() => !disabled && setOpen(!open)}
         className={cn(
-          "inline-flex items-center gap-0.5 rounded px-1 py-0.5 font-mono text-[11px] font-medium text-foreground border border-transparent transition-all duration-200",
+          "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium border outline-none transition-all duration-200",
           disabled
-            ? "opacity-50 cursor-not-allowed"
+            ? "opacity-50 cursor-not-allowed border-input bg-muted text-foreground/60"
             : open
-              ? "border-primary/50 bg-muted/80 shadow-[0_0_8px_#8b5cf620]"
-              : "hover:bg-accent hover:border-primary/30 cursor-pointer",
+              ? "border-primary/50 bg-muted/80 text-foreground shadow-[0_0_8px_#8b5cf620]"
+              : "border-input bg-muted text-foreground hover:border-primary/40 hover:bg-muted/80 cursor-pointer",
         )}
       >
-        {value}
+        <span className="truncate max-w-28">{displayLabel}</span>
         <svg
           width="8"
           height="8"
           viewBox="0 0 12 12"
           className={cn(
-            "text-muted-foreground transition-transform duration-200",
+            "shrink-0 text-muted-foreground transition-transform duration-200",
             open && "rotate-180",
           )}
         >
@@ -59,13 +71,13 @@ export function InlineSelect({
         </svg>
       </button>
       {open && (
-        <div className="absolute right-0 top-6 z-50 min-w-40 max-h-48 overflow-y-auto rounded-lg border border-border/60 bg-popover/95 backdrop-blur-md p-1 shadow-[0_4px_24px_rgba(0,0,0,0.4),0_0_12px_#8b5cf610] animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute right-0 top-7 z-50 min-w-36 max-h-52 overflow-y-auto rounded-lg border border-border/60 bg-popover/95 backdrop-blur-md p-1 shadow-[0_4px_24px_rgba(0,0,0,0.4),0_0_12px_#8b5cf610] animate-in fade-in zoom-in-95 duration-150">
           {options.map((opt) => (
             <button
               key={opt.value}
               type="button"
               onClick={() => {
-                onSelect(opt.value);
+                onChange(opt.value);
                 setOpen(false);
               }}
               className={cn(
@@ -78,7 +90,7 @@ export function InlineSelect({
             >
               <span className="font-medium">{opt.label}</span>
               {opt.description && (
-                <span className="text-[10px] text-muted-foreground mt-0.5">
+                <span className="text-[9px] text-muted-foreground mt-0.5">
                   {opt.description}
                 </span>
               )}

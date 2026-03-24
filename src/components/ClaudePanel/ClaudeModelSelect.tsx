@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { CyberSelect } from "@/components/ui/cyber-select";
 import type { SelectOption } from "./useClaudeConfig";
 
 interface Props {
@@ -11,20 +11,11 @@ interface Props {
 export function ConfigSelect({ options, value, onChange, disabled }: Props) {
   if (options.length === 0) return null;
   return (
-    <select
+    <CyberSelect
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      options={options.map((o) => ({ value: o.id, label: o.label }))}
+      onChange={onChange}
       disabled={disabled}
-      className={cn(
-        "rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground border border-input outline-none",
-        disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
-      )}
-    >
-      {options.map((o) => (
-        <option key={o.id} value={o.id}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+    />
   );
 }

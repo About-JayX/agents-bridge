@@ -89,12 +89,15 @@ export function registerCodexEvents(deps: CodexEventDeps): void {
 
       const replyReminder =
         "You MUST respond using the agentbridge reply tool so your response reaches the other agent.";
+      const preamble = codexRole.forwardPrompt
+        ? `${codexRole.forwardPrompt}\n`
+        : "";
       let inject: string;
       if (content.length <= MAX_INJECT_LEN) {
-        inject = `${codexRole.label} says: ${content}\n\n${replyReminder}`;
+        inject = `${preamble}${codexRole.label} says: ${content}\n\n${replyReminder}`;
       } else {
         const summary = content.slice(0, MAX_INJECT_LEN).trimEnd();
-        inject = `${codexRole.label} says: ${summary}... (truncated, use check_messages for full content)\n\n${replyReminder}`;
+        inject = `${preamble}${codexRole.label} says: ${summary}... (truncated, use check_messages for full content)\n\n${replyReminder}`;
       }
       const injected = sendToClaudePty(inject);
 

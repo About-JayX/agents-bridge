@@ -24,11 +24,34 @@ export function MiniMeter({
           {Math.round(remaining)}%
         </span>
       </div>
-      <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+      <div className="h-1.5 rounded-full bg-secondary overflow-hidden relative">
         <div
-          className={cn("h-full rounded-full transition-all", barColor(u))}
-          style={{ width: `${u}%` }}
-        />
+          className={cn(
+            "h-full rounded-full transition-all duration-1000 ease-out relative",
+            barColor(u),
+          )}
+          style={{
+            width: `${u}%`,
+            animation: "meter-fill 1s ease-out",
+            boxShadow:
+              u < 90
+                ? "0 0 8px #22c55e40, 0 0 2px #22c55e80"
+                : "0 0 8px #ef444440",
+          }}
+        >
+          {u < 90 && (
+            <div className="absolute inset-0 overflow-hidden rounded-full">
+              <div
+                className="absolute inset-0"
+                style={{
+                  background:
+                    "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.15) 50%, transparent 100%)",
+                  animation: "shimmer 2.5s ease-in-out infinite",
+                }}
+              />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

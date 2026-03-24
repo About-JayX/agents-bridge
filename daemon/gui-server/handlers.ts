@@ -6,26 +6,7 @@ import {
 } from "../daemon-state";
 import type { GuiServerDeps } from "./types";
 import { handleLaunchCodexTui, handleApplyConfig } from "./codex-actions";
-import { handleSetAgentRole } from "./role-actions";
-
-/** Broadcast role change result (success or failure with revert) */
-export function broadcastRoleChange(
-  agent: string,
-  role: string,
-  level: "info" | "error",
-  message: string,
-) {
-  broadcastToGui({
-    type: "role_sync",
-    payload: { agent, role },
-    timestamp: Date.now(),
-  });
-  broadcastToGui({
-    type: "system_log",
-    payload: { level, message },
-    timestamp: Date.now(),
-  });
-}
+import { handleSetRole } from "./role-actions";
 
 export function handleGuiMessage(
   ws: ServerWebSocket<GuiSocketData>,
@@ -42,6 +23,18 @@ export function handleGuiMessage(
 
   switch (message.type) {
     case "send_to_codex": {
+      // Always show user message in the panel
+      broadcastToGui({
+        type: "agent_message",
+        payload: {
+          id: `gui_${Date.now()}`,
+          source: "user",
+          content: message.content,
+          timestamp: Date.now(),
+        },
+        timestamp: Date.now(),
+      });
+
       if (!tuiState.canReply()) {
         sendGuiEvent(ws, {
           type: "system_log",
@@ -50,19 +43,7 @@ export function handleGuiMessage(
         });
         return;
       }
-      const injected = codex.injectMessage(message.content);
-      if (injected) {
-        broadcastToGui({
-          type: "agent_message",
-          payload: {
-            id: `gui_${Date.now()}`,
-            source: "claude",
-            content: message.content,
-            timestamp: Date.now(),
-          },
-          timestamp: Date.now(),
-        });
-      }
+      codex.injectMessage(message.content);
       return;
     }
     case "get_status":
@@ -78,8 +59,8 @@ export function handleGuiMessage(
     case "apply_config":
       handleApplyConfig(message, deps);
       return;
-    case "set_agent_role":
-      handleSetAgentRole(message, deps);
+    case "set_role":
+      handleSetRole(message, deps);
       return;
     case "stop_codex_tui": {
       log("Disconnecting Codex from GUI...");

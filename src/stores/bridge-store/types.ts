@@ -35,5 +35,5 @@ export interface BridgeState {
     reasoningEffort?: string;
     cwd?: string;
   }) => void;
-  setAgentRole: (agent: string, role: string) => void;
+  setRole: (agent: "claude" | "codex", role: string) => void;
 }

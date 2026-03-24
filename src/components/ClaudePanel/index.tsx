@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { invoke } from "@tauri-apps/api/core";
@@ -6,11 +6,12 @@ import { listen } from "@tauri-apps/api/event";
 import { useBridgeStore } from "@/stores/bridge-store";
 import { useCodexAccountStore } from "@/stores/codex-account-store";
 import { buildClaudeAgentsJson, buildMcpConfigJson } from "@/lib/agent-roles";
-import { ClaudeRoleSelect } from "./ClaudeRoleSelect";
 import { ConfigSelect } from "./ClaudeModelSelect";
 import { ClaudeQuota } from "./ClaudeQuota";
 import { useClaudeConfig } from "./useClaudeConfig";
 import { shortenPath } from "./helpers";
+import { RoleSelect } from "@/components/AgentStatus/RoleSelect";
+import { StatusDot } from "@/components/AgentStatus/StatusDot";
 
 interface ClaudePanelProps {
   connected: boolean;
@@ -27,6 +28,17 @@ export function ClaudePanel({ connected }: ClaudePanelProps) {
   const { config: claudeConfig, loading: configLoading } = useClaudeConfig();
 
   const locked = connected || isRunning;
+  const prevConnectedRef = useRef(connected);
+  const [justConnected, setJustConnected] = useState(false);
+
+  useEffect(() => {
+    if (connected && !prevConnectedRef.current) {
+      setJustConnected(true);
+      const t = setTimeout(() => setJustConnected(false), 600);
+      return () => clearTimeout(t);
+    }
+    prevConnectedRef.current = connected;
+  }, [connected]);
 
   useEffect(() => {
     const unlisten = listen<number>("pty-exit", () => setIsRunning(false));
@@ -65,23 +77,29 @@ export function ClaudePanel({ connected }: ClaudePanelProps) {
   }, [cwd, claudeRole, model, effort]);
 
   return (
-    <div className="rounded-lg border border-input bg-card p-3">
+    <div
+      className={cn(
+        "rounded-lg border bg-card p-3 card-depth transition-all duration-300",
+        connected
+          ? "border-claude/40 glow-claude-subtle border-glow-claude"
+          : isRunning
+            ? "border-yellow-500/30"
+            : "border-input hover:border-input/80",
+        justConnected && "card-connect-anim",
+      )}
+    >
       {/* Header */}
       <div className="flex items-center gap-2">
-        <span
-          className={cn(
-            "inline-block size-2 shrink-0 rounded-full",
-            connected
-              ? "bg-claude"
-              : isRunning
-                ? "bg-yellow-500 animate-pulse"
-                : "bg-muted-foreground",
-          )}
+        <StatusDot
+          status={
+            connected ? "connected" : isRunning ? "connecting" : "disconnected"
+          }
+          variant="claude"
         />
         <span className="flex-1 text-[13px] font-medium text-card-foreground">
           Claude Code
         </span>
-        <ClaudeRoleSelect disabled={locked} />
+        <RoleSelect agent="claude" disabled={locked} />
         {locked && (
           <button
             type="button"
@@ -104,7 +122,10 @@ export function ClaudePanel({ connected }: ClaudePanelProps) {
             </svg>
           </button>
         )}
-        <span className="text-[11px] uppercase text-secondary-foreground">
+        <span
+          key={connected ? "c" : isRunning ? "s" : "d"}
+          className="text-[11px] uppercase text-secondary-foreground status-flash"
+        >
           {connected ? "connected" : isRunning ? "starting" : "disconnected"}
         </span>
       </div>
@@ -199,9 +220,11 @@ export function ClaudePanel({ connected }: ClaudePanelProps) {
         <Button
           size="xs"
           variant="destructive"
-          className="w-full mt-2"
+          className="w-full mt-2 active:scale-[0.98] transition-all duration-200"
           onClick={() => {
-            invoke("stop_pty").catch(console.warn);
+            invoke("stop_pty")
+              .then(() => setIsRunning(false))
+              .catch(console.warn);
           }}
         >
           Stop Claude
@@ -212,7 +235,7 @@ export function ClaudePanel({ connected }: ClaudePanelProps) {
       {!locked && claudeConfig.installed && (
         <Button
           size="sm"
-          className="w-full mt-2 bg-claude text-white hover:bg-claude/80"
+          className="w-full mt-2 bg-claude text-white hover:bg-claude/90 hover:shadow-[0_0_16px_#8b5cf640] active:scale-[0.98] transition-all duration-200 btn-ripple"
           disabled={!cwd}
           onClick={handleLaunch}
         >

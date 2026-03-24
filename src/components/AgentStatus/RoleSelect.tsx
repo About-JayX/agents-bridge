@@ -1,7 +1,8 @@
-import { cn } from "@/lib/utils";
 import { useBridgeStore } from "@/stores/bridge-store";
+import { CyberSelect } from "@/components/ui/cyber-select";
 
 const ROLE_OPTIONS = [
+  { value: "user", label: "User (Admin)" },
   { value: "lead", label: "Lead" },
   { value: "coder", label: "Coder" },
   { value: "reviewer", label: "Reviewer" },
@@ -18,22 +19,13 @@ export function RoleSelect({
   const role = useBridgeStore((s) =>
     agent === "claude" ? s.claudeRole : s.codexRole,
   );
-  const setRole = useBridgeStore((s) => s.setAgentRole);
+  const setRole = useBridgeStore((s) => s.setRole);
   return (
-    <select
+    <CyberSelect
       value={role}
-      onChange={(e) => setRole(agent, e.target.value)}
+      options={ROLE_OPTIONS}
+      onChange={(v) => setRole(agent, v)}
       disabled={disabled}
-      className={cn(
-        "rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground border border-input outline-none",
-        disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
-      )}
-    >
-      {ROLE_OPTIONS.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+    />
   );
 }

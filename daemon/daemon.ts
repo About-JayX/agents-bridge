@@ -73,6 +73,8 @@ function currentStatus() {
     codexTuiRunning: tuiState.canReply() || codex.activeThreadId !== null,
     claudeConnected: state.attachedClaude !== null,
     codexAccount: codex.accountInfo,
+    claudeRole: state.claudeRole,
+    codexRole: state.codexRole,
   };
 }
 

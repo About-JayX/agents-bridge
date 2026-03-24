@@ -43,14 +43,33 @@ export function ClaudeQuota() {
             resets {timeLeft}
           </span>
         </div>
-        <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+        <div className="h-1.5 rounded-full bg-secondary overflow-hidden relative">
           <div
             className={cn(
-              "h-full rounded-full transition-all",
+              "h-full rounded-full transition-all duration-1000 ease-out relative",
               barColor(rl.status),
             )}
-            style={{ width: `${windowPercent}%` }}
-          />
+            style={{
+              width: `${windowPercent}%`,
+              animation: "meter-fill 1s ease-out",
+              boxShadow: isAllowed
+                ? "0 0 8px #8b5cf640, 0 0 2px #8b5cf680"
+                : "0 0 8px #ef444440",
+            }}
+          >
+            {isAllowed && (
+              <div className="absolute inset-0 overflow-hidden rounded-full">
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background:
+                      "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.15) 50%, transparent 100%)",
+                    animation: "shimmer 2.5s ease-in-out infinite",
+                  }}
+                />
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

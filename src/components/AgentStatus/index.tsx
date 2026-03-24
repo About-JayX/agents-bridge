@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { cn } from "@/lib/utils";
 import { ClaudePanel } from "@/components/ClaudePanel";
 import { useBridgeStore } from "@/stores/bridge-store";
 import { useCodexAccountStore } from "@/stores/codex-account-store";
@@ -42,19 +41,15 @@ export function AgentStatusPanel({
   return (
     <div className="flex flex-1 flex-col gap-3 p-4 overflow-y-auto min-h-0">
       {/* Daemon connection */}
-      <div className="flex items-center gap-2 pb-3 border-b border-border">
+      <div className="flex items-center gap-2 pb-3 border-b border-border/50 relative">
         <h3 className="flex-1 m-0 text-sm font-semibold text-foreground">
           AgentBridge
         </h3>
-        <span
-          className={cn(
-            "inline-block size-2 shrink-0 rounded-full",
-            connected ? "bg-codex" : "bg-destructive",
-          )}
-        />
+        <StatusDot status={connected ? "connected" : "error"} variant="codex" />
         <span className="text-xs text-secondary-foreground">
           {connected ? "Online" : "Offline"}
         </span>
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-primary/20 to-transparent" />
       </div>
 
       <div className="flex flex-col gap-2">
@@ -81,7 +76,7 @@ export function AgentStatusPanel({
           .map(([key, agent]) => (
             <div
               key={key}
-              className="rounded-lg border border-input bg-card p-3"
+              className="rounded-lg border border-input bg-card p-3 card-depth transition-all duration-300 hover:border-input/80"
             >
               <div className="flex items-center gap-2">
                 <StatusDot status={agent.status} />
@@ -98,7 +93,7 @@ export function AgentStatusPanel({
 
       {/* Daemon info */}
       {daemonStatus && (
-        <div className="mt-auto rounded-md bg-muted p-2.5">
+        <div className="mt-auto rounded-md bg-muted/60 p-2.5 border border-border/30 backdrop-blur-sm">
           <div className="mb-1 text-[11px] font-semibold uppercase text-muted-foreground">
             Daemon
           </div>

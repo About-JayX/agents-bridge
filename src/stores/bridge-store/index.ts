@@ -83,9 +83,9 @@ export const useBridgeStore = create<BridgeState>((set, get) => {
       reasoningEffort?: string;
       cwd?: string;
     }) => sendWs({ type: "apply_config", ...config }),
-    setAgentRole: (agent, role) => {
+    setRole: (agent, role) => {
       // Don't optimistically set role -- wait for daemon's role_sync event
-      sendWs({ type: "set_agent_role", agent, role });
+      sendWs({ type: "set_role", agent, role });
     },
   };
 });

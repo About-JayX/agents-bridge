@@ -12,6 +12,18 @@ interface ClaudeAgentConfig {
 }
 
 const CLAUDE_AGENTS: Record<string, ClaudeAgentConfig> = {
+  user: {
+    description:
+      "User (Admin): direct user control, full access, all capabilities enabled.",
+    prompt: `You are operating under direct user (admin) control in AgentBridge.
+
+## Your Role
+- The user is the administrator. Follow their instructions precisely.
+- You have full control: read, write, edit files, run commands.
+- You may receive messages from other agents. Evaluate and act on them as the user directs.
+- Use the agentbridge reply tool to communicate with other agents when needed.`,
+    permissionMode: "bypassPermissions",
+  },
   lead: {
     description:
       "Lead agent: reviews plans, makes final decisions, executes code changes.",

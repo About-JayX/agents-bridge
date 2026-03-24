@@ -23,9 +23,9 @@ export function MessageMarkdown({ content }: MessageMarkdownProps) {
               ?.replace("language-", "");
 
             return (
-              <div className="overflow-hidden rounded-md border border-border bg-muted/60">
+              <div className="overflow-hidden rounded-md border border-border/60 bg-muted/40 backdrop-blur-sm shadow-[0_2px_8px_rgba(0,0,0,0.2)]">
                 {language && (
-                  <div className="border-b border-border px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
+                  <div className="border-b border-border/50 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-primary/60 bg-primary/3">
                     {language}
                   </div>
                 )}
@@ -70,7 +70,7 @@ export function MessageMarkdown({ content }: MessageMarkdownProps) {
           ),
           li: ({ children }) => <li className="break-words">{children}</li>,
           blockquote: ({ children }) => (
-            <blockquote className="border-l-2 border-border pl-3 text-muted-foreground">
+            <blockquote className="border-l-2 border-primary/30 pl-3 text-muted-foreground">
               {children}
             </blockquote>
           ),
@@ -87,7 +87,7 @@ export function MessageMarkdown({ content }: MessageMarkdownProps) {
           ),
           // Inline code only — block code is handled by the `pre` component above
           code: ({ children }) => (
-            <code className="rounded bg-muted px-1 py-0.5 font-mono text-[12px] text-foreground">
+            <code className="rounded bg-muted/80 px-1 py-0.5 font-mono text-[12px] text-primary/90 border border-primary/10">
               {children}
             </code>
           ),

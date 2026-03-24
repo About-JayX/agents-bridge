@@ -126,10 +126,16 @@ pub fn launch_pty(
         cmd.arg(&mcp_config_json);
     }
     if !model.is_empty() {
+        if !CLAUDE_MODELS.iter().any(|m| m.id == model) {
+            return Err(format!("Invalid model: {model}"));
+        }
         cmd.arg("--model");
         cmd.arg(&model);
     }
     if !effort.is_empty() {
+        if !EFFORT_LEVELS.iter().any(|e| e.id == effort) {
+            return Err(format!("Invalid effort level: {effort}"));
+        }
         cmd.arg("--effort");
         cmd.arg(&effort);
     }
@@ -275,16 +281,21 @@ pub fn pty_is_running() -> bool {
 #[tauri::command]
 pub fn stop_pty() -> Result<(), String> {
     let state = get_state();
-    let mut guard = state.lock().unwrap();
-    if let Some(mut pty_state) = guard.take() {
-        // Kill child process explicitly
-        if let Some(mut child) = pty_state.child.take() {
-            let _ = child.kill();
-            // Brief wait for cleanup
-            let _ = child.try_wait();
+    let mut child_to_wait = None;
+    {
+        let mut guard = state.lock().unwrap();
+        if let Some(mut pty_state) = guard.take() {
+            if let Some(mut child) = pty_state.child.take() {
+                let _ = child.kill();
+                child_to_wait = Some(child);
+            }
+            // Drop writer + pair closes the PTY (lock released after this block)
+            drop(pty_state);
         }
-        // Drop writer + pair closes the PTY
-        drop(pty_state);
+    }
+    // Wait for child outside of lock to avoid deadlock
+    if let Some(mut child) = child_to_wait {
+        let _ = child.wait();
     }
     Ok(())
 }

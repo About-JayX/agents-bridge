@@ -83,8 +83,9 @@ export function ReplyInput({ connected }: ReplyInputProps) {
   const modKey = isMac ? "⌘" : "Ctrl";
 
   return (
-    <div className="border-t border-border px-4 py-3">
-      <div className="rounded-lg border border-input bg-card focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/30 transition-colors">
+    <div className="border-t border-border/50 px-4 py-3 relative">
+      <div className="absolute top-0 left-4 right-4 h-px bg-linear-to-r from-transparent via-primary/10 to-transparent" />
+      <div className="rounded-lg border border-input bg-card/80 backdrop-blur-sm focus-within:border-claude/50 focus-within:ring-1 focus-within:ring-claude/20 focus-within:shadow-[0_0_20px_#8b5cf615] transition-all duration-300">
         {/* Textarea */}
         <textarea
           ref={textareaRef}
@@ -110,7 +111,7 @@ export function ReplyInput({ connected }: ReplyInputProps) {
           <div className="flex items-center gap-2">
             <Badge
               variant="outline"
-              className="text-[10px] font-normal text-codex border-codex/30"
+              className="text-[10px] font-normal text-codex border-codex/30 shadow-[0_0_6px_#22c55e15]"
             >
               To Codex
             </Badge>
@@ -126,7 +127,7 @@ export function ReplyInput({ connected }: ReplyInputProps) {
               size="sm"
               disabled={!connected || !draft.trim()}
               onClick={handleSend}
-              className="h-7 gap-1.5 px-3 text-[12px]"
+              className="h-7 gap-1.5 px-3 text-[12px] hover:shadow-[0_0_12px_#8b5cf630] active:scale-[0.96] transition-all duration-200"
             >
               <Send className="size-3" />
               Send

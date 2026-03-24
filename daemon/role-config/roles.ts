@@ -1,6 +1,30 @@
 import type { RoleId, AgentRole } from "./types";
 
 export const ROLES: Record<RoleId, AgentRole> = {
+  user: {
+    id: "user",
+    label: "User (Admin)",
+    developerInstructions: `You are operating under direct user control in AgentBridge.
+The user is the administrator with full authority over all agents and decisions.
+Follow the user's instructions precisely. You have full access to all tools and capabilities.`,
+    sandboxMode: "workspace-write",
+    approvalPolicy: "never",
+    shellTool: true,
+    forwardPrompt:
+      "[User (Admin) completed task]\nReview the output below and decide how to proceed.",
+    claudeAgent: {
+      description:
+        "User (Admin): direct user control, full access, all capabilities enabled.",
+      prompt: `You are operating under direct user (admin) control in AgentBridge.
+
+## Your Role
+- The user is the administrator. Follow their instructions precisely.
+- You have full control: read, write, edit files, run commands.
+- You may receive messages from other agents. Evaluate and act on them as the user directs.
+- Use the agentbridge reply tool to communicate with other agents when needed.`,
+      permissionMode: "bypassPermissions",
+    },
+  },
   lead: {
     id: "lead",
     label: "Lead",
@@ -8,7 +32,8 @@ export const ROLES: Record<RoleId, AgentRole> = {
     sandboxMode: "workspace-write",
     approvalPolicy: "never",
     shellTool: true,
-    forwardPrompt: "",
+    forwardPrompt:
+      "[Lead completed task]\nReview the output below and decide how to proceed.",
     claudeAgent: {
       description:
         "Lead agent: reviews plans, makes final decisions, executes code changes.",

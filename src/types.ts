@@ -1,4 +1,4 @@
-export type MessageSource = "claude" | "codex" | "system";
+export type MessageSource = "claude" | "codex" | "user" | "system";
 
 export interface BridgeMessage {
   id: string;
@@ -54,6 +54,8 @@ export interface DaemonStatus {
   codexTuiRunning: boolean;
   claudeConnected: boolean;
   codexAccount?: CodexAccountInfo;
+  claudeRole?: string;
+  codexRole?: string;
 }
 
 export interface GuiEvent {

@@ -45,7 +45,7 @@ class DaemonState {
   codexBootstrapped = false;
   shuttingDown = false;
 
-  // Agent roles
+  // Per-agent roles
   claudeRole: RoleId = "lead";
   codexRole: RoleId = "coder";
 

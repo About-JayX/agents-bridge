@@ -104,9 +104,8 @@ export function handleGuiEvent(guiEvent: GuiEvent, set: SetFn) {
     }
 
     case "role_sync": {
-      const { agent: ra, role: rr } = guiEvent.payload;
-      if (ra === "claude") set({ claudeRole: rr });
-      else if (ra === "codex") set({ codexRole: rr });
+      const { claudeRole, codexRole } = guiEvent.payload;
+      set({ claudeRole, codexRole });
       break;
     }
 

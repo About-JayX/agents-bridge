@@ -1,11 +1,13 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { CyberSelect } from "@/components/ui/cyber-select";
 import { useBridgeStore } from "@/stores/bridge-store";
 import { useCodexAccountStore } from "@/stores/codex-account-store";
+import { RoleSelect } from "./RoleSelect";
+import { StatusDot } from "./StatusDot";
 import { MiniMeter } from "@/components/CodexAccountPanel/MiniMeter";
 import { windowLabel } from "@/components/CodexAccountPanel/helpers";
-import { RoleSelect } from "./RoleSelect";
 import type { CodexAccountInfo } from "@/types";
 
 function shortenPath(p: string): string {
@@ -65,7 +67,21 @@ export function CodexPanel({
   const [selectedReasoning, setSelectedReasoning] = useState("");
   const [cwd, setCwd] = useState("");
 
+  const [connecting, setConnecting] = useState(false);
   const locked = codexTuiRunning;
+  const prevRunningRef = useRef(codexTuiRunning);
+  const [justConnected, setJustConnected] = useState(false);
+
+  useEffect(() => {
+    if (codexTuiRunning && !prevRunningRef.current) {
+      setConnecting(false);
+      setJustConnected(true);
+      const t = setTimeout(() => setJustConnected(false), 600);
+      return () => clearTimeout(t);
+    }
+    if (!codexTuiRunning) setConnecting(false);
+    prevRunningRef.current = codexTuiRunning;
+  }, [codexTuiRunning]);
 
   // Fetch models on mount
   useEffect(() => {
@@ -100,6 +116,15 @@ export function CodexPanel({
     [currentModel],
   );
 
+  const modelSelectOptions = useMemo(
+    () => models.map((m) => ({ value: m.slug, label: m.displayName })),
+    [models],
+  );
+  const reasoningSelectOptions = useMemo(
+    () => reasoningOptions.map((r) => ({ value: r.effort, label: r.effort })),
+    [reasoningOptions],
+  );
+
   // Reset reasoning when model changes (only user-driven)
   const handleModelChange = useCallback(
     (slug: string) => {
@@ -120,6 +145,7 @@ export function CodexPanel({
   }, [pickDirectory]);
 
   const handleConnect = useCallback(() => {
+    setConnecting(true);
     applyConfig({
       model: selectedModel || undefined,
       reasoningEffort: selectedReasoning || undefined,
@@ -129,24 +155,37 @@ export function CodexPanel({
   }, [applyConfig, selectedModel, selectedReasoning, cwd, launchCodexTui]);
 
   return (
-    <div className="rounded-lg border border-input bg-card p-3">
+    <div
+      className={cn(
+        "rounded-lg border bg-card p-3 card-depth transition-all duration-300",
+        codexTuiRunning
+          ? "border-codex/40 glow-codex-subtle border-glow-codex"
+          : codexReady
+            ? "border-yellow-500/30"
+            : "border-input hover:border-input/80",
+        justConnected && "card-connect-anim",
+      )}
+    >
       {/* Header */}
       <div className="flex items-center gap-2">
-        <span
-          className={cn(
-            "inline-block size-2 shrink-0 rounded-full",
+        <StatusDot
+          status={
             codexTuiRunning
-              ? "bg-codex"
+              ? "connected"
               : codexReady
-                ? "bg-yellow-500"
-                : "bg-muted-foreground",
-          )}
+                ? "connecting"
+                : "disconnected"
+          }
+          variant="codex"
         />
         <span className="flex-1 text-[13px] font-medium text-card-foreground">
           Codex
         </span>
-        <RoleSelect agent="codex" disabled={locked} />
-        <span className="text-[11px] uppercase text-secondary-foreground">
+        <RoleSelect agent="codex" disabled={codexTuiRunning} />
+        <span
+          key={codexTuiRunning ? "c" : codexReady ? "r" : "s"}
+          className="text-[11px] uppercase text-secondary-foreground status-flash"
+        >
           {codexTuiRunning ? "connected" : codexReady ? "ready" : "starting..."}
         </span>
       </div>
@@ -235,21 +274,12 @@ export function CodexPanel({
         {models.length > 0 && (
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-muted-foreground">Model</span>
-            <select
+            <CyberSelect
               value={selectedModel}
-              onChange={(e) => handleModelChange(e.target.value)}
+              options={modelSelectOptions}
+              onChange={handleModelChange}
               disabled={locked}
-              className={cn(
-                "rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground border border-input outline-none",
-                locked ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
-              )}
-            >
-              {models.map((m) => (
-                <option key={m.slug} value={m.slug}>
-                  {m.displayName}
-                </option>
-              ))}
-            </select>
+            />
           </div>
         )}
 
@@ -257,21 +287,12 @@ export function CodexPanel({
         {reasoningOptions.length > 0 && (
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-muted-foreground">Reasoning</span>
-            <select
+            <CyberSelect
               value={selectedReasoning}
-              onChange={(e) => setSelectedReasoning(e.target.value)}
+              options={reasoningSelectOptions}
+              onChange={setSelectedReasoning}
               disabled={locked}
-              className={cn(
-                "rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground border border-input outline-none",
-                locked ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
-              )}
-            >
-              {reasoningOptions.map((r) => (
-                <option key={r.effort} value={r.effort}>
-                  {r.effort}
-                </option>
-              ))}
-            </select>
+            />
           </div>
         )}
 
@@ -313,7 +334,7 @@ export function CodexPanel({
         <Button
           size="sm"
           variant="secondary"
-          className="w-full mt-2"
+          className="w-full mt-2 active:scale-[0.98] transition-all duration-200"
           onClick={stopCodexTui}
         >
           Disconnect Codex
@@ -323,12 +344,19 @@ export function CodexPanel({
       {/* Connect button (when not connected) */}
       {!locked && (
         <Button
-          className="w-full mt-2 bg-codex text-white hover:bg-codex/80"
+          className="w-full mt-2 bg-codex text-white hover:bg-codex/90 hover:shadow-[0_0_16px_#22c55e40] active:scale-[0.98] transition-all duration-200 btn-ripple"
           size="sm"
-          disabled={!codexReady}
+          disabled={!codexReady || connecting}
           onClick={handleConnect}
         >
-          Connect Codex
+          {connecting ? (
+            <span className="flex items-center gap-2">
+              <span className="size-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              Connecting…
+            </span>
+          ) : (
+            "Connect Codex"
+          )}
         </Button>
       )}
 

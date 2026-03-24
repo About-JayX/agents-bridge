@@ -1,4 +1,4 @@
-export type RoleId = "lead" | "coder" | "reviewer" | "tester";
+export type RoleId = "user" | "lead" | "coder" | "reviewer" | "tester";
 
 export interface AgentRole {
   id: RoleId;
@@ -25,6 +25,7 @@ export interface AgentRole {
 }
 
 export const ROLE_OPTIONS: { value: RoleId; label: string }[] = [
+  { value: "user", label: "User (Admin)" },
   { value: "lead", label: "Lead" },
   { value: "coder", label: "Coder" },
   { value: "reviewer", label: "Reviewer" },
