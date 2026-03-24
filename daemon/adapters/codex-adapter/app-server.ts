@@ -1,0 +1,115 @@
+import type { EventEmitter } from "node:events";
+import type { AdapterState } from "./types";
+import { patchResponse } from "./codex-response-patcher";
+import { scheduleReconnect } from "./lifecycle";
+
+export function connectToAppServer(
+  state: AdapterState,
+  emitter: EventEmitter,
+  log: (msg: string) => void,
+  isReconnect = false,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const appWs = new WebSocket(`ws://127.0.0.1:${state.appPort}`);
+    let settled = false;
+
+    appWs.onopen = () => {
+      settled = true;
+      state.appServerWs = appWs;
+      state.intentionalDisconnect = false;
+      state.reconnectAttempts = 0;
+      log(
+        isReconnect
+          ? "Reconnected to app-server"
+          : "Connected to app-server (persistent)",
+      );
+      resolve();
+    };
+
+    appWs.onmessage = (event) => handleAppServerMessage(state, event, log);
+
+    appWs.onerror = () => {
+      log("App-server connection error");
+      if (!settled) {
+        settled = true;
+        reject(new Error("Failed to connect to app-server"));
+      }
+    };
+
+    appWs.onclose = () => {
+      log("App-server connection closed");
+      state.appServerWs = null;
+      // Only auto-reconnect for established connections that drop unexpectedly.
+      // If the promise was rejected by onerror (settled && !open), the caller
+      // (scheduleReconnect) handles retry — don't double-schedule.
+      if (!settled && !state.intentionalDisconnect) {
+        settled = true;
+        reject(new Error("Connection closed before open"));
+      } else if (
+        appWs.readyState !== WebSocket.CONNECTING &&
+        !state.intentionalDisconnect &&
+        state.reconnectAttempts === 0
+      ) {
+        // Connection was established then dropped — schedule reconnect
+        scheduleReconnect(state, emitter, log);
+      }
+    };
+  });
+}
+
+function handleAppServerMessage(
+  state: AdapterState,
+  event: MessageEvent,
+  log: (msg: string) => void,
+) {
+  const data =
+    typeof event.data === "string" ? event.data : event.data.toString();
+  let forwarded = data;
+
+  try {
+    const parsed = JSON.parse(data);
+
+    // Protocol discovery: log method + key params
+    if (parsed.method) {
+      const extra =
+        parsed.method === "item/started"
+          ? ` type=${parsed.params?.item?.type}`
+          : parsed.method === "item/agentMessage/delta"
+            ? ` itemId=${parsed.params?.itemId} len=${parsed.params?.delta?.length}`
+            : "";
+      log(`[proto] notification: ${parsed.method}${extra}`);
+    } else if (parsed.result) {
+      log(
+        `[proto] response id=${parsed.id} keys=${Object.keys(parsed.result).join(",")}`,
+      );
+    }
+    const mapping =
+      parsed.id !== undefined
+        ? state.upstreamToClient.get(parsed.id)
+        : undefined;
+
+    if (mapping) {
+      state.upstreamToClient.delete(parsed.id);
+      if (mapping.connId !== state.tuiConnId) {
+        log(`Dropping stale response (upstream id ${parsed.id})`);
+        return;
+      }
+      parsed.id = mapping.clientId;
+      const raw = JSON.stringify(parsed);
+      forwarded = patchResponse(parsed, raw, log);
+      // If response was patched, intercept the patched version so captureAccountData sees result
+      const interceptObj = forwarded !== raw ? JSON.parse(forwarded) : parsed;
+      state.handler.intercept(interceptObj, mapping.connId);
+    } else {
+      forwarded = patchResponse(parsed, data, log);
+      const interceptObj = forwarded !== data ? JSON.parse(forwarded) : parsed;
+      state.handler.intercept(interceptObj);
+    }
+  } catch {}
+
+  if (state.tuiWs) {
+    try {
+      state.tuiWs.send(forwarded);
+    } catch {}
+  }
+}

@@ -24,6 +24,7 @@ pub fn launch_pty(
     rows: u16,
     role_id: String,
     agents_json: String,
+    mcp_config_json: String,
 ) -> Result<(), String> {
     let state = get_state();
     {
@@ -47,12 +48,11 @@ pub fn launch_pty(
     let claude_bin = std::env::var("CLAUDE_PATH").unwrap_or_else(|_| "claude".to_string());
     let mut cmd = CommandBuilder::new(&claude_bin);
     cmd.arg("--dangerously-skip-permissions");
-    // Ensure MCP servers (agentbridge) are loaded
-    let home = dirs::home_dir().unwrap_or_default();
-    let mcp_config = home.join(".claude").join("mcp.json");
-    if mcp_config.exists() {
+    // MCP config: inline JSON + --strict-mcp-config (zero file writes)
+    if !mcp_config_json.is_empty() {
+        cmd.arg("--strict-mcp-config");
         cmd.arg("--mcp-config");
-        cmd.arg(mcp_config.to_string_lossy().as_ref());
+        cmd.arg(&mcp_config_json);
     }
     if !role_id.is_empty() && !agents_json.is_empty() {
         cmd.arg("--agent");

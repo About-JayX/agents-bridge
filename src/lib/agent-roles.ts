@@ -85,6 +85,28 @@ const CLAUDE_AGENTS: Record<string, ClaudeAgentConfig> = {
   },
 };
 
+/**
+ * Build inline MCP config JSON for --strict-mcp-config --mcp-config <json>.
+ * Zero file writes — the JSON is passed directly as a CLI argument.
+ */
+export function buildMcpConfigJson(controlPort = 4502): string {
+  // In dev mode, bridge.ts is at <project>/daemon/bridge.ts
+  // The path is resolved at runtime by the daemon side; here we use a fixed reference
+  // that matches the daemon's bridge.ts location relative to the project root.
+  return JSON.stringify({
+    mcpServers: {
+      agentbridge: {
+        command: "bun",
+        args: [
+          "run",
+          new URL("../../daemon/bridge.ts", import.meta.url).pathname,
+        ],
+        env: { AGENTBRIDGE_CONTROL_PORT: String(controlPort) },
+      },
+    },
+  });
+}
+
 /** Generate --agents JSON for Claude CLI */
 export function buildClaudeAgentsJson(roleId: string): string {
   const agent = CLAUDE_AGENTS[roleId];
