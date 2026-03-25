@@ -52,13 +52,23 @@ pub fn read_profile() -> Result<CodexProfile, String> {
         .and_then(|v| v.as_array());
     let default_org = orgs.and_then(|arr| {
         arr.iter()
-            .find(|o| o.get("is_default").and_then(|v| v.as_bool()).unwrap_or(false))
+            .find(|o| {
+                o.get("is_default")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+            })
             .or(arr.first())
     });
 
     Ok(CodexProfile {
-        email: payload.get("email").and_then(|v| v.as_str()).map(String::from),
-        name: payload.get("name").and_then(|v| v.as_str()).map(String::from),
+        email: payload
+            .get("email")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        name: payload
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(String::from),
         plan_type: auth_ns
             .and_then(|v| v.get("chatgpt_plan_type"))
             .and_then(|v| v.as_str())

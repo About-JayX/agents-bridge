@@ -1,0 +1,86 @@
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import type { PermissionBehavior, PermissionPrompt } from "@/types";
+
+interface PermissionQueueProps {
+  prompts: PermissionPrompt[];
+  onResolve: (requestId: string, behavior: PermissionBehavior) => Promise<void>;
+}
+
+export function PermissionQueue({
+  prompts,
+  onResolve,
+}: PermissionQueueProps) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const handleResolve = async (
+    requestId: string,
+    behavior: PermissionBehavior,
+  ) => {
+    setBusyId(requestId);
+    try {
+      await onResolve(requestId, behavior);
+    } finally {
+      setBusyId((current) => (current === requestId ? null : current));
+    }
+  };
+
+  if (prompts.length === 0) {
+    return (
+      <div className="py-10 text-center text-[13px] text-muted-foreground">
+        No pending approvals.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+      {prompts.map((prompt) => {
+        const busy = busyId === prompt.requestId;
+        return (
+          <div
+            key={prompt.requestId}
+            className="rounded-xl border border-amber-500/30 bg-amber-500/8 p-3"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-[13px] font-medium text-foreground">
+                  {prompt.toolName}
+                </div>
+                <div className="mt-0.5 text-[11px] text-muted-foreground">
+                  {prompt.agent} •{" "}
+                  {new Date(prompt.createdAt).toLocaleTimeString()}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => handleResolve(prompt.requestId, "deny")}
+                >
+                  Deny
+                </Button>
+                <Button
+                  size="xs"
+                  disabled={busy}
+                  onClick={() => handleResolve(prompt.requestId, "allow")}
+                >
+                  Allow
+                </Button>
+              </div>
+            </div>
+            <p className="mt-3 text-[12px] leading-relaxed text-secondary-foreground">
+              {prompt.description}
+            </p>
+            {prompt.inputPreview && (
+              <pre className="mt-3 overflow-x-auto rounded-lg border border-border/60 bg-background/70 p-2 font-mono text-[11px] text-muted-foreground">
+                {prompt.inputPreview}
+              </pre>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}

@@ -30,6 +30,11 @@ pub enum DaemonCmd {
     StopCodex,
     /// Update which role Claude is playing (affects routing).
     SetClaudeRole(String),
+    /// Send a permission verdict back to the bridge for Claude Code.
+    RespondPermission {
+        request_id: String,
+        behavior: types::PermissionBehavior,
+    },
 }
 
 /// Create the command channel.  Call before spawning to avoid the DaemonSender race.
@@ -60,7 +65,11 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
                 routing::route_message(&state, &app, msg).await;
             }
 
-            DaemonCmd::LaunchCodex { role_id, cwd, model } => {
+            DaemonCmd::LaunchCodex {
+                role_id,
+                cwd,
+                model,
+            } => {
                 if let Some(h) = codex_handle.take() {
                     h.stop().await;
                     let mut daemon = state.write().await;
@@ -94,6 +103,60 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
 
             DaemonCmd::SetClaudeRole(role) => {
                 state.write().await.claude_role = role;
+            }
+
+            DaemonCmd::RespondPermission {
+                request_id,
+                behavior,
+            } => {
+                let resolved = {
+                    let mut daemon = state.write().await;
+                    daemon.resolve_permission(
+                        &request_id,
+                        behavior,
+                        chrono::Utc::now().timestamp_millis() as u64,
+                    )
+                };
+
+                let Some((agent_id, outbound)) = resolved else {
+                    gui::emit_system_log(
+                        &app,
+                        "warn",
+                        &format!("[Daemon] permission request {request_id} is unknown or expired"),
+                    );
+                    continue;
+                };
+
+                let sender = { state.read().await.attached_agents.get(&agent_id).cloned() };
+                let verdict = match &outbound {
+                    types::ToAgent::PermissionVerdict { verdict } => Some(verdict.clone()),
+                    _ => None,
+                };
+
+                match sender {
+                    Some(tx) if tx.send(outbound).await.is_ok() => {
+                        gui::emit_system_log(
+                            &app,
+                            "info",
+                            &format!("[Daemon] permission verdict delivered to {agent_id}"),
+                        );
+                    }
+                    _ => {
+                        if let Some(verdict) = verdict {
+                            state
+                                .write()
+                                .await
+                                .buffer_permission_verdict(&agent_id, verdict);
+                        }
+                        gui::emit_system_log(
+                            &app,
+                            "warn",
+                            &format!(
+                                "[Daemon] {agent_id} offline, buffered permission verdict for {request_id}"
+                            ),
+                        );
+                    }
+                }
             }
         }
     }

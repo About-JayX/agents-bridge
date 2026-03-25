@@ -1,13 +1,3 @@
-export function shortenPath(p: string): string {
-  const idx = p.indexOf("/Users/");
-  if (idx >= 0) {
-    const rest = p.slice(idx + 7);
-    const slash = rest.indexOf("/");
-    return slash >= 0 ? `~${rest.slice(slash)}` : "~";
-  }
-  return p;
-}
-
 export function windowLabel(mins: number | null, fb: string): string {
   if (!mins) return fb;
   if (mins === 300) return "5h";

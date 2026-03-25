@@ -9,12 +9,12 @@ paths:
   - 内嵌 async daemon
   - Codex 账号 / OAuth / 用量 / 模型
   - 项目 `.mcp.json` 注册
-  - 启动外部 Claude 终端
+  - Claude channel preview preflight + 启动外部 Claude 终端
 
 ## 当前模块职责
 
 - `main.rs` — commands 注册、daemon task 启动
-- `mcp.rs` — 项目 `.mcp.json` 注册、检查、启动 Claude 终端
+- `mcp.rs` — 项目 `.mcp.json` 注册、检查、Claude CLI 版本校验、preview 启动
 - `codex/auth.rs` — 读取 `$HOME/.codex/auth.json`
 - `codex/oauth.rs` — OAuth 登录 / 取消 / 登出
 - `codex/usage.rs` — 用量查询
@@ -43,6 +43,7 @@ paths:
 - `daemon_launch_codex`
 - `daemon_stop_codex`
 - `daemon_set_claude_role`
+- `daemon_respond_permission`
 
 新增 command 时，必须同步注册到 `main.rs` 的 `invoke_handler`。
 
@@ -51,6 +52,7 @@ paths:
 - `agent_message`
 - `system_log`
 - `agent_status`
+- `permission_prompt`
 
 新增事件时：
 
@@ -62,6 +64,7 @@ paths:
 
 - 所有消息路由都必须走 `routing.rs`
 - 不要在 `control/handler.rs` 或 `codex/session.rs` 里复制路由规则
+- Claude permission request / verdict 必须走 `daemon/state.rs` + `daemon/control/handler.rs` 的显式协议，不要伪装成普通聊天消息
 - `session_manager.rs` 当前只负责 `auth.json` symlink 和 `config.toml`
 - 如果后续新增 Starlark、AGENTS、MCP 注入到 `CODEX_HOME`，必须先更新文档再实现
 
@@ -71,6 +74,7 @@ paths:
   - `src-tauri/build.rs`
   - `src-tauri/tauri.conf.json`
   - `src-tauri/src/mcp.rs`
+- `.mcp.json` 中的 bridge command 当前有意写绝对路径，这是 Tauri 打包形态要求，不要擅自改回文档示例里的相对脚本路径
 - `beforeDevCommand` / `beforeBuildCommand` 必须保证 `agent-bridge-bridge` 先被构建，否则 `.mcp.json` 注册出来的命令会指向不存在的二进制
 - 当前运行时不依赖 Bun daemon，但前端构建仍由 `bun run dev/build` 驱动
 

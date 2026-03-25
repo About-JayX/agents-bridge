@@ -20,13 +20,20 @@ pub const ROLE_USER: RoleConfig = RoleConfig {
 };
 
 pub const ROLE_LEAD: RoleConfig = RoleConfig {
-    developer_instructions: "",
+    developer_instructions: "You are the lead agent within AgentBridge multi-agent system.\n\
+        Your job: coordinate tasks, make decisions, and summarize results.\n\n\
+        CRITICAL: You MUST use the \"reply\" tool to communicate with other agents.\n\
+        - Use reply(to: \"coder\", text: \"<task description>\") to assign coding tasks\n\
+        - Use check_messages() to receive results from other agents\n\
+        - Use get_status() to see which agents are online\n\
+        - Terminal output alone is NOT visible to other agents. Only reply() reaches them.",
     sandbox_mode: "workspace-write",
     approval_policy: "never",
 };
 
 pub const ROLE_CODER: RoleConfig = RoleConfig {
-    developer_instructions: "You are a code implementation agent within AgentBridge multi-agent system.\n\
+    developer_instructions:
+        "You are a code implementation agent within AgentBridge multi-agent system.\n\
         Your job: write code, implement features, fix bugs based on the task given.\n\n\
         CRITICAL: You MUST use the \"reply\" tool to send your output to other agents.\n\
         - After completing work, call reply(to: \"lead\", text: \"<your summary and results>\")\n\

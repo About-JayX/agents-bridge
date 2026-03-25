@@ -15,6 +15,7 @@ pub struct BridgeMessage {
 }
 
 impl BridgeMessage {
+    #[cfg(test)]
     pub fn system(content: &str, to: &str) -> Self {
         Self {
             id: format!("sys_{}", chrono::Utc::now().timestamp_millis()),
@@ -28,17 +29,44 @@ impl BridgeMessage {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct PermissionRequest {
+    pub request_id: String,
+    pub tool_name: String,
+    pub description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_preview: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionBehavior {
+    Allow,
+    Deny,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct PermissionVerdict {
+    pub request_id: String,
+    pub behavior: PermissionBehavior,
+}
+
 /// daemon → bridge (over WS :4502)
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToAgent {
     RoutedMessage { message: BridgeMessage },
+    PermissionVerdict { verdict: PermissionVerdict },
 }
 
 /// bridge → daemon (over WS :4502)
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum FromAgent {
+    // Note: `agentId` uses camelCase (not snake_case) for wire compatibility
+    // with the bridge. Both sides use `#[serde(rename = "agentId")]`.
     AgentConnect {
         #[serde(rename = "agentId")]
         agent_id: String,
@@ -46,5 +74,40 @@ pub enum FromAgent {
     AgentReply {
         message: BridgeMessage,
     },
+    PermissionRequest {
+        request: PermissionRequest,
+    },
     AgentDisconnect,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn serialize_permission_verdict_to_agent() {
+        let outbound = ToAgent::PermissionVerdict {
+            verdict: PermissionVerdict {
+                request_id: "req-1".into(),
+                behavior: PermissionBehavior::Allow,
+            },
+        };
+        let json = serde_json::to_value(outbound).unwrap();
+        assert_eq!(json["type"], "permission_verdict");
+        assert_eq!(json["verdict"]["request_id"], "req-1");
+        assert_eq!(json["verdict"]["behavior"], "allow");
+    }
+
+    #[test]
+    fn deserialize_permission_request_from_agent() {
+        let raw = r#"{"type":"permission_request","request":{"request_id":"req-2","tool_name":"Bash","description":"run pwd","input_preview":"pwd"}}"#;
+        let inbound: FromAgent = serde_json::from_str(raw).unwrap();
+        match inbound {
+            FromAgent::PermissionRequest { request } => {
+                assert_eq!(request.request_id, "req-2");
+                assert_eq!(request.tool_name, "Bash");
+            }
+            other => panic!("unexpected inbound payload: {other:?}"),
+        }
+    }
 }

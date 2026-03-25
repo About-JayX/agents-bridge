@@ -1,5 +1,7 @@
+mod channel_state;
 mod daemon_client;
 mod mcp;
+mod mcp_protocol;
 mod tools;
 mod types;
 
@@ -14,9 +16,9 @@ async fn main() {
     eprintln!("[Bridge/{agent_id}] starting, daemon port {control_port}");
 
     // daemon_client → mcp: push routed messages as Channel notifications
-    let (push_tx, push_rx) = tokio::sync::mpsc::channel::<types::BridgeMessage>(64);
-    // mcp (reply tool) → daemon_client: send agent_reply
-    let (reply_tx, reply_rx) = tokio::sync::mpsc::channel::<types::BridgeMessage>(64);
+    let (push_tx, push_rx) = tokio::sync::mpsc::channel::<types::DaemonInbound>(64);
+    // mcp → daemon_client: send agent_reply / permission_request
+    let (reply_tx, reply_rx) = tokio::sync::mpsc::channel::<types::BridgeOutbound>(64);
 
     let dc = tokio::spawn(daemon_client::run(
         control_port,

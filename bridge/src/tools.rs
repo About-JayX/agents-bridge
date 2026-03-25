@@ -3,20 +3,20 @@ use crate::types::BridgeMessage;
 pub fn reply_tool_schema() -> serde_json::Value {
     serde_json::json!({
         "name": "reply",
-        "description": "Send a message to another agent or the user.",
+        "description": "Reply to an AgentBridge channel message using the original chat_id.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "to": {
+                "chat_id": {
                     "type": "string",
-                    "description": "Target role: lead/coder/reviewer/tester/user"
+                    "description": "chat_id from the incoming <channel ...> event"
                 },
                 "text": {
                     "type": "string",
                     "description": "Message content"
                 }
             },
-            "required": ["to", "text"]
+            "required": ["chat_id", "text"]
         }
     })
 }
@@ -27,15 +27,15 @@ pub fn handle_tool_call(params: &serde_json::Value, from: &str) -> Option<Bridge
         return None;
     }
     let args = params.get("arguments")?;
-    let to = args.get("to")?.as_str()?;
+    let chat_id = args.get("chat_id")?.as_str()?;
     let text = args.get("text")?.as_str()?;
     Some(BridgeMessage {
         id: format!("claude_{}", chrono::Utc::now().timestamp_millis()),
         from: from.to_string(),
-        to: to.to_string(),
+        to: chat_id.to_string(),
         content: text.to_string(),
         timestamp: chrono::Utc::now().timestamp_millis() as u64,
-        reply_to: None,
+        reply_to: Some(chat_id.to_string()),
         priority: None,
     })
 }
@@ -45,13 +45,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn reply_schema_uses_chat_id_contract() {
+        let schema = reply_tool_schema();
+        assert!(schema["inputSchema"]["properties"]["chat_id"].is_object());
+        assert_eq!(
+            schema["inputSchema"]["required"],
+            serde_json::json!(["chat_id", "text"])
+        );
+        assert!(schema["inputSchema"]["properties"]["to"].is_null());
+    }
+
+    #[test]
     fn handle_reply_tool() {
         let params = serde_json::json!({
             "name": "reply",
-            "arguments": { "to": "lead", "text": "hello" }
+            "arguments": { "chat_id": "chat-1", "text": "hello" }
         });
         let msg = handle_tool_call(&params, "coder").unwrap();
-        assert_eq!(msg.to, "lead");
+        assert_eq!(msg.reply_to.as_deref(), Some("chat-1"));
         assert_eq!(msg.content, "hello");
         assert_eq!(msg.from, "coder");
     }

@@ -7,11 +7,7 @@ use axum::{
 };
 use tauri::AppHandle;
 
-pub async fn start(
-    port: u16,
-    state: SharedState,
-    app: AppHandle,
-) -> anyhow::Result<()> {
+pub async fn start(port: u16, state: SharedState, app: AppHandle) -> anyhow::Result<()> {
     let shared = (state, app);
     let router = Router::new()
         .route("/healthz", get(|| async { "ok" }))

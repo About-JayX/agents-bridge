@@ -1,24 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { CyberSelect } from "@/components/ui/cyber-select";
 import { useBridgeStore } from "@/stores/bridge-store";
 import { useCodexAccountStore } from "@/stores/codex-account-store";
-import { RoleSelect } from "./RoleSelect";
-import { StatusDot } from "./StatusDot";
-import { MiniMeter } from "@/components/CodexAccountPanel/MiniMeter";
-import { windowLabel } from "@/components/CodexAccountPanel/helpers";
-import type { CodexAccountInfo } from "@/types";
-
-function shortenPath(p: string): string {
-  const idx = p.indexOf("/Users/");
-  if (idx >= 0) {
-    const rest = p.slice(idx + 7);
-    const slash = rest.indexOf("/");
-    return slash >= 0 ? `~${rest.slice(slash)}` : "~";
-  }
-  return p;
-}
+import { AuthActions } from "./AuthActions";
+import { CodexHeader } from "./CodexHeader";
+import { CodexUsageSection, type CodexUsageData } from "./CodexUsageSection";
+import { CodexConfigRows } from "./CodexConfigRows";
 
 interface CodexPanelProps {
   codexTuiRunning: boolean;
@@ -26,23 +14,9 @@ interface CodexPanelProps {
   threadId: string | null;
   stopCodexTui: () => void;
   profile: { name?: string; planType?: string } | null;
-  usage: {
-    allowed: boolean;
-    limitReached: boolean;
-    primary: {
-      usedPercent: number;
-      remainingPercent: number;
-      windowMinutes: number | null;
-    } | null;
-    secondary: {
-      usedPercent: number;
-      remainingPercent: number;
-      windowMinutes: number | null;
-    } | null;
-  } | null;
+  usage: CodexUsageData | null;
   refreshing: boolean;
   refreshUsage: () => void;
-  codexAccount: CodexAccountInfo | undefined;
 }
 
 export function CodexPanel({
@@ -54,7 +28,6 @@ export function CodexPanel({
   usage,
   refreshing,
   refreshUsage,
-  codexAccount,
 }: CodexPanelProps) {
   const models = useCodexAccountStore((s) => s.models);
   const fetchModels = useCodexAccountStore((s) => s.fetchModels);
@@ -81,12 +54,10 @@ export function CodexPanel({
     prevRunningRef.current = codexTuiRunning;
   }, [codexTuiRunning]);
 
-  // Fetch models on mount
   useEffect(() => {
     fetchModels();
   }, [fetchModels]);
 
-  // Set defaults when models first load
   useEffect(() => {
     if (models.length > 0 && !selectedModel) {
       const first = models[0];
@@ -97,14 +68,6 @@ export function CodexPanel({
     }
   }, [models, selectedModel]);
 
-  // Sync from protocol data when connected
-  useEffect(() => {
-    if (codexAccount?.model) setSelectedModel(codexAccount.model);
-    if (codexAccount?.reasoningEffort)
-      setSelectedReasoning(codexAccount.reasoningEffort);
-    if (codexAccount?.cwd) setCwd(codexAccount.cwd);
-  }, [codexAccount?.model, codexAccount?.reasoningEffort, codexAccount?.cwd]);
-
   const currentModel = useMemo(
     () => models.find((m) => m.slug === selectedModel),
     [models, selectedModel],
@@ -113,7 +76,6 @@ export function CodexPanel({
     () => currentModel?.reasoningLevels ?? [],
     [currentModel],
   );
-
   const modelSelectOptions = useMemo(
     () => models.map((m) => ({ value: m.slug, label: m.displayName })),
     [models],
@@ -123,7 +85,6 @@ export function CodexPanel({
     [reasoningOptions],
   );
 
-  // Reset reasoning when model changes (only user-driven)
   const handleModelChange = useCallback(
     (slug: string) => {
       setSelectedModel(slug);
@@ -163,170 +124,35 @@ export function CodexPanel({
         justConnected && "card-connect-anim",
       )}
     >
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <StatusDot
-          status={
-            codexTuiRunning
-              ? "connected"
-              : codexReady
-                ? "connecting"
-                : "disconnected"
-          }
-          variant="codex"
-        />
-        <span className="flex-1 text-[13px] font-medium text-card-foreground">
-          Codex
-        </span>
-        <RoleSelect agent="codex" disabled={codexTuiRunning} />
-        <span
-          key={codexTuiRunning ? "c" : codexReady ? "r" : "s"}
-          className="text-[11px] uppercase text-secondary-foreground status-flash"
-        >
-          {codexTuiRunning ? "connected" : codexReady ? "ready" : "starting..."}
-        </span>
-      </div>
+      <CodexHeader
+        running={codexTuiRunning}
+        ready={codexReady}
+        threadId={threadId}
+      />
 
-      {/* Thread ID */}
-      {threadId && (
-        <div className="mt-1 font-mono text-[11px] text-muted-foreground">
-          Thread: {threadId.slice(0, 16)}...
-        </div>
-      )}
-
-      {/* Usage (when connected) */}
       {locked && usage && (
-        <div className="mt-2 rounded-md bg-muted/40 px-3 py-2 space-y-1.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-semibold uppercase text-muted-foreground">
-                {"\u7528\u91CF"}
-              </span>
-              <span
-                className={cn(
-                  "rounded-full px-1.5 py-px text-[9px] font-semibold",
-                  usage.limitReached || !usage.allowed
-                    ? "bg-destructive/10 text-destructive"
-                    : "bg-codex/10 text-codex",
-                )}
-              >
-                {usage.limitReached || !usage.allowed
-                  ? "\u53D7\u9650"
-                  : "\u6B63\u5E38"}
-              </span>
-            </div>
-            <button
-              type="button"
-              disabled={refreshing}
-              onClick={refreshUsage}
-              className={cn(
-                "text-[10px] text-muted-foreground hover:text-foreground transition-colors",
-                refreshing && "opacity-50",
-              )}
-            >
-              {refreshing ? "\u5237\u65B0\u4E2D\u2026" : "\u5237\u65B0"}
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <MiniMeter
-              label={windowLabel(
-                usage.primary?.windowMinutes ?? null,
-                "\u77ED\u671F",
-              )}
-              used={usage.primary?.usedPercent ?? 0}
-              remaining={usage.primary?.remainingPercent ?? 100}
-            />
-            <MiniMeter
-              label={windowLabel(
-                usage.secondary?.windowMinutes ?? null,
-                "\u957F\u671F",
-              )}
-              used={usage.secondary?.usedPercent ?? 0}
-              remaining={usage.secondary?.remainingPercent ?? 100}
-            />
-          </div>
-        </div>
+        <CodexUsageSection
+          usage={usage}
+          refreshing={refreshing}
+          refreshUsage={refreshUsage}
+        />
       )}
 
-      {/* Config rows — always visible, locked after connection */}
-      <div className="mt-2 space-y-1.5">
-        {/* Profile (when connected) */}
-        {locked && profile?.name && (
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-muted-foreground">Account</span>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-medium text-foreground">
-                {profile.name}
-              </span>
-              {profile.planType && (
-                <span className="capitalize rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
-                  {profile.planType}
-                </span>
-              )}
-            </div>
-          </div>
-        )}
+      <CodexConfigRows
+        locked={locked}
+        profile={profile}
+        models={models}
+        selectedModel={selectedModel}
+        modelSelectOptions={modelSelectOptions}
+        handleModelChange={handleModelChange}
+        reasoningOptions={reasoningOptions}
+        selectedReasoning={selectedReasoning}
+        setSelectedReasoning={setSelectedReasoning}
+        reasoningSelectOptions={reasoningSelectOptions}
+        cwd={cwd}
+        handlePickDir={handlePickDir}
+      />
 
-        {/* Model */}
-        {models.length > 0 && (
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-muted-foreground">Model</span>
-            <CyberSelect
-              value={selectedModel}
-              options={modelSelectOptions}
-              onChange={handleModelChange}
-              disabled={locked}
-            />
-          </div>
-        )}
-
-        {/* Reasoning */}
-        {reasoningOptions.length > 0 && (
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-muted-foreground">Reasoning</span>
-            <CyberSelect
-              value={selectedReasoning}
-              options={reasoningSelectOptions}
-              onChange={setSelectedReasoning}
-              disabled={locked}
-            />
-          </div>
-        )}
-
-        {/* Project / CWD */}
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] text-muted-foreground">Project</span>
-          <button
-            type="button"
-            onClick={handlePickDir}
-            disabled={locked}
-            className={cn(
-              "inline-flex items-center gap-1 rounded px-1 py-0.5 font-mono text-[11px] text-secondary-foreground transition-colors truncate max-w-44",
-              locked
-                ? "opacity-50 cursor-not-allowed"
-                : "hover:bg-accent hover:text-primary cursor-pointer",
-            )}
-            title={cwd}
-          >
-            <svg
-              width="10"
-              height="10"
-              viewBox="0 0 16 16"
-              className="shrink-0 text-muted-foreground"
-            >
-              <path
-                d="M2 4v8h12V6H8L6 4z"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.2"
-              />
-            </svg>
-            {cwd ? shortenPath(cwd) : "Select project..."}
-          </button>
-        </div>
-      </div>
-
-      {/* Disconnect button (when connected) */}
       {locked && (
         <Button
           size="sm"
@@ -338,7 +164,6 @@ export function CodexPanel({
         </Button>
       )}
 
-      {/* Connect button (when not connected) */}
       {!locked && (
         <Button
           className="w-full mt-2 bg-codex text-white hover:bg-codex/90 hover:shadow-[0_0_16px_#22c55e40] active:scale-[0.98] transition-all duration-200 btn-ripple"
@@ -357,93 +182,13 @@ export function CodexPanel({
         </Button>
       )}
 
-      {/* Auth actions */}
       {!locked && <AuthActions />}
 
-      {/* Status */}
       {!codexReady && (
         <div className="mt-1.5 text-[11px] text-muted-foreground">
           Codex app-server is starting...
         </div>
       )}
-    </div>
-  );
-}
-
-function AuthActions() {
-  const profile = useCodexAccountStore((s) => s.profile);
-  const loginPending = useCodexAccountStore((s) => s.loginPending);
-  const loginUri = useCodexAccountStore((s) => s.loginUri);
-  const login = useCodexAccountStore((s) => s.login);
-  const cancelLogin = useCodexAccountStore((s) => s.cancelLogin);
-  const logout = useCodexAccountStore((s) => s.logout);
-
-  if (loginPending) {
-    return (
-      <div className="mt-2 rounded-md border border-codex/20 bg-codex/5 px-3 py-2.5 space-y-2">
-        <div className="flex items-center gap-2 text-[11px] text-codex">
-          <span className="size-3 border-2 border-codex/30 border-t-codex rounded-full animate-spin shrink-0" />
-          Waiting for browser login...
-        </div>
-        {loginUri && (
-          <a
-            href={loginUri}
-            target="_blank"
-            rel="noreferrer"
-            className="block text-[10px] text-codex/80 hover:text-codex hover:underline truncate"
-            title={loginUri}
-          >
-            Open login page →
-          </a>
-        )}
-        <Button
-          size="sm"
-          variant="ghost"
-          className="w-full text-[11px] text-muted-foreground hover:text-destructive"
-          onClick={cancelLogin}
-        >
-          Cancel
-        </Button>
-      </div>
-    );
-  }
-
-  if (!profile?.email) {
-    return (
-      <Button
-        size="sm"
-        variant="outline"
-        className="w-full mt-2 text-[11px] border-codex/30 text-codex hover:bg-codex/10 hover:border-codex/50 transition-all"
-        onClick={login}
-      >
-        Login to Codex
-      </Button>
-    );
-  }
-
-  return (
-    <div className="mt-1.5 flex items-center justify-between rounded-md bg-muted/30 px-2.5 py-1.5">
-      <div className="flex items-center gap-1.5 min-w-0">
-        <span className="size-1.5 rounded-full bg-codex shrink-0" />
-        <span
-          className="text-[10px] text-foreground/80 truncate"
-          title={profile.email}
-        >
-          {profile.email}
-        </span>
-        {profile.planType && (
-          <span className="capitalize rounded bg-codex/10 px-1 py-px text-[9px] font-semibold text-codex shrink-0">
-            {profile.planType}
-          </span>
-        )}
-      </div>
-      <button
-        type="button"
-        onClick={logout}
-        className="text-[10px] text-muted-foreground hover:text-destructive transition-colors shrink-0 ml-2"
-      >
-        Logout
-      </button>
     </div>
   );
 }

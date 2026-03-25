@@ -1,8 +1,13 @@
-import type { BridgeMessage, AgentInfo } from "@/types";
+import type {
+  AgentInfo,
+  BridgeMessage,
+  PermissionBehavior,
+  PermissionPrompt,
+} from "@/types";
 
 export interface TerminalLine {
   agent: string;
-  kind: string;
+  kind: "text" | "error";
   line: string;
   timestamp: number;
 }
@@ -12,6 +17,7 @@ export interface BridgeState {
   messages: BridgeMessage[];
   agents: Record<string, AgentInfo>;
   terminalLines: TerminalLine[];
+  permissionPrompts: PermissionPrompt[];
   claudeRole: string;
   codexRole: string;
   draft: string;
@@ -21,6 +27,10 @@ export interface BridgeState {
   clearMessages: () => void;
   launchCodexTui: () => void;
   stopCodexTui: () => void;
+  respondToPermission: (
+    requestId: string,
+    behavior: PermissionBehavior,
+  ) => Promise<void>;
   applyConfig: (config: {
     model?: string;
     reasoningEffort?: string;

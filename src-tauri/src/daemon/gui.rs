@@ -1,4 +1,4 @@
-use crate::daemon::types::BridgeMessage;
+use crate::daemon::types::{BridgeMessage, PermissionRequest};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
@@ -23,6 +23,18 @@ pub struct AgentStatusEvent {
     pub online: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exit_code: Option<i32>,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionPromptEvent {
+    pub agent: String,
+    pub request_id: String,
+    pub tool_name: String,
+    pub description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_preview: Option<String>,
+    pub created_at: u64,
 }
 
 pub fn emit_agent_message(app: &AppHandle, msg: &BridgeMessage) {
@@ -52,6 +64,25 @@ pub fn emit_agent_status(app: &AppHandle, agent: &str, online: bool, exit_code: 
             agent: agent.into(),
             online,
             exit_code,
+        },
+    );
+}
+
+pub fn emit_permission_prompt(
+    app: &AppHandle,
+    agent: &str,
+    request: &PermissionRequest,
+    created_at: u64,
+) {
+    let _ = app.emit(
+        "permission_prompt",
+        PermissionPromptEvent {
+            agent: agent.into(),
+            request_id: request.request_id.clone(),
+            tool_name: request.tool_name.clone(),
+            description: request.description.clone(),
+            input_preview: request.input_preview.clone(),
+            created_at,
         },
     );
 }

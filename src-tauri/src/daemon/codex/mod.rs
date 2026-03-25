@@ -19,7 +19,10 @@ impl CodexHandle {
         if let Some(ref mut child) = *self.process.lock().await {
             lifecycle::stop(child).await;
         }
-        self.session_mgr.lock().await.cleanup_session(&self.session_id);
+        self.session_mgr
+            .lock()
+            .await
+            .cleanup_session(&self.session_id);
     }
 }
 
@@ -48,12 +51,20 @@ pub async fn start(
     let session_mgr = state.read().await.session_mgr.clone();
 
     let session_id = session_mgr.lock().await.next_session_id();
-    let codex_home = session_mgr
-        .lock()
-        .await
-        .create_session(&session_id, &sandbox_mode, &approval_policy)?;
+    let codex_home =
+        session_mgr
+            .lock()
+            .await
+            .create_session(&session_id, &sandbox_mode, &approval_policy)?;
 
-    let child = lifecycle::start(codex_port, &codex_home, &cwd, &sandbox_mode, &approval_policy).await?;
+    let child = lifecycle::start(
+        codex_port,
+        &codex_home,
+        &cwd,
+        &sandbox_mode,
+        &approval_policy,
+    )
+    .await?;
     let child_arc = Arc::new(Mutex::new(Some(child)));
 
     gui::emit_system_log(
@@ -65,8 +76,17 @@ pub async fn start(
     // Poll until Codex app-server is accepting connections (up to 10 s)
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
-        if tokio::net::TcpStream::connect(format!("127.0.0.1:{codex_port}")).await.is_ok() {
+        if tokio::net::TcpStream::connect(format!("127.0.0.1:{codex_port}"))
+            .await
+            .is_ok()
+        {
             break;
+        }
+        // Check if child process exited prematurely
+        if let Some(ref mut child) = *child_arc.lock().await {
+            if let Ok(Some(status)) = child.try_wait() {
+                anyhow::bail!("Codex process exited prematurely with status: {status}");
+            }
         }
         if tokio::time::Instant::now() >= deadline {
             anyhow::bail!("Codex app-server did not start within 10 s");
@@ -102,7 +122,41 @@ pub async fn start(
             .ok();
     }
     gui::emit_agent_status(&app, "codex", true, None);
-    gui::emit_system_log(&app, "info", &format!("[Codex] session wired role={role_id}"));
+    gui::emit_system_log(
+        &app,
+        "info",
+        &format!("[Codex] session wired role={role_id}"),
+    );
+
+    // Health monitor: detect unexpected Codex process death
+    let child_health = child_arc.clone();
+    let state_health = state.clone();
+    let app_health = app.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            let mut guard = child_health.lock().await;
+            if let Some(ref mut child) = *guard {
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        eprintln!("[Codex] process exited: {status}");
+                        state_health.write().await.codex_inject_tx = None;
+                        gui::emit_agent_status(&app_health, "codex", false, None);
+                        gui::emit_system_log(
+                            &app_health,
+                            "warn",
+                            &format!("[Codex] process exited: {status}"),
+                        );
+                        return;
+                    }
+                    Ok(None) => {} // still running
+                    Err(_) => return,
+                }
+            } else {
+                return;
+            }
+        }
+    });
 
     Ok(CodexHandle {
         process: child_arc,

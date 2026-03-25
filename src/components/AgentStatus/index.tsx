@@ -59,7 +59,6 @@ export function AgentStatusPanel({ agents, connected }: AgentStatusProps) {
           usage={usage}
           refreshing={refreshing}
           refreshUsage={refreshUsage}
-          codexAccount={undefined}
         />
 
         {/* Other agents */}

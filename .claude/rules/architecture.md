@@ -6,11 +6,12 @@
 React UI
   ↕ Tauri invoke / listen
 Tauri main.rs
-  ├── mcp.rs                  # .mcp.json 注册 + 启动 Claude 终端
+  ├── mcp.rs                  # .mcp.json 注册 + Claude channel preflight / 启动
   ├── codex/*                 # 账号 / OAuth / 用量 / 模型
   └── daemon/*
       ├── control server      # WS :4502，bridge 连入
       ├── routing             # Claude / Codex / GUI 路由
+      ├── permission relay    # Claude permission request ↔ GUI 审批
       ├── codex session       # WS :4500，连 codex app-server
       └── session manager     # 临时 CODEX_HOME
 
@@ -40,10 +41,13 @@ Rust daemon
 ### Claude 方向
 
 - 前端调用 `register_mcp`
-- Tauri 在项目根写 `.mcp.json`
-- 外部终端运行 `claude`
+- Tauri 在项目根写 `.mcp.json`，command 固定写 app-bundled bridge 绝对路径
+- 前端调用 `launch_claude_terminal`
+- Tauri 先检查 `claude -v` 是否 `>= 2.1.80`
+- 外部终端以 preview 模式运行 `claude --dangerously-load-development-channels server:agentbridge`
 - Claude 通过 MCP 启动 `agent-bridge-bridge`
 - bridge 用 WS 连内嵌 daemon
+- permission request 走 daemon → GUI → daemon → bridge 闭环返回 Claude
 
 ### Codex 方向
 
@@ -60,12 +64,15 @@ Rust daemon
 - `to = claude_role` 走 bridge WS
 - `to = codex_role` 走 `codex_inject_tx`
 - 离线消息进入 `buffered_messages`
+- 发往 Claude 的消息只允许来自 `user`、`system`、当前 `codex_role`
+- permission verdict 独立于普通聊天消息，不伪装成 `BridgeMessage`
 
 ## 模块边界
 
 ### `bridge/**`
 
-- 只负责协议转换，不承载业务状态
+- 只负责 Claude channel 协议转换，不承载产品业务状态
+- bridge 内只保留会话级 `chat_id -> reply target` 和 pending permission 这类短期协议状态
 - `bridge/src/types.rs` 必须和 `src-tauri/src/daemon/types.rs` 保持字段兼容
 - 新增或修改 bridge tool 时，同时检查 daemon 路由和前端文档
 

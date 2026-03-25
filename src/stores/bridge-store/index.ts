@@ -1,7 +1,11 @@
 import { create } from "zustand";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import type { BridgeMessage } from "@/types";
+import type {
+  BridgeMessage,
+  PermissionBehavior,
+  PermissionPrompt,
+} from "@/types";
 import type { BridgeState } from "./types";
 
 export type { TerminalLine, BridgeState } from "./types";
@@ -20,6 +24,7 @@ interface AgentStatusPayload {
   online: boolean;
   exitCode?: number;
 }
+interface PermissionPromptPayload extends PermissionPrompt {}
 
 // Module-level unlisten handles; called on cleanup() to prevent leaks during HMR.
 let _unlisteners: UnlistenFn[] = [];
@@ -59,10 +64,35 @@ function initListeners(
         },
       }));
     }),
+    listen<PermissionPromptPayload>("permission_prompt", (e) => {
+      set((s) => ({
+        permissionPrompts: [
+          ...s.permissionPrompts.filter(
+            (prompt) => prompt.requestId !== e.payload.requestId,
+          ),
+          e.payload,
+        ],
+      }));
+    }),
   ]).then((fns) => {
     _unlisteners.forEach((fn) => fn());
     _unlisteners = fns;
   });
+}
+
+function logError(set: (fn: (s: BridgeState) => Partial<BridgeState>) => void) {
+  return (e: unknown) =>
+    set((s) => ({
+      terminalLines: [
+        ...s.terminalLines.slice(-200),
+        {
+          agent: "system",
+          kind: "error" as const,
+          line: `[Error] ${String(e)}`,
+          timestamp: Date.now(),
+        },
+      ],
+    }));
 }
 
 export const useBridgeStore = create<BridgeState>((set, get) => {
@@ -81,6 +111,7 @@ export const useBridgeStore = create<BridgeState>((set, get) => {
       codex: { name: "codex", displayName: "Codex", status: "disconnected" },
     },
     terminalLines: [],
+    permissionPrompts: [],
     claudeRole: "lead",
     codexRole: "coder",
     draft: "",
@@ -97,7 +128,7 @@ export const useBridgeStore = create<BridgeState>((set, get) => {
           content,
           timestamp: Date.now(),
         },
-      }).catch(console.warn);
+      }).catch(logError(set));
     },
 
     clearMessages: () => set({ messages: [] }),
@@ -108,10 +139,34 @@ export const useBridgeStore = create<BridgeState>((set, get) => {
         roleId: codexRole,
         cwd: ".",
         model: null,
-      }).catch(console.warn);
+      }).catch(logError(set));
     },
 
-    stopCodexTui: () => invoke("daemon_stop_codex").catch(console.warn),
+    stopCodexTui: () => invoke("daemon_stop_codex").catch(logError(set)),
+
+    respondToPermission: async (requestId, behavior) => {
+      try {
+        await invoke("daemon_respond_permission", { requestId, behavior });
+        set((s) => ({
+          permissionPrompts: s.permissionPrompts.filter(
+            (prompt) => prompt.requestId !== requestId,
+          ),
+        }));
+      } catch (error) {
+        set((s) => ({
+          terminalLines: [
+            ...s.terminalLines.slice(-200),
+            {
+              agent: "system",
+              kind: "error",
+              line: `[Permission] ${String(error)}`,
+              timestamp: Date.now(),
+            },
+          ],
+        }));
+        throw error;
+      }
+    },
 
     applyConfig: (config) => {
       const { codexRole } = get();
@@ -119,13 +174,13 @@ export const useBridgeStore = create<BridgeState>((set, get) => {
         roleId: codexRole,
         cwd: config.cwd ?? ".",
         model: config.model ?? null,
-      }).catch(console.warn);
+      }).catch(logError(set));
     },
 
     setRole: (agent, role) => {
       if (agent === "claude") {
         set({ claudeRole: role });
-        invoke("daemon_set_claude_role", { role }).catch(console.warn);
+        invoke("daemon_set_claude_role", { role }).catch(logError(set));
       } else {
         set({ codexRole: role });
       }

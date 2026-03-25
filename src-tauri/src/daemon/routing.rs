@@ -1,9 +1,14 @@
-use crate::daemon::{gui, types::BridgeMessage, SharedState};
+use crate::daemon::{
+    gui,
+    types::{BridgeMessage, ToAgent},
+    SharedState,
+};
 use tauri::AppHandle;
 
 pub enum RouteResult {
     Delivered,
     Buffered,
+    Dropped,
     ToGui,
 }
 
@@ -12,16 +17,19 @@ pub async fn route_message_inner(state: &SharedState, msg: BridgeMessage) -> Rou
         return RouteResult::ToGui;
     }
     enum Target {
-        Claude(tokio::sync::mpsc::Sender<BridgeMessage>),
+        Claude(tokio::sync::mpsc::Sender<ToAgent>),
         Codex(tokio::sync::mpsc::Sender<String>, String),
         Buffer,
+        Drop,
     }
 
     let target = {
         let mut s = state.write().await;
 
         if s.claude_role == msg.to {
-            if let Some(tx) = s.attached_agents.get("claude") {
+            if msg.from != "user" && msg.from != "system" && msg.from != s.codex_role {
+                Target::Drop
+            } else if let Some(tx) = s.attached_agents.get("claude") {
                 Target::Claude(tx.clone())
             } else {
                 s.buffer_message(msg.clone());
@@ -42,7 +50,13 @@ pub async fn route_message_inner(state: &SharedState, msg: BridgeMessage) -> Rou
 
     match target {
         Target::Claude(tx) => {
-            if tx.send(msg.clone()).await.is_ok() {
+            if tx
+                .send(ToAgent::RoutedMessage {
+                    message: msg.clone(),
+                })
+                .await
+                .is_ok()
+            {
                 RouteResult::Delivered
             } else {
                 state.write().await.buffer_message(msg);
@@ -57,6 +71,7 @@ pub async fn route_message_inner(state: &SharedState, msg: BridgeMessage) -> Rou
                 RouteResult::Buffered
             }
         }
+        Target::Drop => RouteResult::Dropped,
         Target::Buffer => RouteResult::Buffered,
     }
 }
@@ -77,6 +92,13 @@ pub async fn route_message(state: &SharedState, app: &AppHandle, msg: BridgeMess
                 app,
                 "warn",
                 &format!("[Route] {} offline, buffered", msg.to),
+            );
+        }
+        RouteResult::Dropped => {
+            gui::emit_system_log(
+                app,
+                "warn",
+                &format!("[Route] dropped unauthorized Claude sender {}", msg.from),
             );
         }
         RouteResult::ToGui => {}
@@ -113,5 +135,21 @@ mod tests {
         let msg = BridgeMessage::system("hello", "user");
         let result = route_message_inner(&state, msg).await;
         assert!(matches!(result, RouteResult::ToGui));
+    }
+
+    #[tokio::test]
+    async fn route_to_claude_from_unknown_sender_drops() {
+        let state = Arc::new(RwLock::new(DaemonState::new()));
+        let msg = BridgeMessage {
+            id: "msg-1".into(),
+            from: "intruder".into(),
+            to: "lead".into(),
+            content: "hello".into(),
+            timestamp: 1,
+            reply_to: None,
+            priority: None,
+        };
+        let result = route_message_inner(&state, msg).await;
+        assert!(matches!(result, RouteResult::Dropped));
     }
 }

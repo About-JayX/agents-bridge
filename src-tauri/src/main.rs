@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod claude_cli;
 mod codex;
 mod daemon;
 mod mcp;
@@ -8,7 +9,10 @@ use codex::auth::CodexProfile;
 use codex::models::CodexModel;
 use codex::oauth::{OAuthHandle, OAuthLaunchInfo};
 use codex::usage::UsageSnapshot;
-use daemon::{types::BridgeMessage, DaemonCmd};
+use daemon::{
+    types::{BridgeMessage, PermissionBehavior},
+    DaemonCmd,
+};
 use std::sync::Arc;
 use tauri::{Manager, State};
 use tauri_plugin_dialog::DialogExt;
@@ -67,7 +71,11 @@ async fn daemon_launch_codex(
 ) -> Result<(), String> {
     sender
         .0
-        .send(DaemonCmd::LaunchCodex { role_id, cwd, model })
+        .send(DaemonCmd::LaunchCodex {
+            role_id,
+            cwd,
+            model,
+        })
         .await
         .map_err(|e| e.to_string())
 }
@@ -89,6 +97,22 @@ async fn daemon_set_claude_role(
     sender
         .0
         .send(DaemonCmd::SetClaudeRole(role))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn daemon_respond_permission(
+    request_id: String,
+    behavior: PermissionBehavior,
+    sender: State<'_, DaemonSender>,
+) -> Result<(), String> {
+    sender
+        .0
+        .send(DaemonCmd::RespondPermission {
+            request_id,
+            behavior,
+        })
         .await
         .map_err(|e| e.to_string())
 }
@@ -144,6 +168,7 @@ fn main() {
             daemon_launch_codex,
             daemon_stop_codex,
             daemon_set_claude_role,
+            daemon_respond_permission,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -21,6 +21,7 @@
 | 当前运行时无 Bun daemon | Bun 只保留为前端包管理/脚本运行器，不再承载后端常驻进程 |
 | Source of Truth 只认当前代码 | 以 `src-tauri/src/daemon/`、`bridge/`、`src/`、`.claude/rules/` 为准 |
 | 历史设计文档不当现状 | `docs/superpowers/**` 主要是迁移记录，不代表当前实现 |
+| 每个源码文件最多 200 行 | 超过必须拆分模块（此限制不适用于 CLAUDE.md 等文档文件） |
 
 ## 技术栈
 
@@ -43,6 +44,8 @@
 ┌─ bridge/agent-bridge-bridge ────────────────────────────────────┐
 │ tools.rs         → reply tool                                   │
 │ mcp.rs           → Claude Channel notification / tools/list     │
+│ channel_state.rs → reply target tracking / permission cache     │
+│ mcp_protocol.rs  → RPC parsing / initialize result              │
 │ daemon_client.rs → WS client → 127.0.0.1:4502                   │
 └───────────────┬─────────────────────────────────────────────────┘
                 │ WS :4502
@@ -50,6 +53,7 @@
 ┌─ Tauri 主进程 / Rust daemon ────────────────────────────────────┐
 │ main.rs                   → commands 注册 + daemon task 启动     │
 │ mcp.rs                    → .mcp.json 注册 + 启动 Claude 终端    │
+│ claude_cli.rs             → Claude CLI 版本校验 + channel 启动    │
 │ codex/auth|oauth|usage    → 账号/OAuth/用量/模型                 │
 │ daemon/control/           → bridge 接入与消息投递                │
 │ daemon/routing.rs         → Claude / Codex / GUI 路由            │
@@ -61,8 +65,8 @@
 ┌─ React 前端 ────────────────────────────────────────────────────┐
 │ bridge-store      → 监听 agent_message / system_log / status     │
 │ ClaudePanel       → register_mcp + launch_claude_terminal        │
-│ CodexPanel        → daemon_launch_codex / daemon_stop_codex      │
-│ MessagePanel      → 消息与日志                                   │
+│ AgentStatus/      → CodexPanel / RoleSelect / StatusDot          │
+│ MessagePanel      → 消息与日志与 Permission 审批                  │
 └──────────────────────────────────────────────────────────────────┘
 
 Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
@@ -77,11 +81,12 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 3. 前端再调用 `launch_claude_terminal`，打开外部终端并在该目录运行 `claude`。
 4. Claude Code 读取项目 `.mcp.json`，以 MCP stdio 方式启动 bridge sidecar。
 5. bridge 通过 `ws://127.0.0.1:4502/ws` 连入内嵌 daemon。
+6. Permission 链路: bridge `permission_request` → daemon → GUI → `permission_verdict` → bridge
 
 ### Codex 链路
 
 1. 前端调用 `daemon_launch_codex`。
-2. `session_manager.rs` 创建 `/tmp/agentbridge-<sessionId>/` 临时 `CODEX_HOME`。
+2. `session_manager.rs` 创建 `/tmp/agentbridge-<pid>-<sessionId>/` 临时 `CODEX_HOME`。
 3. 当前实现会写入：
    - `auth.json` symlink → `$HOME/.codex/auth.json`
    - `config.toml` → `sandbox_mode` / `approval_policy` / `apply_patch_freeform=false`
@@ -98,6 +103,7 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 - **Codex → Claude**: Codex 动态 `reply` → `routing.rs` → bridge WS channel → Claude Channel notification
 - **任一 agent → user**: `to = "user"` 时只发到 GUI
 - **离线缓冲**: 目标离线时写入 `buffered_messages`，Claude bridge 重连或 Codex session 启动后回放
+- **Sender gating**: Claude 只接受 `user`/`system`/当前 `codex_role`；control WS 只接受 `claude`/`codex`
 
 ## 端口分配
 
@@ -111,7 +117,7 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 
 ## 角色系统
 
-角色定义以 [`src-tauri/src/daemon/role_config/roles.rs`](/Users/jason/floder/agent-bridge/src-tauri/src/daemon/role_config/roles.rs) 为准：
+角色定义以 `src-tauri/src/daemon/role_config/roles.rs` 为准：
 
 | 角色 | 当前作用 | Codex 约束 |
 |------|----------|------------|
@@ -130,11 +136,11 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 
 ## 会话管理
 
-[`src-tauri/src/daemon/session_manager.rs`](/Users/jason/floder/agent-bridge/src-tauri/src/daemon/session_manager.rs) 负责临时 `CODEX_HOME` 生命周期：
+`src-tauri/src/daemon/session_manager.rs` 负责临时 `CODEX_HOME` 生命周期：
 
 ```text
 创建会话
-  → /tmp/agentbridge-<sessionId>/
+  → /tmp/agentbridge-<pid>-<sessionId>/
   → auth.json symlink（如存在）
   → config.toml
   → 启动 codex app-server
@@ -155,7 +161,7 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 
 当前 MCP 注册是 **项目级**、**显式用户触发** 的：
 
-- Tauri command: [`src-tauri/src/mcp.rs`](/Users/jason/floder/agent-bridge/src-tauri/src/mcp.rs)
+- Tauri command: `src-tauri/src/mcp.rs`
 - 配置文件位置: 项目根 **`.mcp.json`**
 - sidecar 命令: `agent-bridge-bridge`
 
@@ -191,7 +197,7 @@ cargo test          # 运行 Rust 测试
 
 - 遇到 bug 或设计问题，修复后必须把根因和解法写入对应 rules 文件和踩坑记录
 - 每次架构变更必须同步更新本文件的架构图和 `UPDATE.md`
-- **每个文件最多 200 行**，超过必须拆分模块
+- **每个源码文件最多 200 行**，超过必须拆分模块（文档文件不受此限制）
 - 完成功能后必须补充对应 UI 或可见状态
 - 执行完任务后必须调用 superpowers 代码审计（`superpowers:requesting-code-review`）
 - Rust 改动后必须重新运行 Tauri / Cargo 校验，前端改动后至少跑一次 TS / build 校验
@@ -217,35 +223,6 @@ cargo test          # 运行 Rust 测试
 - 新增项目私有 skill 时，直接创建 `.claude/skills/<name>/SKILL.md`
 - 用户全局 skills 目录只作为个人环境兜底，不属于仓库协作约定
 
-## 当前状态
-
-### 已实现
-
-- Rust 内嵌 daemon（无独立 Bun daemon）
-- Rust bridge sidecar（Cargo workspace 成员）
-- Claude 项目级 `.mcp.json` 注册
-- 外部终端启动 Claude CLI
-- Codex account / OAuth / models / usage
-- 临时 `CODEX_HOME` + `auth.json` symlink + `config.toml`
-- Rust control server + routing + message buffering
-- Tauri event 驱动的消息 / 日志 / agent 状态同步
-
-### 已删除或不再适用
-
-- `daemon/**/*.ts` Bun daemon 体系
-- GUI WebSocket `:4503`
-- PTY 注入链路、`portable-pty`、`node-pty`
-- 旧 `test-e2e.ts` / `test-routing.ts` / `test-codex-mcp.ts` 手工脚本
-- `tsconfig.daemon.json`
-
-### 尚未实现，但旧文档中曾经提过的内容
-
-- Claude CLI `--agent --agents` 角色注入
-- Starlark rules / `rules/role.rules`
-- AGENTS/指令合并注入
-- 三模式 orchestrator
-- 独立 MCP register/unregister CLI
-
 ## 模块结构
 
 ### Cargo Workspace
@@ -264,6 +241,8 @@ bridge/src/
 ├── main.rs                # sidecar entry
 ├── daemon_client.rs       # WS client → 4502
 ├── mcp.rs                 # MCP stdio server / channel notification
+├── mcp_protocol.rs        # RPC message parsing + initialize result
+├── channel_state.rs       # Claude channel state + reply target tracking
 ├── tools.rs               # reply tool schema + parsing
 └── types.rs               # bridge ↔ daemon protocol mirror
 ```
@@ -274,10 +253,12 @@ bridge/src/
 src-tauri/src/
 ├── main.rs
 ├── mcp.rs
+├── claude_cli.rs           # Claude CLI version check + channel preview launch
 ├── codex/
 │   ├── auth.rs
 │   ├── models.rs
 │   ├── oauth.rs
+│   ├── oauth_helpers.rs
 │   └── usage.rs
 └── daemon/
     ├── mod.rs
@@ -307,6 +288,9 @@ src/
 ├── App.tsx
 ├── main.tsx
 ├── types.ts
+├── index.css
+├── animations.css
+├── utilities.css
 ├── stores/
 │   ├── bridge-store/
 │   │   ├── index.ts
@@ -314,14 +298,28 @@ src/
 │   └── codex-account-store.ts
 ├── components/
 │   ├── AgentStatus/
+│   │   ├── index.tsx
+│   │   ├── CodexPanel.tsx
+│   │   ├── AuthActions.tsx
+│   │   ├── CodexUsageSection.tsx
+│   │   ├── CodexConfigRows.tsx
+│   │   ├── CodexHeader.tsx
+│   │   ├── RoleSelect.tsx
+│   │   └── StatusDot.tsx
 │   ├── ClaudePanel/
+│   │   └── index.tsx
 │   ├── CodexAccountPanel/
+│   │   ├── MiniMeter.tsx
+│   │   └── helpers.ts
 │   ├── MessagePanel/
+│   │   ├── index.tsx
+│   │   ├── PermissionQueue.tsx
+│   │   ├── SourceBadge.tsx
+│   │   └── TabBtn.tsx
 │   ├── ReplyInput.tsx
 │   ├── MessageMarkdown.tsx
 │   └── ui/
 └── lib/
-    ├── hello-world.ts
     └── utils.ts
 ```
 
@@ -331,6 +329,39 @@ src/
 - Codex 权限边界当前主要依赖 `sandbox_mode`、`approval_policy`、`apply_patch_freeform=false`
 - Claude MCP 注册是项目级 `.mcp.json`，由用户显式点击触发
 - bridge 只负责 MCP/WS 协议转换，不负责业务决策
+- CSP 已配置为 `default-src 'self'`，限制 XSS 风险
+- 非 macOS 平台使用 `std::process::Command` 直接启动 Claude CLI，避免 shell 注入
+
+## 当前状态
+
+### 已实现
+
+- Rust 内嵌 daemon（无独立 Bun daemon）
+- Rust bridge sidecar（Cargo workspace 成员）
+- Claude 项目级 `.mcp.json` 注册
+- Claude channel preview 启动链路与版本 preflight
+- Claude channel `instructions` / `reply(chat_id, text)` / permission relay
+- 外部终端启动 Claude CLI
+- Codex account / OAuth / models / usage
+- 临时 `CODEX_HOME` + `auth.json` symlink + `config.toml`
+- Rust control server + routing + message buffering
+- Tauri event 驱动的消息 / 日志 / agent 状态 / permission prompt 同步
+
+### 已删除或不再适用
+
+- `daemon/**/*.ts` Bun daemon 体系
+- GUI WebSocket `:4503`
+- PTY 注入链路、`portable-pty`、`node-pty`
+- 旧 `test-e2e.ts` / `test-routing.ts` / `test-codex-mcp.ts` 手工脚本
+- `tsconfig.daemon.json`
+
+### 尚未实现，但旧文档中曾经提过的内容
+
+- Claude CLI `--agent --agents` 角色注入
+- Starlark rules / `rules/role.rules`
+- AGENTS/指令合并注入
+- 三模式 orchestrator
+- 独立 MCP register/unregister CLI
 
 ## 历史文档说明
 

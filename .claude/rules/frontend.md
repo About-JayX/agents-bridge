@@ -21,11 +21,13 @@ paths:
   - `agent_message`
   - `agent_status`
   - `system_log`
+  - `permission_prompt`
 - 用户操作通过 Tauri command：
   - `daemon_send_message`
   - `daemon_launch_codex`
   - `daemon_stop_codex`
   - `daemon_set_claude_role`
+  - `daemon_respond_permission`
   - `register_mcp`
   - `launch_claude_terminal`
 
@@ -41,12 +43,14 @@ paths:
 - shadcn 组件放 `src/components/ui/`
 - 所有消息展示都以 `BridgeMessage` 为准，不再保留旧 `source` 字段兼容层
 - “是否连接 Codex” 这类交互态必须用真实 `agent_status` 驱动
+- Claude permission request 必须在前端明确展示 Allow / Deny 审批入口，不能只写日志
 
 ## 性能与安全
 
 - 禁止在前端使用 Node.js API
 - 需要系统信息或文件选择时，统一走 Tauri command
 - 日志视图和消息视图只消费现有事件，不在前端推导不存在的后端状态
+- `.mcp.json` 注册和 Claude 启动错误必须直接反馈到面板，不要吞掉 preflight 失败
 
 ## 代码检查
 

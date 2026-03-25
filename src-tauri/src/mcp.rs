@@ -1,4 +1,5 @@
 /// MCP registration helpers and related Tauri commands.
+use crate::claude_cli::{apple_script_escape, claude_launch_command, ensure_claude_channel_ready};
 
 fn resolve_release_bridge_cmd() -> Result<String, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
@@ -12,8 +13,12 @@ fn resolve_release_bridge_cmd() -> Result<String, String> {
         return Ok(direct.to_string_lossy().to_string());
     }
 
-    let entries = std::fs::read_dir(&resources_dir)
-        .map_err(|e| format!("failed to read resources dir {}: {e}", resources_dir.display()))?;
+    let entries = std::fs::read_dir(&resources_dir).map_err(|e| {
+        format!(
+            "failed to read resources dir {}: {e}",
+            resources_dir.display()
+        )
+    })?;
 
     for entry in entries.flatten() {
         let path = entry.path();
@@ -31,24 +36,29 @@ fn resolve_release_bridge_cmd() -> Result<String, String> {
     ))
 }
 
-/// Register the agentbridge MCP server into the project-local `.mcp.json`.
-/// `cwd` is the project directory; falls back to current dir if not provided.
 #[tauri::command]
 pub fn register_mcp(cwd: Option<String>) -> Result<bool, String> {
     let bridge_cmd = if cfg!(debug_assertions) {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let project_root =
-            std::path::Path::new(manifest_dir).parent().unwrap_or(std::path::Path::new("."));
-        let bridge_bin = project_root.join("target").join("debug").join("agent-bridge-bridge");
+        let project_root = std::path::Path::new(manifest_dir)
+            .parent()
+            .unwrap_or(std::path::Path::new("."));
+        let bridge_bin = project_root
+            .join("target")
+            .join("debug")
+            .join("agent-bridge-bridge");
         bridge_bin.to_string_lossy().to_string()
     } else {
         resolve_release_bridge_cmd()?
     };
     let project_dir = cwd.unwrap_or_else(|| ".".to_string());
+    eprintln!(
+        "[MCP] register agentbridge in {project_dir} using absolute command {}",
+        bridge_cmd
+    );
     write_mcp_config(&project_dir, &bridge_cmd, &[])
 }
 
-/// Write agentbridge entry into `<project_dir>/.mcp.json` (project-local scope).
 fn write_mcp_config(project_dir: &str, command: &str, args: &[&str]) -> Result<bool, String> {
     let mcp_path = std::path::Path::new(project_dir).join(".mcp.json");
 
@@ -99,15 +109,21 @@ pub fn check_mcp_registered(cwd: Option<String>) -> bool {
 #[tauri::command]
 pub fn launch_claude_terminal(cwd: Option<String>) -> Result<(), String> {
     let dir = cwd.unwrap_or_else(|| ".".to_string());
+    let version = ensure_claude_channel_ready()?;
+    let command = claude_launch_command(&dir);
+    eprintln!(
+        "[MCP] launching Claude channel preview in {} with version {}",
+        dir, version
+    );
 
     #[cfg(target_os = "macos")]
     {
         let script = format!(
             r#"tell application "Terminal"
                 activate
-                do script "cd '{}' && claude"
+                do script "{}"
             end tell"#,
-            dir.replace("'", "'\\''")
+            apple_script_escape(&command)
         );
         std::process::Command::new("osascript")
             .arg("-e")
@@ -118,9 +134,12 @@ pub fn launch_claude_terminal(cwd: Option<String>) -> Result<(), String> {
 
     #[cfg(not(target_os = "macos"))]
     {
-        std::process::Command::new("sh")
-            .arg("-c")
-            .arg(format!("cd '{}' && claude", dir))
+        let claude_bin = which::which("claude")
+            .map_err(|_| "Claude CLI not found in PATH".to_string())?;
+        std::process::Command::new(claude_bin)
+            .current_dir(&dir)
+            .arg("--dangerously-load-development-channels")
+            .arg("server:agentbridge")
             .spawn()
             .map_err(|e| format!("failed: {e}"))?;
     }

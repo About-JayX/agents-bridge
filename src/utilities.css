@@ -1,0 +1,85 @@
+/* === UTILITY CLASSES === */
+
+@layer utilities {
+  .glow-claude {
+    box-shadow: 0 0 12px var(--color-claude-glow), 0 0 4px color-mix(in srgb, var(--color-claude) 12%, transparent), inset 0 1px 0 color-mix(in srgb, var(--color-claude) 6%, transparent);
+  }
+  .glow-codex {
+    box-shadow: 0 0 12px var(--color-codex-glow), 0 0 4px color-mix(in srgb, var(--color-codex) 12%, transparent), inset 0 1px 0 color-mix(in srgb, var(--color-codex) 6%, transparent);
+  }
+  .glow-claude-subtle {
+    box-shadow: 0 0 8px color-mix(in srgb, var(--color-claude) 12%, transparent), inset 0 1px 0 color-mix(in srgb, var(--color-claude) 3%, transparent);
+  }
+  .glow-codex-subtle {
+    box-shadow: 0 0 8px color-mix(in srgb, var(--color-codex) 12%, transparent), inset 0 1px 0 color-mix(in srgb, var(--color-codex) 3%, transparent);
+  }
+
+  .card-depth {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+
+  .border-glow-claude {
+    --glow-color: var(--color-claude-glow);
+    --glow-color-strong: color-mix(in srgb, var(--color-claude) 50%, transparent);
+    animation: border-glow 3s ease-in-out infinite;
+  }
+  .border-glow-codex {
+    --glow-color: var(--color-codex-glow);
+    --glow-color-strong: color-mix(in srgb, var(--color-codex) 50%, transparent);
+    animation: border-glow 3s ease-in-out infinite;
+  }
+
+  .dot-glow {
+    animation: glow-pulse 2s ease-in-out infinite;
+  }
+  .dot-ring-ping {
+    animation: ring-ping 1.5s ease-out infinite;
+  }
+
+  .msg-enter {
+    animation: message-enter 0.3s ease-out both;
+  }
+
+  .btn-ripple:active {
+    animation: ripple-out 0.4s ease-out;
+  }
+
+  .card-connect-anim {
+    animation: card-connect 0.5s ease-out;
+  }
+
+  .status-flash {
+    animation: status-flash 0.3s ease-out;
+  }
+
+  .text-gradient-cyber {
+    background: linear-gradient(135deg, #8b5cf6, #a78bfa, #22c55e, #8b5cf6);
+    background-size: 300% 300%;
+    animation: gradient-shift 6s ease infinite;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .noise-bg {
+    position: relative;
+  }
+  .noise-bg::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0.015;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dot-glow, .dot-ring-ping, .border-glow-claude, .border-glow-codex, .msg-enter, .btn-ripple:active, .card-connect-anim, .status-flash {
+      animation: none !important;
+    }
+    .text-gradient-cyber {
+      animation: none !important;
+    }
+  }
+}

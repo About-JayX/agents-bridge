@@ -30,7 +30,9 @@ pub async fn handle_dynamic_tool(
             "success": true
         }
     });
-    ws_tx.send(response.to_string()).await.ok();
+    if ws_tx.send(response.to_string()).await.is_err() {
+        eprintln!("[Codex] failed to send tool response for id={id}");
+    }
 }
 
 async fn handle_reply(args: &Value, from: &str, state: &SharedState, app: &AppHandle) -> String {

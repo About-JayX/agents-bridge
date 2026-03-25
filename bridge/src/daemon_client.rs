@@ -1,4 +1,4 @@
-use crate::types::{BridgeMessage, BridgeMsg, DaemonMsg};
+use crate::types::{BridgeMsg, BridgeOutbound, DaemonInbound, DaemonMsg};
 use futures_util::{SinkExt, StreamExt};
 use tokio::time::{sleep, Duration};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
@@ -8,8 +8,8 @@ const MAX_RETRIES: u32 = 20;
 pub async fn run(
     port: u16,
     agent_id: String,
-    push_tx: tokio::sync::mpsc::Sender<BridgeMessage>,
-    mut reply_rx: tokio::sync::mpsc::Receiver<BridgeMessage>,
+    push_tx: tokio::sync::mpsc::Sender<DaemonInbound>,
+    mut reply_rx: tokio::sync::mpsc::Receiver<BridgeOutbound>,
 ) {
     let url = format!("ws://127.0.0.1:{port}/ws");
     let mut attempt = 0u32;
@@ -18,13 +18,16 @@ pub async fn run(
         match connect_async(&url).await {
             Ok((ws, _)) => {
                 eprintln!("[Bridge/{agent_id}] connected to daemon");
-                attempt = 0;
+                let connected_at = tokio::time::Instant::now();
                 let (mut sink, mut stream) = ws.split();
 
                 let connect_msg = serde_json::to_string(&BridgeMsg::AgentConnect {
                     agent_id: &agent_id,
                 })
-                .unwrap();
+                .unwrap_or_else(|e| {
+                    eprintln!("[Bridge/{agent_id}] failed to serialize connect msg: {e}");
+                    "{}".to_string()
+                });
                 if sink.send(Message::Text(connect_msg.into())).await.is_err() {
                     continue;
                 }
@@ -34,12 +37,20 @@ pub async fn run(
                         msg = stream.next() => {
                             match msg {
                                 Some(Ok(Message::Text(txt))) => {
-                                    if let Ok(dm) = serde_json::from_str::<DaemonMsg>(&txt) {
-                                        match dm {
-                                            DaemonMsg::RoutedMessage { message } => {
-                                                let _ = push_tx.send(message).await;
+                                    match serde_json::from_str::<DaemonMsg>(&txt) {
+                                        Ok(dm) => {
+                                            match dm {
+                                                DaemonMsg::RoutedMessage { message } => {
+                                                    let _ = push_tx.send(DaemonInbound::RoutedMessage(message)).await;
+                                                }
+                                                DaemonMsg::PermissionVerdict { verdict } => {
+                                                    let _ = push_tx.send(DaemonInbound::PermissionVerdict(verdict)).await;
+                                                }
+                                                DaemonMsg::Status { .. } => {}
                                             }
-                                            DaemonMsg::Status { .. } => {}
+                                        }
+                                        Err(e) => {
+                                            eprintln!("[Bridge/{agent_id}] failed to parse daemon msg: {e}");
                                         }
                                     }
                                 }
@@ -47,16 +58,27 @@ pub async fn run(
                                 _ => break,
                             }
                         }
-                        Some(reply) = reply_rx.recv() => {
-                            let msg = serde_json::to_string(&BridgeMsg::AgentReply {
-                                message: &reply,
-                            })
-                            .unwrap();
+                        Some(outbound) = reply_rx.recv() => {
+                            let serialized = match outbound {
+                                BridgeOutbound::AgentReply(reply) => serde_json::to_string(&BridgeMsg::AgentReply {
+                                    message: &reply,
+                                }),
+                                BridgeOutbound::PermissionRequest(request) => serde_json::to_string(&BridgeMsg::PermissionRequest {
+                                    request: &request,
+                                }),
+                            };
+                            let Ok(msg) = serialized else {
+                                eprintln!("[Bridge/{agent_id}] failed to serialize outbound message");
+                                continue;
+                            };
                             if sink.send(Message::Text(msg.into())).await.is_err() {
                                 break;
                             }
                         }
                     }
+                }
+                if connected_at.elapsed() > Duration::from_secs(2) {
+                    attempt = 0;
                 }
                 eprintln!("[Bridge/{agent_id}] daemon connection dropped, reconnecting...");
             }

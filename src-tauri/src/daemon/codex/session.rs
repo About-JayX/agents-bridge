@@ -1,9 +1,10 @@
-use crate::daemon::{gui, SharedState};
 use crate::daemon::codex::handler;
+use crate::daemon::{gui, SharedState};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use tauri::AppHandle;
 use tokio::sync::mpsc;
+use tokio::time::{timeout, Duration};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 pub struct SessionOpts {
@@ -38,29 +39,56 @@ pub async fn run(
     // Outbound writer task
     tokio::spawn(async move {
         while let Some(text) = ws_rx.recv().await {
-            if sink.send(Message::Text(text.into())).await.is_err() { break; }
+            if sink.send(Message::Text(text.into())).await.is_err() {
+                break;
+            }
         }
     });
 
     // === Handshake: initialize ===
     let mut next_id: u64 = 1;
-    let init_id = next_id; next_id += 1;
-    ws_tx.send(json!({
-        "method": "initialize", "id": init_id,
-        "params": { "clientInfo": {"name":"agentbridge","version":"0.1.0"},
-                    "protocolVersion": "0.1.0",
-                    "capabilities": {"experimentalApi": true} }
-    }).to_string()).await.ok();
+    let init_id = next_id;
+    next_id += 1;
+    if ws_tx
+        .send(
+            json!({
+                "method": "initialize", "id": init_id,
+                "params": { "clientInfo": {"name":"agentbridge","version":"0.1.0"},
+                            "protocolVersion": "0.1.0",
+                            "capabilities": {"experimentalApi": true} }
+            })
+            .to_string(),
+        )
+        .await
+        .is_err()
+    {
+        gui::emit_system_log(&app, "error", "[Codex] failed to send initialize message");
+        return;
+    }
 
     // Wait for init response
-    loop {
-        let Some(Ok(msg)) = stream.next().await else { return };
-        let Ok(v) = serde_json::from_str::<Value>(&msg.to_text().unwrap_or("")) else { continue };
-        if v["id"].as_u64() == Some(init_id) { break; }
+    let init_result = timeout(Duration::from_secs(30), async {
+        loop {
+            let Some(Ok(msg)) = stream.next().await else {
+                return false;
+            };
+            let Ok(v) = serde_json::from_str::<Value>(&msg.to_text().unwrap_or("")) else {
+                continue;
+            };
+            if v["id"].as_u64() == Some(init_id) {
+                return true;
+            }
+        }
+    })
+    .await;
+    if init_result != Ok(true) {
+        gui::emit_system_log(&app, "error", "[Codex] initialize handshake timed out");
+        return;
     }
 
     // === Handshake: thread/start ===
-    let thread_id_rpc = next_id; next_id += 1;
+    let thread_id_rpc = next_id;
+    next_id += 1;
     let mut params = json!({
         "dynamicTools": [
             { "name": "reply", "description": "Send a message to another agent role.",
@@ -74,30 +102,60 @@ pub async fn run(
     if let Some(cwd) = (!opts.cwd.is_empty()).then(|| opts.cwd.as_str()) {
         params["cwd"] = json!(cwd);
     }
-    if let Some(m) = &opts.model { params["model"] = json!(m); }
-    if let Some(sb) = &opts.sandbox_mode { params["sandbox"] = json!(sb); }
-    if let Some(di) = &opts.developer_instructions {
-        if !di.is_empty() { params["settings"] = json!({"developer_instructions": di}); }
+    if let Some(m) = &opts.model {
+        params["model"] = json!(m);
     }
-    ws_tx.send(json!({"method":"thread/start","id":thread_id_rpc,"params":params}).to_string()).await.ok();
-
-    // Wait for thread/start response
-    let mut thread_id = String::new();
-    loop {
-        let Some(Ok(msg)) = stream.next().await else { return };
-        let Ok(v) = serde_json::from_str::<Value>(&msg.to_text().unwrap_or("")) else { continue };
-        if v["id"].as_u64() == Some(thread_id_rpc) {
-            if let Some(tid) = v["result"]["thread"]["id"].as_str() {
-                thread_id = tid.to_string();
-                gui::emit_system_log(&app, "info", &format!("[Codex] session started thread={tid}"));
-            }
-            break;
+    if let Some(sb) = &opts.sandbox_mode {
+        params["sandbox"] = json!(sb);
+    }
+    if let Some(di) = &opts.developer_instructions {
+        if !di.is_empty() {
+            params["settings"] = json!({"developer_instructions": di});
         }
     }
-    if thread_id.is_empty() {
-        gui::emit_system_log(&app, "error", "[Codex] failed to start thread");
+    if ws_tx
+        .send(json!({"method":"thread/start","id":thread_id_rpc,"params":params}).to_string())
+        .await
+        .is_err()
+    {
+        gui::emit_system_log(&app, "error", "[Codex] failed to send thread/start message");
         return;
     }
+
+    // Wait for thread/start response
+    let thread_result = timeout(Duration::from_secs(30), async {
+        loop {
+            let Some(Ok(msg)) = stream.next().await else {
+                return String::new();
+            };
+            let Ok(v) = serde_json::from_str::<Value>(&msg.to_text().unwrap_or("")) else {
+                continue;
+            };
+            if v["id"].as_u64() == Some(thread_id_rpc) {
+                if let Some(tid) = v["result"]["thread"]["id"].as_str() {
+                    gui::emit_system_log(
+                        &app,
+                        "info",
+                        &format!("[Codex] session started thread={tid}"),
+                    );
+                    return tid.to_string();
+                }
+                return String::new();
+            }
+        }
+    })
+    .await;
+    let thread_id = match thread_result {
+        Ok(tid) if !tid.is_empty() => tid,
+        Ok(_) => {
+            gui::emit_system_log(&app, "error", "[Codex] failed to start thread");
+            return;
+        }
+        Err(_) => {
+            gui::emit_system_log(&app, "error", "[Codex] thread/start handshake timed out");
+            return;
+        }
+    };
 
     // === Main event loop ===
     let role_id = opts.role_id.clone();
@@ -117,10 +175,13 @@ pub async fn run(
             inject = inject_rx.recv() => {
                 let Some(text) = inject else { break };
                 let id = next_id; next_id += 1;
-                ws_tx.send(json!({
+                if ws_tx.send(json!({
                     "method": "turn/start", "id": id,
                     "params": {"threadId": &thread_id, "input": [{"type":"text","text":text}]}
-                }).to_string()).await.ok();
+                }).to_string()).await.is_err() {
+                    eprintln!("[Codex] failed to inject turn/start");
+                    break;
+                }
             }
         }
     }

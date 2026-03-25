@@ -8,6 +8,9 @@ dist/
 target/
 src-tauri/target/
 
+# Bridge sidecar build artifact
+src-tauri/binaries/
+
 # Logs
 *.log
 /tmp/agentbridge*.log
@@ -30,12 +33,11 @@ Thumbs.db
 
 # Agent skills
 # Keep project-vendored shared skills under .agents/skills in version control
-# only when explicitly vendored into this repo; leave all other local mirrors ignored.
 .agents/*
 !.agents/skills/
 .agents/skills/*
-!.agents/skills/superpowers/
-!.agents/skills/superpowers/**
+!.agents/skills/*/
+!.agents/skills/*/**
 .agent/
 
 # Claude Code local settings
@@ -43,4 +45,3 @@ Thumbs.db
 
 # Lock files (bun)
 *.lockb
-src-tauri/target/*

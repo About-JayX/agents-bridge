@@ -3,10 +3,11 @@ import { Button } from "@/components/ui/button";
 import { MessageMarkdown } from "@/components/MessageMarkdown";
 import { useBridgeStore, type TerminalLine } from "@/stores/bridge-store";
 import type { BridgeMessage } from "@/types";
+import { PermissionQueue } from "./PermissionQueue";
 import { SourceBadge } from "./SourceBadge";
 import { TabBtn } from "./TabBtn";
 
-type Tab = "messages" | "logs";
+type Tab = "messages" | "logs" | "approvals";
 
 interface MessagePanelProps {
   messages: BridgeMessage[];
@@ -24,6 +25,8 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
 
   const clearMessages = useBridgeStore((s) => s.clearMessages);
   const allTerminalLines = useBridgeStore((s) => s.terminalLines);
+  const permissionPrompts = useBridgeStore((s) => s.permissionPrompts);
+  const respondToPermission = useBridgeStore((s) => s.respondToPermission);
 
   const chatMessages = messages.filter((m) => m.from !== "system");
 
@@ -50,10 +53,16 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
         <TabBtn active={tab === "logs"} onClick={() => setTab("logs")}>
           Logs {errorLines.length > 0 && `(${errorLines.length})`}
         </TabBtn>
+        <TabBtn active={tab === "approvals"} onClick={() => setTab("approvals")}>
+          Approvals
+          {permissionPrompts.length > 0 && ` (${permissionPrompts.length})`}
+        </TabBtn>
         <div className="flex-1" />
-        <Button variant="secondary" size="xs" onClick={clearMessages}>
-          Clear
-        </Button>
+        {tab !== "approvals" && (
+          <Button variant="secondary" size="xs" onClick={clearMessages}>
+            Clear
+          </Button>
+        )}
         <div className="absolute bottom-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-primary/15 to-transparent" />
       </div>
 
@@ -122,6 +131,13 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
             </div>
           ))}
         </div>
+      )}
+
+      {tab === "approvals" && (
+        <PermissionQueue
+          prompts={permissionPrompts}
+          onResolve={respondToPermission}
+        />
       )}
     </div>
   );

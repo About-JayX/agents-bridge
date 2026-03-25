@@ -9,6 +9,17 @@ export interface BridgeMessage {
   priority?: "normal" | "urgent";
 }
 
+export type PermissionBehavior = "allow" | "deny";
+
+export interface PermissionPrompt {
+  agent: string;
+  requestId: string;
+  toolName: string;
+  description: string;
+  inputPreview?: string;
+  createdAt: number;
+}
+
 export type AgentStatus = "disconnected" | "connecting" | "connected" | "error";
 
 export interface AgentInfo {

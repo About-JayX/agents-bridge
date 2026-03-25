@@ -186,15 +186,11 @@ fn map_cached_window(v: &serde_json::Value) -> Option<UsageWindow> {
 }
 
 fn chrono_now() -> String {
-    // Simple ISO 8601 without chrono dependency
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = now.as_secs();
-    // Good enough for display
-    format!("{}Z", secs)
+    chrono::Utc::now().to_rfc3339()
 }
 
 fn format_unix_ts(ts: i64) -> String {
-    format!("{}Z", ts)
+    chrono::DateTime::from_timestamp(ts, 0)
+        .map(|dt| dt.to_rfc3339())
+        .unwrap_or_else(|| format!("{ts}"))
 }

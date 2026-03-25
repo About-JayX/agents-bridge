@@ -1,11 +1,10 @@
 import { useState, useCallback } from "react";
-import { cn } from "@/lib/utils";
+import { cn, shortenPath } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { invoke } from "@tauri-apps/api/core";
 import { useCodexAccountStore } from "@/stores/codex-account-store";
 import { RoleSelect } from "@/components/AgentStatus/RoleSelect";
 import { StatusDot } from "@/components/AgentStatus/StatusDot";
-import { shortenPath } from "./helpers";
 
 interface ClaudePanelProps {
   connected: boolean;
@@ -112,6 +111,13 @@ export function ClaudePanel({ connected }: ClaudePanelProps) {
       {!connected && !cwd && (
         <div className="mt-1.5 text-[10px] text-muted-foreground text-center">
           Select a project directory first
+        </div>
+      )}
+
+      {!connected && cwd && !launchError && (
+        <div className="mt-1.5 text-[10px] text-muted-foreground text-center">
+          AgentBridge will register a project-local .mcp.json and launch Claude
+          in channel preview mode.
         </div>
       )}
 
