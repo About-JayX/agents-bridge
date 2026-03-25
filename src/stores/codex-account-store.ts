@@ -122,6 +122,24 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
     try {
       const info = await invoke<OAuthLaunchInfo>("codex_login");
       set({ loginUri: info.verificationUri });
+      // Poll for auth completion — stop when profile has email
+      const poll = setInterval(async () => {
+        try {
+          const profile = await invoke<CodexProfile>("get_codex_account");
+          if (profile?.email) {
+            clearInterval(poll);
+            set({ profile, loginPending: false, loginUri: null });
+            // Refresh dependent data
+            get().fetchUsage();
+            get().fetchModels();
+          }
+        } catch {}
+      }, 2000);
+      // Safety timeout
+      setTimeout(() => {
+        clearInterval(poll);
+        if (get().loginPending) set({ loginPending: false });
+      }, 120000);
     } catch {
       set({ loginPending: false, loginUri: null });
     }
@@ -137,7 +155,7 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
   logout: async () => {
     try {
       await invoke("codex_logout");
-      set({ profile: null, usage: null });
+      set({ profile: null, usage: null, models: [] });
     } catch {}
   },
 }));

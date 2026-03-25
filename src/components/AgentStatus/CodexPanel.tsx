@@ -380,44 +380,29 @@ function AuthActions() {
   const login = useCodexAccountStore((s) => s.login);
   const cancelLogin = useCodexAccountStore((s) => s.cancelLogin);
   const logout = useCodexAccountStore((s) => s.logout);
-  const fetchProfile = useCodexAccountStore((s) => s.fetchProfile);
-
-  const handleLogin = useCallback(async () => {
-    await login();
-    // Poll for profile after login starts (OAuth is async)
-    const interval = setInterval(async () => {
-      await fetchProfile();
-    }, 2000);
-    setTimeout(() => clearInterval(interval), 120000);
-  }, [login, fetchProfile]);
-
-  const handleLogout = useCallback(async () => {
-    await logout();
-  }, [logout]);
 
   if (loginPending) {
     return (
-      <div className="mt-2 rounded-md bg-muted/40 px-3 py-2 space-y-1.5">
-        <div className="text-[11px] text-muted-foreground">
-          <span className="flex items-center gap-2">
-            <span className="size-3 border-2 border-codex/30 border-t-codex rounded-full animate-spin" />
-            Waiting for browser login...
-          </span>
+      <div className="mt-2 rounded-md border border-codex/20 bg-codex/5 px-3 py-2.5 space-y-2">
+        <div className="flex items-center gap-2 text-[11px] text-codex">
+          <span className="size-3 border-2 border-codex/30 border-t-codex rounded-full animate-spin shrink-0" />
+          Waiting for browser login...
         </div>
         {loginUri && (
           <a
             href={loginUri}
             target="_blank"
             rel="noreferrer"
-            className="block text-[10px] text-codex hover:underline truncate"
+            className="block text-[10px] text-codex/80 hover:text-codex hover:underline truncate"
+            title={loginUri}
           >
-            {loginUri}
+            Open login page →
           </a>
         )}
         <Button
           size="sm"
           variant="ghost"
-          className="w-full text-[11px]"
+          className="w-full text-[11px] text-muted-foreground hover:text-destructive"
           onClick={cancelLogin}
         >
           Cancel
@@ -431,8 +416,8 @@ function AuthActions() {
       <Button
         size="sm"
         variant="outline"
-        className="w-full mt-2 text-[11px]"
-        onClick={handleLogin}
+        className="w-full mt-2 text-[11px] border-codex/30 text-codex hover:bg-codex/10 hover:border-codex/50 transition-all"
+        onClick={login}
       >
         Login to Codex
       </Button>
@@ -440,17 +425,25 @@ function AuthActions() {
   }
 
   return (
-    <div className="mt-1 flex items-center justify-between">
-      <span
-        className="text-[10px] text-muted-foreground truncate max-w-32"
-        title={profile.email}
-      >
-        {profile.email}
-      </span>
+    <div className="mt-1.5 flex items-center justify-between rounded-md bg-muted/30 px-2.5 py-1.5">
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className="size-1.5 rounded-full bg-codex shrink-0" />
+        <span
+          className="text-[10px] text-foreground/80 truncate"
+          title={profile.email}
+        >
+          {profile.email}
+        </span>
+        {profile.planType && (
+          <span className="capitalize rounded bg-codex/10 px-1 py-px text-[9px] font-semibold text-codex shrink-0">
+            {profile.planType}
+          </span>
+        )}
+      </div>
       <button
         type="button"
-        onClick={handleLogout}
-        className="text-[10px] text-muted-foreground hover:text-destructive transition-colors"
+        onClick={logout}
+        className="text-[10px] text-muted-foreground hover:text-destructive transition-colors shrink-0 ml-2"
       >
         Logout
       </button>
