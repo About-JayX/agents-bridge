@@ -13,7 +13,7 @@ paths:
 - 每条消息带 `from`/`to` 字段（角色名），bridge 按 `to` 字段路由到目标 agent，`skipSender` 防循环
 
 ## 文件规模
-- **每个文件最多 500 行**，超过必须拆分
+- **每个文件最多 200 行**，超过必须拆分
 - daemon 模块结构: `daemon.ts`(入口) / `daemon-state.ts`(共享状态) / `gui-server.ts` / `control-server.ts`
 - adapter 模块结构: `codex-adapter.ts`(编排) / `codex-message-handler.ts` / `codex-response-patcher.ts` / `codex-port-utils.ts` / `codex-types.ts`
 

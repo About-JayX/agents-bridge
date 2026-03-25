@@ -30,7 +30,7 @@ paths:
 - TypeScript 配置用 tsconfig.app.json
 
 ## 文件规模
-- **每个文件最多 500 行**，超过必须拆分为独立模块/组件
+- **每个文件最多 200 行**，超过必须拆分为独立模块/组件
 
 ## 封装与抽离
 - 可复用的 UI 单元必须抽为独立组件（如 `UsageBar`、`StatusDot`、`SourceBadge`）
