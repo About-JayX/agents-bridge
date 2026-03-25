@@ -2,7 +2,6 @@
 
 import { appendFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { spawn } from "node:child_process";
 import { CodexAdapter } from "./adapters/codex-adapter";
 import { TuiConnectionState } from "./tui-connection-state";
 import { SessionManager } from "./session-manager";
@@ -140,25 +139,7 @@ async function bootCodex() {
       controlPort: CONTROL_PORT,
     });
     state.codexBootstrapped = true;
-
-    // Spawn bridge process for Codex agent (daemon-managed, not Codex-managed)
-    const codexBridge = spawn(process.execPath, ["run", bridgePath], {
-      env: {
-        ...process.env,
-        AGENTBRIDGE_CONTROL_PORT: String(CONTROL_PORT),
-        AGENTBRIDGE_AGENT: "codex",
-      } as any,
-      stdio: "pipe",
-    });
-    codexBridge.stderr?.on("data", (d: Buffer) => {
-      const lines = d.toString().trim().split("\n");
-      for (const l of lines) log(`[Bridge/codex] ${l}`);
-    });
-    codexBridge.on("exit", (code) =>
-      log(`[Bridge/codex] exited (code ${code})`),
-    );
-    log(`Spawned bridge/codex (pid ${codexBridge.pid})`);
-
+    // MCP bridge will be spawned by app-server from CODEX_HOME/config.toml
     broadcastStatus();
   } catch (err: any) {
     log(`Failed to start Codex: ${err.message}`);

@@ -168,10 +168,8 @@ function shutdown(reason: string) {
 
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
-if (AGENT_ID !== "codex") {
-  process.stdin.on("end", () => shutdown("stdin closed"));
-  process.stdin.on("close", () => shutdown("stdin closed"));
-}
+process.stdin.on("end", () => shutdown("stdin closed"));
+process.stdin.on("close", () => shutdown("stdin closed"));
 process.on("exit", () => {
   if (!shuttingDown) void daemonClient.disconnect();
 });
@@ -192,19 +190,5 @@ function log(msg: string) {
 
 log(`Starting bridge for ${AGENT_ID} (daemon ws ${CONTROL_WS_URL})`);
 
-if (AGENT_ID === "codex") {
-  // Codex bridge: no MCP stdio, connect directly to daemon as agent proxy
-  (async () => {
-    try {
-      await ensureDaemonRunning();
-      await daemonClient.connect();
-      daemonClient.attachAgent(AGENT_ID);
-      log(`Connected to daemon as ${AGENT_ID} (proxy mode, no MCP stdio)`);
-    } catch (err: any) {
-      log(`Failed to connect to daemon: ${err.message}`);
-    }
-  })();
-} else {
-  // Claude bridge: MCP stdio server (spawned by Claude CLI)
-  void adapter.start().catch((err: any) => log(`Fatal: ${err.message}`));
-}
+// MCP stdio server — works for both Claude (spawned by CLI) and Codex (spawned by app-server)
+void adapter.start().catch((err: any) => log(`Fatal: ${err.message}`));
