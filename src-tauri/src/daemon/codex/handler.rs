@@ -75,11 +75,42 @@ async fn handle_check_messages(role_id: &str, state: &SharedState) -> String {
 
 async fn handle_get_status(state: &SharedState) -> String {
     let s = state.read().await;
-    let online: Vec<&str> = s.attached_agents.keys().map(|k| k.as_str()).collect();
+    let mut online: Vec<String> = Vec::new();
+    if s.attached_agents.contains_key("claude") {
+        online.push("claude".to_string());
+    }
+    if s.codex_inject_tx.is_some() {
+        online.push("codex".to_string());
+    }
+    for agent in s
+        .attached_agents
+        .keys()
+        .filter(|agent| agent.as_str() != "claude" && agent.as_str() != "codex")
+    {
+        online.push(agent.clone());
+    }
     format!(
         "Claude role: {}, Codex role: {}, Online agents: [{}]",
         s.claude_role,
         s.codex_role,
         online.join(", ")
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::daemon::state::DaemonState;
+    use std::sync::Arc;
+    use tokio::sync::{mpsc, RwLock};
+
+    #[tokio::test]
+    async fn get_status_reports_wired_codex_session() {
+        let state: SharedState = Arc::new(RwLock::new(DaemonState::new()));
+        let (tx, _rx) = mpsc::channel::<String>(1);
+        state.write().await.codex_inject_tx = Some(tx);
+
+        let status = handle_get_status(&state).await;
+        assert!(status.contains("Online agents: [codex]"));
+    }
 }

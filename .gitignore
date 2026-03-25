@@ -28,8 +28,14 @@ Thumbs.db
 .env.*
 !.env.example
 
-# Agent skills (installed via npx skills, not project source)
-.agents/
+# Agent skills
+# Keep project-vendored shared skills under .agents/skills in version control
+# only when explicitly vendored into this repo; leave all other local mirrors ignored.
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/superpowers/
+!.agents/skills/superpowers/**
 .agent/
 
 # Claude Code local settings

@@ -207,12 +207,13 @@ cargo test          # 运行 Rust 测试
 当前仓库内置技能：
 
 - 项目自定义：`add-adapter`、`debug-daemon`
-- 共享镜像：`aceternity-ui`、`rust-async-patterns`、`rust-pro`、`shadcn`、`tailwind-css-patterns`、`vercel-react-best-practices`
+- 共享镜像：`aceternity-ui`、`rust-async-patterns`、`rust-pro`、`shadcn`、`superpowers`、`tailwind-css-patterns`、`vercel-react-best-practices`
 
 **维护约定:**
 
 - `.claude/skills/<name>` 如果是 symlink，真实内容以 `.agents/skills/<name>/` 为准
 - 新增共享 skill 时，同时更新 `.agents/skills/`、`.claude/skills/` 和 `skills-lock.json`
+- 已明确 vendored 到仓库的共享 skill 必须在 `.agents/skills/<name>/` 落地并可提交；不要让 `.gitignore` 把项目级 skill 屏蔽掉
 - 新增项目私有 skill 时，直接创建 `.claude/skills/<name>/SKILL.md`
 - 用户全局 skills 目录只作为个人环境兜底，不属于仓库协作约定
 
