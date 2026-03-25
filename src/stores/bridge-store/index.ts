@@ -30,6 +30,7 @@ export const useBridgeStore = create<BridgeState>((set, get) => {
     terminalLines: [],
     claudeTerminalChunks: [],
     permissionPrompts: [],
+    claudeNeedsAttention: false,
     claudeRole: "lead",
     codexRole: "coder",
     draft: "",

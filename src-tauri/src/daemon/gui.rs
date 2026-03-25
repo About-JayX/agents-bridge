@@ -74,6 +74,11 @@ pub fn emit_claude_terminal_reset(app: &AppHandle) {
     let _ = app.emit("claude_terminal_reset", ());
 }
 
+/// Emitted when Claude terminal shows an interactive prompt needing user input.
+pub fn emit_claude_terminal_attention(app: &AppHandle) {
+    let _ = app.emit("claude_terminal_attention", ());
+}
+
 pub fn emit_agent_status(app: &AppHandle, agent: &str, online: bool, exit_code: Option<i32>) {
     let _ = app.emit(
         "agent_status",

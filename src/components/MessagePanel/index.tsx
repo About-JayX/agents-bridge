@@ -17,8 +17,7 @@ interface MessagePanelProps {
 
 export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
   const [tab, setTabState] = useState<Tab>("messages");
-  const previousClaudeConnectedRef = useRef(false);
-  const previousClaudeChunkCountRef = useRef(0);
+  const prevClaudeRef = useRef({ connected: false, chunks: 0 });
   const [claudeTabAttention, setClaudeTabAttention] = useState(false);
   const setTab = (t: Tab) => {
     setTabState(t);
@@ -35,6 +34,7 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
   const respondToPermission = useBridgeStore((s) => s.respondToPermission);
   const claudeConnected =
     useBridgeStore((s) => s.agents.claude?.status) === "connected";
+  const claudeNeedsAttention = useBridgeStore((s) => s.claudeNeedsAttention);
   const claudeTerminalAvailable =
     claudeConnected || claudeTerminalChunks.length > 0;
 
@@ -61,31 +61,33 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
   }, [messages, tab, isNearBottom]);
 
   useEffect(() => {
-    if (!previousClaudeConnectedRef.current && claudeConnected) {
+    if (!prevClaudeRef.current.connected && claudeConnected)
       setClaudeTabAttention(true);
-    }
-    previousClaudeConnectedRef.current = claudeConnected;
-  }, [claudeConnected]);
-
-  useEffect(() => {
     if (
-      claudeTerminalChunks.length > previousClaudeChunkCountRef.current &&
+      claudeTerminalChunks.length > prevClaudeRef.current.chunks &&
       tab !== "claude"
-    ) {
+    )
       setClaudeTabAttention(true);
-    }
-    previousClaudeChunkCountRef.current = claudeTerminalChunks.length;
-  }, [claudeTerminalChunks.length, tab]);
+    prevClaudeRef.current = {
+      connected: claudeConnected,
+      chunks: claudeTerminalChunks.length,
+    };
+  }, [claudeConnected, claudeTerminalChunks.length, tab]);
 
   useEffect(() => {
-    if (tab === "claude") {
-      setClaudeTabAttention(false);
-    }
+    if (tab === "claude") setClaudeTabAttention(false);
   }, [tab]);
+
+  // Auto-switch to Claude tab when interactive prompt detected
+  useEffect(() => {
+    if (claudeNeedsAttention && tab !== "claude") {
+      setTab("claude");
+      useBridgeStore.setState({ claudeNeedsAttention: false });
+    }
+  }, [claudeNeedsAttention, tab]);
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
-      {/* Tabs */}
       <div className="flex items-center px-4 py-2 border-b border-border/50 gap-3 relative">
         <TabBtn active={tab === "messages"} onClick={() => setTab("messages")}>
           Messages ({chatMessages.length})
@@ -117,7 +119,6 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
         <div className="absolute bottom-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-primary/15 to-transparent" />
       </div>
 
-      {/* Messages */}
       {tab === "messages" && (
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-2">
           {chatMessages.length === 0 && (
@@ -155,7 +156,6 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
           <div ref={bottomRef} />
         </div>
       )}
-
       {tab === "logs" && (
         <div
           ref={logRef}

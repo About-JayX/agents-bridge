@@ -44,6 +44,10 @@ pub fn spawn_auto_confirm_thread(
                                 }
                             }
                         }
+                        // Check for prompts needing user attention
+                        if needs_user_attention(&transcript) {
+                            crate::daemon::gui::emit_claude_terminal_attention(&app);
+                        }
                         if confirmed || !should_auto_confirm_development_prompt(&transcript) {
                             continue;
                         }
@@ -105,6 +109,31 @@ pub fn drain_log_lines(pending: &mut String, chunk: &str) -> Vec<String> {
         .map(|line| line.trim().to_string())
         .filter(|line| !line.is_empty())
         .collect()
+}
+
+/// Detect interactive prompts that need manual user input.
+/// Looks for numbered options, y/n questions, or "?" prompts.
+/// Excludes the auto-confirmed development channel prompt.
+fn needs_user_attention(transcript: &str) -> bool {
+    let clean = strip_ansi(transcript);
+    // Only check the last ~500 chars (recent output)
+    let tail = if clean.len() > 500 { &clean[clean.len() - 500..] } else { &clean };
+    let lower = tail.to_ascii_lowercase();
+    // Skip if this is the agentbridge auto-confirm prompt
+    if lower.contains("server:agentbridge") && lower.contains("local development") {
+        return false;
+    }
+    // Detect numbered options like "1.", "2." at line start
+    let has_options = tail.lines().any(|l| {
+        let t = l.trim();
+        t.starts_with("1.") || t.starts_with("2.") || t.starts_with("1)")
+    });
+    // Detect y/n prompts
+    let has_yn = lower.contains("(y/n)") || lower.contains("[y/n]")
+        || lower.contains("(yes/no)") || lower.contains("[yes/no]");
+    // Detect question at end of recent line
+    let has_question = tail.lines().rev().take(3).any(|l| l.trim().ends_with('?'));
+    has_options || has_yn || has_question
 }
 
 fn normalize_prompt_text(raw: &str) -> String {

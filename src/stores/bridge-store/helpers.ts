@@ -100,6 +100,9 @@ export function initListeners(
         },
       }));
     }),
+    listen("claude_terminal_attention", () => {
+      set(() => ({ claudeNeedsAttention: true }));
+    }),
     listen<PermissionPromptPayload>("permission_prompt", (e) => {
       set((s) => ({
         permissionPrompts: [

@@ -26,6 +26,7 @@ export interface BridgeState {
   terminalLines: TerminalLine[];
   claudeTerminalChunks: ClaudeTerminalChunk[];
   permissionPrompts: PermissionPrompt[];
+  claudeNeedsAttention: boolean;
   claudeRole: string;
   codexRole: string;
   draft: string;
