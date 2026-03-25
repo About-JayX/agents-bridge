@@ -46,6 +46,7 @@ class DaemonState {
   nextSystemMessageId = 0;
   codexBootstrapped = false;
   shuttingDown = false;
+  codexHome: string | null = null;
 
   // Per-agent roles
   claudeRole: RoleId = "lead";

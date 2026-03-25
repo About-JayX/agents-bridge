@@ -30,6 +30,8 @@ export async function startCodex(
     args.push("--config", "features.apply_patch_freeform=false");
   }
 
+  // MCP is loaded from CODEX_HOME/config.toml (written by session-manager)
+
   // Build environment with optional CODEX_HOME isolation
   const env: Record<string, string> = { ...process.env } as any;
   if (opts?.codexHome) {

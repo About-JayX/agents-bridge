@@ -89,6 +89,15 @@ export async function initSession(
           const tid = msg.result?.thread?.id;
           if (tid) {
             state.handler.setActiveThreadId(tid, "initSession");
+            // Trigger MCP server reload so app-server loads agentbridge from config.toml
+            try {
+              state.appServerWs!.send(
+                JSON.stringify({
+                  method: "config/mcpServer/reload",
+                  id: state.nextInjectionId++,
+                }),
+              );
+            } catch {}
             resolve({ success: true });
           } else {
             resolve({
@@ -108,6 +117,7 @@ export async function initSession(
         params: {
           clientInfo: { name: "agentbridge", version: "0.1.0" },
           protocolVersion: "0.1.0",
+          capabilities: { experimentalApi: true },
         },
       }),
     );

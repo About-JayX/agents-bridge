@@ -54,6 +54,7 @@ export function handleLaunchCodexTui(
       if (result.success) {
         log("Codex session initialized successfully");
         tuiState.markBridgeReady();
+
         broadcastToGui({
           type: "agent_status",
           payload: {

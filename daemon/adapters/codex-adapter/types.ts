@@ -14,6 +14,10 @@ export interface CodexStartOptions {
   approvalPolicy?: string;
   /** Disable apply_patch_freeform feature flag */
   disableApplyPatch?: boolean;
+  /** Absolute path to bridge.ts for MCP injection */
+  bridgePath?: string;
+  /** Control port for MCP bridge */
+  controlPort?: number;
 }
 
 export interface InitSessionOptions {

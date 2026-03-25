@@ -1,4 +1,5 @@
-export { AgentAdapter, AgentStatus } from "./base-adapter";
+export type { AgentAdapter } from "./base-adapter";
+export { type AgentStatus } from "./base-adapter";
 export {
   AgentMcpAdapter,
   type ReplySender,

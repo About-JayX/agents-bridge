@@ -83,30 +83,20 @@ export class SessionManager {
       );
     }
 
-    // Write MCP config for agentbridge communication
+    // Write config.toml with MCP server for agentbridge communication
     if (config.bridgePath) {
-      const mcpJson = join(codexHome, "mcp.json");
-      writeFileSync(
-        mcpJson,
-        JSON.stringify(
-          {
-            mcpServers: {
-              agentbridge: {
-                command: "bun",
-                args: ["run", config.bridgePath],
-                env: {
-                  AGENTBRIDGE_CONTROL_PORT: String(config.controlPort ?? 4502),
-                  AGENTBRIDGE_AGENT: "codex",
-                },
-              },
-            },
-          },
-          null,
-          2,
-        ),
-        "utf-8",
-      );
-      this.log(`Wrote mcp.json for session ${config.sessionId}`);
+      const configToml = join(codexHome, "config.toml");
+      const port = String(config.controlPort ?? 4502);
+      const toml = `[mcp_servers.agentbridge]
+command = "bun"
+args = ["run", ${JSON.stringify(config.bridgePath)}]
+
+[mcp_servers.agentbridge.env]
+AGENTBRIDGE_CONTROL_PORT = "${port}"
+AGENTBRIDGE_AGENT = "codex"
+`;
+      writeFileSync(configToml, toml, "utf-8");
+      this.log(`Wrote config.toml with MCP for session ${config.sessionId}`);
     }
 
     const paths: SessionPaths = { codexHome, authJson, rulesDir, rulesFile };
