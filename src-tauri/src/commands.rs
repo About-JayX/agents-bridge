@@ -94,19 +94,19 @@ pub async fn daemon_get_status_snapshot(
         .map_err(|_| "daemon dropped status snapshot reply".to_string())
 }
 
-/// Kill any running Claude channel preview processes.
+/// Kill bridge sidecar + Claude channel processes to disconnect Claude.
+/// Killing the bridge triggers daemon WS disconnect → agent_status(false).
 #[tauri::command]
 pub async fn stop_claude() -> Result<(), String> {
-    let output = tokio::process::Command::new("pkill")
-        .arg("-f")
-        .arg("claude.*server:agentbridge")
-        .output()
-        .await
-        .map_err(|e| format!("pkill failed: {e}"))?;
-    eprintln!(
-        "[Claude] stop: pkill exit={}, killed channel processes",
-        output.status.code().unwrap_or(-1)
-    );
+    // Kill bridge sidecar — this triggers daemon disconnect detection
+    let _ = tokio::process::Command::new("pkill")
+        .arg("-f").arg("agent-bridge-bridge")
+        .output().await;
+    // Also kill any claude channel process
+    let _ = tokio::process::Command::new("pkill")
+        .arg("-f").arg("dangerously-load-development-channels")
+        .output().await;
+    eprintln!("[Claude] stop: killed bridge + channel processes");
     Ok(())
 }
 
