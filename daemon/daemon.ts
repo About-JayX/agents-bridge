@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { appendFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { CodexAdapter } from "./adapters/codex-adapter";
 import { TuiConnectionState } from "./tui-connection-state";
 import { SessionManager } from "./session-manager";
@@ -123,7 +124,15 @@ async function bootCodex() {
   );
 
   try {
-    await codex.start();
+    // Create isolated CODEX_HOME with mcp.json for agent communication
+    const bridgePath = join(import.meta.dir, "bridge.ts");
+    const session = sessionManager.createSession({
+      sessionId: `boot-${Date.now()}`,
+      roleId: state.codexRole,
+      bridgePath,
+      controlPort: CONTROL_PORT,
+    });
+    await codex.start({ codexHome: session.codexHome });
     state.codexBootstrapped = true;
     broadcastStatus();
   } catch (err: any) {
