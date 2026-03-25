@@ -32,13 +32,21 @@ pub async fn start(
     Ok(child)
 }
 
-/// Kill the Codex process, waiting up to 3 s before forcing SIGKILL.
+/// Kill the Codex process and wait for it to fully exit.
+/// After the process exits, waits briefly for the OS to release the listen port.
 pub async fn stop(child: &mut Child) {
     child.start_kill().ok();
     tokio::select! {
         _ = child.wait() => {}
         _ = tokio::time::sleep(std::time::Duration::from_secs(3)) => {
             child.kill().await.ok();
+            // Ensure process fully exits after forced kill
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                child.wait(),
+            ).await;
         }
     }
+    // Give the OS time to release the bound port
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 }

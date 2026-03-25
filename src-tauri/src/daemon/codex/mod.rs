@@ -60,6 +60,15 @@ pub async fn start(
             .await
             .create_session(&session_id, &sandbox_mode, &approval_policy)?;
 
+    // Wait for port to be free before spawning (previous process may still hold it)
+    let port_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    while tokio::net::TcpStream::connect(format!("127.0.0.1:{codex_port}")).await.is_ok() {
+        if tokio::time::Instant::now() >= port_deadline {
+            anyhow::bail!("Port {codex_port} still in use after 5s");
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+
     let child = lifecycle::start(
         codex_port,
         &codex_home,
