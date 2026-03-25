@@ -11,7 +11,7 @@ pub use state::DaemonState;
 
 use std::sync::Arc;
 use tauri::AppHandle;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{mpsc, oneshot, RwLock};
 
 /// Shared daemon state accessible from all submodules.
 pub type SharedState = Arc<RwLock<DaemonState>>;
@@ -25,9 +25,16 @@ pub enum DaemonCmd {
         role_id: String,
         cwd: String,
         model: Option<String>,
+        reply: oneshot::Sender<Result<(), String>>,
     },
     /// Stop the current Codex session.
     StopCodex,
+    /// Stop active agents and let the app exit without orphaned child processes.
+    Shutdown { reply: oneshot::Sender<()> },
+    /// Read the current runtime status snapshot for frontend hydration.
+    ReadStatusSnapshot {
+        reply: oneshot::Sender<types::DaemonStatusSnapshot>,
+    },
     /// Update which role Claude is playing (affects routing).
     SetClaudeRole(String),
     /// Send a permission verdict back to the bridge for Claude Code.
@@ -40,6 +47,20 @@ pub enum DaemonCmd {
 /// Create the command channel.  Call before spawning to avoid the DaemonSender race.
 pub fn channel() -> (mpsc::Sender<DaemonCmd>, mpsc::Receiver<DaemonCmd>) {
     mpsc::channel(64)
+}
+
+async fn stop_codex_session(
+    codex_handle: &mut Option<codex::CodexHandle>,
+    state: &SharedState,
+    app: &AppHandle,
+) {
+    if let Some(h) = codex_handle.take() {
+        h.stop().await;
+    }
+    let mut daemon = state.write().await;
+    daemon.codex_inject_tx = None;
+    drop(daemon);
+    gui::emit_agent_status(app, "codex", false, None);
 }
 
 /// Run the daemon.  Consumes `cmd_rx`; should be spawned via `tauri::async_runtime::spawn`.
@@ -69,40 +90,49 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
                 role_id,
                 cwd,
                 model,
+                reply,
             } => {
-                if let Some(h) = codex_handle.take() {
-                    h.stop().await;
-                    let mut daemon = state.write().await;
-                    daemon.codex_inject_tx = None;
-                    drop(daemon);
-                    gui::emit_agent_status(&app, "codex", false, None);
-                }
-                match codex::start(role_id, cwd, model, state.clone(), app.clone(), 4500).await {
-                    Ok(h) => {
-                        codex_handle = Some(h);
-                    }
-                    Err(e) => {
-                        gui::emit_system_log(
-                            &app,
-                            "error",
-                            &format!("[Daemon] Codex start failed: {e}"),
-                        );
-                    }
-                }
+                eprintln!(
+                    "[Daemon] LaunchCodex received: role={role_id} cwd={cwd} model={model:?}"
+                );
+                stop_codex_session(&mut codex_handle, &state, &app).await;
+                let launch_result =
+                    match codex::start(role_id, cwd, model, state.clone(), app.clone(), 4500).await
+                    {
+                        Ok(h) => {
+                            codex_handle = Some(h);
+                            Ok(())
+                        }
+                        Err(e) => {
+                            gui::emit_agent_status(&app, "codex", false, None);
+                            gui::emit_system_log(
+                                &app,
+                                "error",
+                                &format!("[Daemon] Codex start failed: {e}"),
+                            );
+                            Err(e.to_string())
+                        }
+                    };
+                let _ = reply.send(launch_result);
             }
 
             DaemonCmd::StopCodex => {
-                if let Some(h) = codex_handle.take() {
-                    h.stop().await;
-                }
-                let mut daemon = state.write().await;
-                daemon.codex_inject_tx = None;
-                drop(daemon);
-                gui::emit_agent_status(&app, "codex", false, None);
+                stop_codex_session(&mut codex_handle, &state, &app).await;
+            }
+
+            DaemonCmd::Shutdown { reply } => {
+                stop_codex_session(&mut codex_handle, &state, &app).await;
+                let _ = reply.send(());
+                break;
             }
 
             DaemonCmd::SetClaudeRole(role) => {
                 state.write().await.claude_role = role;
+            }
+
+            DaemonCmd::ReadStatusSnapshot { reply } => {
+                let snapshot = state.read().await.status_snapshot();
+                let _ = reply.send(snapshot);
             }
 
             DaemonCmd::RespondPermission {

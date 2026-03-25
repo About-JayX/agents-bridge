@@ -14,13 +14,14 @@ pub struct CodexHandle {
     session_mgr: Arc<Mutex<crate::daemon::session_manager::SessionManager>>,
     session_id: String,
     cancel: CancellationToken,
+    port: u16,
 }
 
 impl CodexHandle {
     pub async fn stop(&self) {
         self.cancel.cancel();
         if let Some(mut child) = self.process.lock().await.take() {
-            lifecycle::stop(&mut child).await;
+            lifecycle::stop(&mut child, self.port).await;
         }
         self.session_mgr
             .lock()
@@ -62,7 +63,10 @@ pub async fn start(
 
     // Wait for port to be free before spawning (previous process may still hold it)
     let port_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
-    while tokio::net::TcpStream::connect(format!("127.0.0.1:{codex_port}")).await.is_ok() {
+    while tokio::net::TcpStream::connect(format!("127.0.0.1:{codex_port}"))
+        .await
+        .is_ok()
+    {
         if tokio::time::Instant::now() >= port_deadline {
             anyhow::bail!("Port {codex_port} still in use after 5s");
         }
@@ -79,12 +83,7 @@ pub async fn start(
     .await?;
     let child_arc = Arc::new(Mutex::new(Some(child)));
 
-    eprintln!("[Codex] process spawned, polling port {codex_port}...");
-    gui::emit_system_log(
-        &app,
-        "info",
-        &format!("[Codex] started port={codex_port} role={role_id}"),
-    );
+    gui::emit_system_log(&app, "info", &format!("[Codex] spawned port={codex_port} role={role_id}"));
 
     // Poll until Codex app-server is accepting connections (up to 10 s)
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
@@ -119,6 +118,7 @@ pub async fn start(
     };
 
     let cancel = CancellationToken::new();
+    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel::<String>();
 
     let state2 = state.clone();
     let app2 = app.clone();
@@ -126,9 +126,17 @@ pub async fn start(
     tokio::spawn(async move {
         tokio::select! {
             _ = cancel_session.cancelled() => {}
-            _ = session::run(codex_port, opts, state2, app2, inject_rx) => {}
+            _ = session::run(codex_port, opts, state2, app2, inject_rx, ready_tx) => {}
         }
     });
+
+    // Wait for session handshake to complete before declaring connected
+    let thread_id = match ready_rx.await {
+        Ok(tid) if !tid.is_empty() => tid,
+        _ => {
+            anyhow::bail!("Codex session handshake failed");
+        }
+    };
 
     let buffered = {
         let mut s = state.write().await;
@@ -142,13 +150,8 @@ pub async fn start(
             .await
             .ok();
     }
-    eprintln!("[Codex] session wired, emitting agent_status(true)");
     gui::emit_agent_status(&app, "codex", true, None);
-    gui::emit_system_log(
-        &app,
-        "info",
-        &format!("[Codex] session wired role={role_id}"),
-    );
+    gui::emit_system_log(&app, "info", &format!("[Codex] ready role={role_id} thread={thread_id}"));
 
     // Health monitor: detect unexpected Codex process death
     let child_health = child_arc.clone();
@@ -189,5 +192,6 @@ pub async fn start(
         session_mgr,
         session_id,
         cancel,
+        port: codex_port,
     })
 }

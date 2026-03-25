@@ -1,6 +1,9 @@
 use crate::daemon::{
     session_manager::SessionManager,
-    types::{BridgeMessage, PermissionBehavior, PermissionRequest, PermissionVerdict, ToAgent},
+    types::{
+        AgentRuntimeStatus, BridgeMessage, DaemonStatusSnapshot, PermissionBehavior,
+        PermissionRequest, PermissionVerdict, ToAgent,
+    },
 };
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{mpsc, Mutex};
@@ -45,7 +48,40 @@ impl Default for DaemonState {
 }
 
 impl DaemonState {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn status_snapshot(&self) -> DaemonStatusSnapshot {
+        let mut agents = vec![
+            AgentRuntimeStatus {
+                agent: "claude".into(),
+                online: self.attached_agents.contains_key("claude"),
+            },
+            AgentRuntimeStatus {
+                agent: "codex".into(),
+                online: self.codex_inject_tx.is_some(),
+            },
+        ];
+
+        let mut other_agents: Vec<_> = self
+            .attached_agents
+            .keys()
+            .filter(|agent| agent.as_str() != "claude" && agent.as_str() != "codex")
+            .cloned()
+            .collect();
+        other_agents.sort();
+        agents.extend(other_agents.into_iter().map(|agent| AgentRuntimeStatus {
+            agent,
+            online: true,
+        }));
+
+        DaemonStatusSnapshot {
+            agents,
+            claude_role: self.claude_role.clone(),
+            codex_role: self.codex_role.clone(),
+        }
+    }
 
     #[cfg(test)]
     pub fn flush_buffered(&mut self) -> Vec<BridgeMessage> {
@@ -110,9 +146,14 @@ impl DaemonState {
     }
 
     pub fn buffer_permission_verdict(&mut self, agent_id: &str, verdict: PermissionVerdict) {
-        let entry = self.buffered_verdicts.entry(agent_id.to_string()).or_default();
+        let entry = self
+            .buffered_verdicts
+            .entry(agent_id.to_string())
+            .or_default();
         entry.push(verdict);
-        if entry.len() > 50 { entry.drain(0..25); }
+        if entry.len() > 50 {
+            entry.drain(0..25);
+        }
     }
 
     pub fn take_buffered_verdicts_for(&mut self, agent_id: &str) -> Vec<PermissionVerdict> {
@@ -191,8 +232,31 @@ mod tests {
         );
 
         let result = s.resolve_permission(
-            "req-expired", PermissionBehavior::Deny, 100 + PERMISSION_TTL_MS + 1,
+            "req-expired",
+            PermissionBehavior::Deny,
+            100 + PERMISSION_TTL_MS + 1,
         );
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn status_snapshot_reports_current_online_agents() {
+        let mut s = DaemonState::new();
+        let (claude_tx, _claude_rx) = tokio::sync::mpsc::channel::<ToAgent>(1);
+        let (codex_tx, _codex_rx) = tokio::sync::mpsc::channel::<String>(1);
+        s.attached_agents.insert("claude".into(), claude_tx);
+        s.codex_inject_tx = Some(codex_tx);
+
+        let snapshot = s.status_snapshot();
+        assert_eq!(snapshot.claude_role, "lead");
+        assert_eq!(snapshot.codex_role, "coder");
+        assert!(snapshot
+            .agents
+            .iter()
+            .any(|agent| agent.agent == "claude" && agent.online));
+        assert!(snapshot
+            .agents
+            .iter()
+            .any(|agent| agent.agent == "codex" && agent.online));
     }
 }

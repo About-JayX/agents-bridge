@@ -32,8 +32,12 @@ impl ChannelState {
         self.chat_targets.insert(msg.id.clone(), reply_target);
         if self.chat_targets.len() > MAX_CHAT_TARGETS {
             // Evict oldest entries (HashMap doesn't preserve order, so just clear half)
-            let keys: Vec<String> =
-                self.chat_targets.keys().take(MAX_CHAT_TARGETS / 2).cloned().collect();
+            let keys: Vec<String> = self
+                .chat_targets
+                .keys()
+                .take(MAX_CHAT_TARGETS / 2)
+                .cloned()
+                .collect();
             for k in keys {
                 self.chat_targets.remove(&k);
             }

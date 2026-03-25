@@ -134,8 +134,8 @@ pub fn launch_claude_terminal(cwd: Option<String>) -> Result<(), String> {
 
     #[cfg(not(target_os = "macos"))]
     {
-        let claude_bin = which::which("claude")
-            .map_err(|_| "Claude CLI not found in PATH".to_string())?;
+        let claude_bin =
+            which::which("claude").map_err(|_| "Claude CLI not found in PATH".to_string())?;
         std::process::Command::new(claude_bin)
             .current_dir(&dir)
             .arg("--dangerously-load-development-channels")

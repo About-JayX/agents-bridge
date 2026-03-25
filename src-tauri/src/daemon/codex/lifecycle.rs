@@ -33,20 +33,40 @@ pub async fn start(
 }
 
 /// Kill the Codex process and wait for it to fully exit.
-/// After the process exits, waits briefly for the OS to release the listen port.
-pub async fn stop(child: &mut Child) {
+/// Codex CLI may fork/exec the real app-server, so we also kill the process group.
+pub async fn stop(child: &mut Child, port: u16) {
+    // Kill the direct child
     child.start_kill().ok();
     tokio::select! {
         _ = child.wait() => {}
         _ = tokio::time::sleep(std::time::Duration::from_secs(3)) => {
             child.kill().await.ok();
-            // Ensure process fully exits after forced kill
             let _ = tokio::time::timeout(
                 std::time::Duration::from_secs(2),
                 child.wait(),
             ).await;
         }
     }
-    // Give the OS time to release the bound port
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    // Codex may have forked the real app-server (PPID=1 orphan).
+    // Kill any process still holding the port.
+    kill_port_holder(port).await;
+}
+
+async fn kill_port_holder(port: u16) {
+    let Ok(output) = tokio::process::Command::new("lsof")
+        .arg(format!("-ti:{port}"))
+        .output()
+        .await
+    else {
+        return;
+    };
+    let pids = String::from_utf8_lossy(&output.stdout);
+    for pid_str in pids.split_whitespace() {
+        if let Ok(pid) = pid_str.parse::<i32>() {
+            eprintln!("[Codex] killing orphan process {pid} on port {port}");
+            unsafe { libc::kill(pid, libc::SIGKILL); }
+        }
+    }
+    // Wait for port release
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 }

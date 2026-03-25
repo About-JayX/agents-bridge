@@ -1,13 +1,9 @@
-import { useEffect } from "react";
 import { useBridgeStore } from "./stores/bridge-store";
 import { AgentStatusPanel } from "./components/AgentStatus";
 import { MessagePanel } from "./components/MessagePanel";
 import { ReplyInput } from "./components/ReplyInput";
 
 export default function App() {
-  const cleanup = useBridgeStore((s) => s.cleanup);
-  useEffect(() => cleanup, [cleanup]);
-
   const messages = useBridgeStore((s) => s.messages);
   const agents = useBridgeStore((s) => s.agents);
   const connected = useBridgeStore((s) => s.connected);

@@ -103,13 +103,17 @@ export function CodexPanel({
     if (dir) setCwd(dir);
   }, [pickDirectory]);
 
-  const handleConnect = useCallback(() => {
+  const handleConnect = useCallback(async () => {
     setConnecting(true);
-    applyConfig({
-      model: selectedModel || undefined,
-      reasoningEffort: selectedReasoning || undefined,
-      cwd: cwd || undefined,
-    });
+    try {
+      await applyConfig({
+        model: selectedModel || undefined,
+        reasoningEffort: selectedReasoning || undefined,
+        cwd: cwd || undefined,
+      });
+    } catch {
+      setConnecting(false);
+    }
   }, [applyConfig, selectedModel, selectedReasoning, cwd]);
 
   return (

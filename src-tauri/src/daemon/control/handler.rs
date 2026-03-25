@@ -63,7 +63,11 @@ pub async fn handle_connection(socket: WebSocket, state: SharedState, app: AppHa
                     }
                 }
                 for verdict in buffered_verdicts {
-                    if tx.send(ToAgent::PermissionVerdict { verdict }).await.is_err() {
+                    if tx
+                        .send(ToAgent::PermissionVerdict { verdict })
+                        .await
+                        .is_err()
+                    {
                         eprintln!("[Control] failed to send buffered verdict to {}", id);
                     }
                 }

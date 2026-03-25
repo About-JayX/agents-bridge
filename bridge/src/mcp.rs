@@ -81,7 +81,9 @@ async fn handle_rpc_message(
                 "id": id_to_value(&msg.id),
                 "result": initialize_result()
             });
-            if !write_line(writer, &resp).await { return false; }
+            if !write_line(writer, &resp).await {
+                return false;
+            }
         }
         Some("tools/list") => {
             let resp = serde_json::json!({
@@ -89,11 +91,15 @@ async fn handle_rpc_message(
                 "id": id_to_value(&msg.id),
                 "result": { "tools": [crate::tools::reply_tool_schema()] }
             });
-            if !write_line(writer, &resp).await { return false; }
+            if !write_line(writer, &resp).await {
+                return false;
+            }
         }
         Some("tools/call") => {
             let resp = tool_call_response(agent_id, channel_state, reply_tx, &msg).await;
-            if !write_line(writer, &resp).await { return false; }
+            if !write_line(writer, &resp).await {
+                return false;
+            }
         }
         Some("notifications/claude/channel/permission_request") => {
             if let Some(request) = msg.params.as_ref().and_then(parse_permission_request) {
@@ -191,10 +197,19 @@ async fn handle_daemon_inbound_checked(
 }
 
 /// Write a JSON value as a newline-delimited line. Returns false on error.
-async fn write_line(w: &mut tokio::io::BufWriter<tokio::io::Stdout>, val: &serde_json::Value) -> bool {
-    let Ok(mut line) = serde_json::to_string(val) else { return false };
+async fn write_line(
+    w: &mut tokio::io::BufWriter<tokio::io::Stdout>,
+    val: &serde_json::Value,
+) -> bool {
+    let Ok(mut line) = serde_json::to_string(val) else {
+        return false;
+    };
     line.push('\n');
-    if w.write_all(line.as_bytes()).await.is_err() { return false; }
-    if w.flush().await.is_err() { return false; }
+    if w.write_all(line.as_bytes()).await.is_err() {
+        return false;
+    }
+    if w.flush().await.is_err() {
+        return false;
+    }
     true
 }

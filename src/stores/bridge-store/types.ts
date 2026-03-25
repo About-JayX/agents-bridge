@@ -26,7 +26,7 @@ export interface BridgeState {
   setDraft: (text: string) => void;
   sendToCodex: (content: string) => void;
   clearMessages: () => void;
-  launchCodexTui: () => void;
+  launchCodexTui: () => Promise<void>;
   stopCodexTui: () => void;
   respondToPermission: (
     requestId: string,
@@ -36,7 +36,7 @@ export interface BridgeState {
     model?: string;
     reasoningEffort?: string;
     cwd?: string;
-  }) => void;
+  }) => Promise<void>;
   setRole: (agent: "claude" | "codex", role: string) => void;
   cleanup: () => void;
 }

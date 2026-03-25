@@ -30,6 +30,21 @@ impl BridgeMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentRuntimeStatus {
+    pub agent: String,
+    pub online: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DaemonStatusSnapshot {
+    pub agents: Vec<AgentRuntimeStatus>,
+    pub claude_role: String,
+    pub codex_role: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct PermissionRequest {
     pub request_id: String,
