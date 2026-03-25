@@ -21,6 +21,7 @@ const LOG_FILE = "/tmp/agentbridge.log";
 const DAEMON_PATH = fileURLToPath(new URL("./daemon.ts", import.meta.url));
 
 const adapter = new AgentMcpAdapter();
+adapter.setAgentRole(AGENT_ID);
 const daemonClient = new DaemonClient(CONTROL_WS_URL);
 
 let shuttingDown = false;

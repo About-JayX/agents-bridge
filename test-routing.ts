@@ -11,11 +11,14 @@ import type { BridgeMessage } from "./daemon/types";
 const state = {
   claudeRole: "lead",
   codexRole: "coder",
-  attachedClaude: true as any, // simulate online
-  codexOnline: true,
+  attachedAgents: new Map<string, { readyState: number }>(),
 };
 
-// ── resolveTarget (extracted from handler logic) ─────────
+// Initialize with both agents online
+state.attachedAgents.set("claude", { readyState: 1 });
+state.attachedAgents.set("codex", { readyState: 1 });
+
+// ── resolveTarget (mirrors message-routing.ts) ───────────
 
 function resolveTarget(to: string): {
   targets: Array<{ agent: "claude" | "codex"; online: boolean }>;
@@ -23,10 +26,18 @@ function resolveTarget(to: string): {
   if (to === "user") return { targets: [] };
   const matches: Array<{ agent: "claude" | "codex"; online: boolean }> = [];
   if (state.claudeRole === to) {
-    matches.push({ agent: "claude", online: state.attachedClaude !== null });
+    const ws = state.attachedAgents.get("claude");
+    matches.push({
+      agent: "claude",
+      online: ws !== undefined && ws.readyState === 1,
+    });
   }
   if (state.codexRole === to) {
-    matches.push({ agent: "codex", online: state.codexOnline });
+    const ws = state.attachedAgents.get("codex");
+    matches.push({
+      agent: "codex",
+      online: ws !== undefined && ws.readyState === 1,
+    });
   }
   return { targets: matches };
 }
@@ -129,13 +140,12 @@ console.log("\n=== Routing Resolution Tests ===\n");
 }
 
 {
-  // Offline agent
-  const oldClaude = state.attachedClaude;
-  state.attachedClaude = null;
+  // Offline agent (WS closed)
+  state.attachedAgents.set("claude", { readyState: 3 });
   const result = resolveTarget("lead");
   assert(result.targets.length === 1, "lead still resolves");
   assert(result.targets[0].online === false, "claude is offline");
-  state.attachedClaude = oldClaude; // restore
+  state.attachedAgents.set("claude", { readyState: 1 }); // restore
 }
 
 console.log("\n=== Sender Validation Tests ===\n");
