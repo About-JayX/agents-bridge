@@ -122,6 +122,7 @@ fn main() {
             commands::daemon_launch_codex,
             commands::daemon_stop_codex,
             commands::daemon_set_claude_role,
+            commands::daemon_set_codex_role,
             commands::daemon_respond_permission,
             commands::daemon_get_status_snapshot,
             commands::stop_claude,

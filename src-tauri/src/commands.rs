@@ -65,6 +65,18 @@ pub async fn daemon_set_claude_role(
 }
 
 #[tauri::command]
+pub async fn daemon_set_codex_role(
+    role: String,
+    sender: State<'_, DaemonSender>,
+) -> Result<(), String> {
+    sender
+        .0
+        .send(DaemonCmd::SetCodexRole(role))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn daemon_respond_permission(
     request_id: String,
     behavior: PermissionBehavior,

@@ -108,6 +108,15 @@ impl DaemonState {
         }
     }
 
+    /// Re-target buffered messages from old_role to new_role when a role changes.
+    pub fn migrate_buffered_role(&mut self, old_role: &str, new_role: &str) {
+        for msg in &mut self.buffered_messages {
+            if msg.to == old_role {
+                msg.to = new_role.to_string();
+            }
+        }
+    }
+
     pub fn take_buffered_for(&mut self, role: &str) -> Vec<BridgeMessage> {
         let mut ready = Vec::new();
         self.buffered_messages.retain(|msg| {

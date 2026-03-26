@@ -65,17 +65,18 @@ pub async fn handle_connection(socket: WebSocket, state: SharedState, app: AppHa
                     )
                 };
                 for message in buffered_messages {
-                    if tx.send(ToAgent::RoutedMessage { message }).await.is_err() {
-                        eprintln!("[Control] failed to send buffered message to {}", id);
+                    if tx.send(ToAgent::RoutedMessage { message: message.clone() }).await.is_err() {
+                        // Send failed — put back into buffer
+                        state.write().await.buffer_message(message);
+                        eprintln!("[Control] replay failed for {}, re-buffered", id);
+                        break;
                     }
                 }
                 for verdict in buffered_verdicts {
-                    if tx
-                        .send(ToAgent::PermissionVerdict { verdict })
-                        .await
-                        .is_err()
-                    {
-                        eprintln!("[Control] failed to send buffered verdict to {}", id);
+                    if tx.send(ToAgent::PermissionVerdict { verdict: verdict.clone() }).await.is_err() {
+                        state.write().await.buffer_permission_verdict(&id, verdict);
+                        eprintln!("[Control] verdict replay failed for {}, re-buffered", id);
+                        break;
                     }
                 }
                 gui::emit_agent_status(&app, &id, true, None);

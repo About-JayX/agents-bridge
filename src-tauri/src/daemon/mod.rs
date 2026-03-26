@@ -41,6 +41,8 @@ pub enum DaemonCmd {
     },
     /// Update which role Claude is playing (affects routing).
     SetClaudeRole(String),
+    /// Update which role Codex is playing (affects routing).
+    SetCodexRole(String),
     /// Send a permission verdict back to the bridge for Claude Code.
     RespondPermission {
         request_id: String,
@@ -51,6 +53,12 @@ pub enum DaemonCmd {
 /// Create the command channel.  Call before spawning to avoid the DaemonSender race.
 pub fn channel() -> (mpsc::Sender<DaemonCmd>, mpsc::Receiver<DaemonCmd>) {
     mpsc::channel(64)
+}
+
+async fn set_role(state: &SharedState, field: fn(&mut DaemonState) -> &mut String, new: String) {
+    let mut s = state.write().await;
+    let old = std::mem::replace(field(&mut s), new.clone());
+    if old != new { s.migrate_buffered_role(&old, &new); }
 }
 
 async fn stop_codex_session(
@@ -132,9 +140,8 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
                 let _ = reply.send(role);
             }
 
-            DaemonCmd::SetClaudeRole(role) => {
-                state.write().await.claude_role = role;
-            }
+            DaemonCmd::SetClaudeRole(role) => set_role(&state, |s| &mut s.claude_role, role).await,
+            DaemonCmd::SetCodexRole(role) => set_role(&state, |s| &mut s.codex_role, role).await,
 
             DaemonCmd::ReadStatusSnapshot { reply } => {
                 let snapshot = state.read().await.status_snapshot();
@@ -155,11 +162,8 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
                 };
 
                 let Some((agent_id, outbound)) = resolved else {
-                    gui::emit_system_log(
-                        &app,
-                        "warn",
-                        &format!("[Daemon] permission request {request_id} is unknown or expired"),
-                    );
+                    gui::emit_system_log(&app, "warn",
+                        &format!("[Daemon] permission {request_id} unknown/expired"));
                     continue;
                 };
 
@@ -171,26 +175,15 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
 
                 match sender_tx {
                     Some(tx) if tx.send(outbound).await.is_ok() => {
-                        gui::emit_system_log(
-                            &app,
-                            "info",
-                            &format!("[Daemon] permission verdict delivered to {agent_id}"),
-                        );
+                        gui::emit_system_log(&app, "info",
+                            &format!("[Daemon] verdict delivered to {agent_id}"));
                     }
                     _ => {
-                        if let Some(verdict) = verdict {
-                            state
-                                .write()
-                                .await
-                                .buffer_permission_verdict(&agent_id, verdict);
+                        if let Some(v) = verdict {
+                            state.write().await.buffer_permission_verdict(&agent_id, v);
                         }
-                        gui::emit_system_log(
-                            &app,
-                            "warn",
-                            &format!(
-                                "[Daemon] {agent_id} offline, buffered permission verdict for {request_id}"
-                            ),
-                        );
+                        gui::emit_system_log(&app, "warn",
+                            &format!("[Daemon] {agent_id} offline, buffered verdict {request_id}"));
                     }
                 }
             }

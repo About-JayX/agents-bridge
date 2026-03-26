@@ -62,8 +62,11 @@ export const useBridgeStore = create<BridgeState>((set, get) => {
       if (target && target !== "auto") {
         sendOne(target);
       } else {
-        // Auto: broadcast to all connected agents (dedupe if same role)
-        const targets = new Set([claudeRole, codexRole]);
+        // Auto: broadcast to ONLINE agents only (dedupe if same role)
+        const { agents } = get();
+        const targets = new Set<string>();
+        if (agents.claude?.status === "connected") targets.add(claudeRole);
+        if (agents.codex?.status === "connected") targets.add(codexRole);
         for (const t of targets) sendOne(t);
       }
     },
@@ -131,6 +134,7 @@ export const useBridgeStore = create<BridgeState>((set, get) => {
         invoke("daemon_set_claude_role", { role }).catch(logError(set));
       } else {
         set({ codexRole: role });
+        invoke("daemon_set_codex_role", { role }).catch(logError(set));
       }
     },
 

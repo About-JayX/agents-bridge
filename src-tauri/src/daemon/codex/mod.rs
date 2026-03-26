@@ -136,7 +136,12 @@ pub async fn start(
     };
     for msg in buffered {
         let from_user = msg.from == "user";
-        let _ = inject_tx.send((crate::daemon::routing::format_codex_input(&msg), from_user)).await;
+        let text = crate::daemon::routing::format_codex_input(&msg);
+        if inject_tx.send((text, from_user)).await.is_err() {
+            state.write().await.buffer_message(msg);
+            eprintln!("[Codex] inject replay failed, re-buffered");
+            break;
+        }
     }
     gui::emit_agent_status(&app, "codex", true, None);
     gui::emit_system_log(&app, "info", &format!("[Codex] ready role={role_id} thread={thread_id}"));
