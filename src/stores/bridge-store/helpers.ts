@@ -26,14 +26,10 @@ interface AgentStatusPayload {
   exitCode?: number;
 }
 interface PermissionPromptPayload extends PermissionPrompt {}
-interface AgentRuntimeStatusPayload {
-  agent: string;
-  online: boolean;
-}
-interface DaemonStatusSnapshotPayload {
-  agents: AgentRuntimeStatusPayload[];
-  claudeRole: string;
-  codexRole: string;
+interface CodexStreamPayload {
+  kind: "thinking" | "delta" | "message" | "turnDone";
+  text?: string;
+  status?: string;
 }
 
 export let _unlisteners: UnlistenFn[] = [];
@@ -117,6 +113,53 @@ export function initListeners(
     listen("claude_terminal_attention", () => {
       set(() => ({ claudeNeedsAttention: true }));
     }),
+    listen<CodexStreamPayload>("codex_stream", (e) => {
+      const p = e.payload;
+      set((s) => {
+        switch (p.kind) {
+          case "thinking":
+            return {
+              codexStream: {
+                ...s.codexStream,
+                thinking: true,
+                currentDelta: "",
+                turnStatus: "",
+              },
+            };
+          case "delta": {
+            const MAX_DELTA = 100_000;
+            const next = s.codexStream.currentDelta + (p.text ?? "");
+            return {
+              codexStream: {
+                ...s.codexStream,
+                currentDelta:
+                  next.length > MAX_DELTA ? next.slice(0, MAX_DELTA) : next,
+              },
+            };
+          }
+          case "message":
+            return {
+              codexStream: {
+                ...s.codexStream,
+                thinking: false,
+                lastMessage: p.text ?? "",
+                currentDelta: "",
+              },
+            };
+          case "turnDone":
+            return {
+              codexStream: {
+                ...s.codexStream,
+                thinking: false,
+                currentDelta: "",
+                turnStatus: p.status ?? "done",
+              },
+            };
+          default:
+            return {};
+        }
+      });
+    }),
     listen<PermissionPromptPayload>("permission_prompt", (e) => {
       set((s) => ({
         permissionPrompts: [
@@ -148,51 +191,4 @@ export function logError(
         },
       ],
     }));
-}
-
-export async function syncStatusSnapshot(
-  set: (fn: (s: BridgeState) => Partial<BridgeState>) => void,
-) {
-  try {
-    const snapshot = await invoke<DaemonStatusSnapshotPayload>(
-      "daemon_get_status_snapshot",
-    );
-    set((s) => {
-      const onlineAgents = new Set(
-        snapshot.agents
-          .filter((agent) => agent.online)
-          .map((agent) => agent.agent),
-      );
-      const nextAgents = { ...s.agents };
-
-      for (const [agent, info] of Object.entries(nextAgents)) {
-        nextAgents[agent] = {
-          ...info,
-          name: agent,
-          displayName: info.displayName ?? agent,
-          status: onlineAgents.has(agent) ? "connected" : "disconnected",
-        };
-      }
-
-      for (const { agent, online } of snapshot.agents) {
-        nextAgents[agent] = {
-          ...(nextAgents[agent] ?? {
-            name: agent,
-            displayName: agent,
-          }),
-          name: agent,
-          displayName: nextAgents[agent]?.displayName ?? agent,
-          status: online ? "connected" : "disconnected",
-        };
-      }
-
-      return {
-        agents: nextAgents,
-        claudeRole: snapshot.claudeRole,
-        codexRole: snapshot.codexRole,
-      };
-    });
-  } catch (error) {
-    logError(set)(error);
-  }
 }

@@ -19,6 +19,13 @@ export interface ClaudeTerminalChunk {
   timestamp: number;
 }
 
+export interface CodexStreamState {
+  thinking: boolean;
+  currentDelta: string;
+  lastMessage: string;
+  turnStatus: string;
+}
+
 export interface BridgeState {
   connected: boolean;
   messages: BridgeMessage[];
@@ -32,6 +39,7 @@ export interface BridgeState {
   claudeNeedsAttention: boolean;
   claudeRole: string;
   codexRole: string;
+  codexStream: CodexStreamState;
   draft: string;
 
   setDraft: (text: string) => void;

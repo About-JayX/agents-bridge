@@ -7,6 +7,7 @@ import { PermissionQueue } from "./PermissionQueue";
 import { SourceBadge } from "./SourceBadge";
 import { TabBtn } from "./TabBtn";
 import { ClaudeTerminalPane } from "./ClaudeTerminalPane";
+import { CodexStreamIndicator } from "./CodexStreamIndicator";
 
 type Tab = "messages" | "claude" | "logs" | "approvals";
 
@@ -116,7 +117,6 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
         )}
         <div className="absolute bottom-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-primary/15 to-transparent" />
       </div>
-
       {tab === "messages" && (
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-2">
           {chatMessages.length === 0 && (
@@ -151,6 +151,7 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
               </div>
             );
           })}
+          <CodexStreamIndicator />
           <div ref={bottomRef} />
         </div>
       )}
@@ -180,7 +181,6 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
           ))}
         </div>
       )}
-
       {tab === "claude" && claudeTerminalAvailable && (
         <ClaudeTerminalPane
           chunks={claudeTerminalChunks}

@@ -155,12 +155,141 @@ codex app-server (WebSockets)
 
 **验证:** ✅ tool call response 格式（`contentItems`）仍然有效；turn 成功完成。
 
+### 2026-03-26: Port 4500 残留进程导致 Codex 启动失败
+
+**问题:** 重启 app 后启动 Codex 报 `Port 4500 still in use after 5s`。
+
+**根因:** 上一轮的 `codex app-server` 进程未被正确 kill（`kill_on_drop` 依赖父进程正常退出，`pkill` 可能遗漏 fork 出的子进程）。残留进程持续占用端口。
+
+**修复:** 手动 `kill $(lsof -ti:4500)` 后重新 Connect Codex。
+
+**预防:** `lifecycle.rs::stop()` 已有 `kill_port_holder` 兜底，但仅在 daemon 正常调用 `stop` 时生效。app 异常退出（SIGKILL/crash）时端口不会被清理。
+
+**验证:** ✅ kill 残留后正常启动。
+
+### 2026-03-26: Codex 事件静默丢弃 — 用户看不到 thinking 和回复
+
+**问题:** 消息成功 delivered 到 Codex（`[Route] user → coder delivered`），但 GUI 无任何后续反馈。
+
+**根因:** `session.rs` 事件循环只处理 `item/tool/call`，其他所有 Codex 通知（`turn/started`、`item/agentMessage/delta`、`item/completed`、`turn/completed`）全部 `continue` 跳过。
+
+完整 Codex 事件流（运行时抓包确认）：
+```
+turn/started → item/started(userMessage) → item/completed(userMessage)
+→ item/started(reasoning) → item/completed(reasoning)
+→ item/started(dynamicToolCall) → item/tool/call → item/completed(dynamicToolCall)
+→ item/started(agentMessage) → item/agentMessage/delta × N → item/completed(agentMessage)
+→ turn/completed
+```
+
+**问题分两层:**
+
+1. **Rust 层（事件丢弃）:** `session.rs` 事件循环只匹配 `item/tool/call`，其余事件 continue 跳过。Codex 的 agentMessage 和 thinking 永远不会到达前端。
+2. **前端层（无渲染路径）:** 即使 Rust 侧转发了事件，前端没有对应的 listener 和 UI 组件来显示 Codex 流式输出。`agent_message` 事件只渲染到 Messages 面板的消息列表，没有实时 streaming 指示器。
+
+**修复（Rust 侧）:**
+- `session.rs` 新增 `handle_codex_event()` 分发函数，处理 5 种事件
+- 新增 `codex_stream` Tauri 事件枚举（`Thinking`/`Delta`/`Message`/`TurnDone`），通过 `gui::emit_codex_stream()` 发出
+- `item/completed(agentMessage)` 双发：`agent_message`（消息历史）+ `codex_stream`（实时显示）
+
+**修复（前端层）:**
+- `types.ts` 新增 `CodexStreamState` 接口（thinking/currentDelta/lastMessage/turnStatus）
+- `helpers.ts` 新增 `codex_stream` 事件 listener，按 `kind` 字段分发更新 store
+- `currentDelta` 字符串累加设 100KB 上限，防止长回复导致内存膨胀
+- 新增 `CodexStreamIndicator.tsx` 组件：thinking 时显示 `"thinking…"` 动画脉冲；收到 delta 后实时追加显示流式文本
+- `MessagePanel/index.tsx` 在消息列表底部渲染 `<CodexStreamIndicator />`
+- turn 完成后清空 currentDelta 和 thinking 状态，指示器自动消失
+
+**完整数据流:**
+```
+Codex app-server → WS :4500 → session.rs handle_codex_event()
+  → gui::emit_codex_stream(Thinking/Delta/Message/TurnDone)
+    → Tauri event "codex_stream"
+      → helpers.ts listener → zustand codexStream state
+        → CodexStreamIndicator 组件实时渲染
+
+  → gui::emit_agent_message() (仅 item/completed agentMessage)
+    → Tauri event "agent_message"
+      → helpers.ts listener → zustand messages[]
+        → MessagePanel 消息列表永久渲染
+```
+
+**文件:** `session.rs`, `gui.rs`, `helpers.ts`, `types.ts`, `sync.ts`, `index.ts`, `CodexStreamIndicator.tsx`, `MessagePanel/index.tsx`
+
+**验证:** ✅ 用户可见 thinking → 流式文本 → 完成消息渲染到 Messages 面板。
+
+### 2026-03-26: 角色 instructions 重构与强制性研究
+
+#### 研究结论：指令约束力分层
+
+| 层级 | 机制 | 强制性 |
+|------|------|--------|
+| L0 OS 沙箱 | Codex `sandbox_mode` (Seatbelt/bubblewrap) | 不可绕，内核级 |
+| L1 工具可用性 | Claude `--tools`/`--disallowedTools`；Codex `dynamicTools` | 不可绕，物理不存在 |
+| L2 路由拦截 | daemon `routing.rs` sender gating | 不可绕，代码控制 |
+| L3 权限门 | Claude `permissionMode`；Codex `approval_policy` | 基本不可绕 |
+| L4 System Prompt | Claude `--append-system-prompt`；Codex `base_instructions` | 软约束 |
+| L5 Developer 指令 | Codex `developer_instructions`；Claude MCP `instructions` | 软约束 |
+| L6 CLAUDE.md | 用户级上下文 | 最弱 |
+
+**当前产品定位:** 自动化执行工具，权限全开。角色 instructions 不做权限限制，只规范路由行为和回复格式。
+
+#### 修复：role_instructions 重构
+
+- `roles.rs` 改用 `role_instructions!` 宏，compile-time `concat!` 拼接共享前言 + 角色专属段
+- 共享前言：角色图谱、工具说明、主动汇报进展、自行判断路由目标
+- 每个角色附加典型路由路径（如 lead: `receive task → assign coder → send reviewer → report user`）
+- read-only 角色（reviewer/tester）明确写 "read-only sandbox"，不写 "full permissions"
+- write 角色（user/lead/coder）写 "full permissions, execute directly"
+
+**文件:** `src-tauri/src/daemon/role_config/roles.rs`
+
+#### 修复：Claude MCP instructions 扩充
+
+- `CHANNEL_INSTRUCTIONS` 从简短指引扩展为完整角色图谱 + 路由规则 + 工作风格
+- `initialize_result(role)` 运行时追加 `"Your role: {role}"`
+
+**文件:** `bridge/src/mcp_protocol.rs`
+
+### 2026-03-26: Superpowers 代码审查修复
+
+#### [已修复] I-1: currentDelta 字符串无限累加
+
+**问题:** `helpers.ts` 的 delta handler 无限拼接 `currentDelta`，长回复导致内存膨胀和 React 重渲染性能下降。
+
+**修复:** 设 100KB 上限，超过截断。
+
+**文件:** `src/stores/bridge-store/helpers.ts`
+
+#### [已修复] I-2: upsert_mcp_server 测试断言被弱化
+
+**问题:** 添加 `env` 字段后，测试 fixture 缺少 `env`，`changed` 永远为 true，`assert!(!changed)` 被注释掉。"unchanged" 路径不再被测试覆盖。
+
+**修复:** fixture 补全 `env: { "AGENTBRIDGE_ROLE": "lead" }`，恢复 `assert!(!changed)`。
+
+**文件:** `src-tauri/src/mcp.rs`
+
+#### [已修复] I-4: read-only 角色指令声称 "full permissions"
+
+**问题:** `role_instructions!` 共享前言写 "You have full permissions"，但 reviewer/tester 的 `sandbox_mode` 是 `"read-only"`（OS 内核级限制）。LLM 被误导后尝试写文件会被内核拒绝。
+
+**修复:** 移除共享前言中的权限声明，改为按角色写入：write 角色写 "full permissions"，read-only 角色写 "read-only sandbox, cannot modify files"。
+
+**文件:** `src-tauri/src/daemon/role_config/roles.rs`
+
+#### [已修复] M-4/M-5: 文件超 200 行限制
+
+**修复:**
+- `MessagePanel/index.tsx` 提取 `CodexStreamIndicator.tsx`（28 行）
+- `helpers.ts` 提取 `sync.ts`（60 行）
+
 ## 当前已知限制
 
 - 端口 4500 固定，不可配置
 - `kill_port_holder` 用 SIGKILL 可能误杀同端口的其他进程
-- 不处理 `turn/completed` 通知
-- 不处理 `item/agentMessage/delta` 流式文本
 - 不处理 `item/commandExecution/requestApproval` 审批
 - 不处理 `-32001` 过载错误重试
 - 健康监控和 session task 独立退出时会双重 emit `agent_status(false)`
+- app 异常退出时 codex app-server 残留进程不会被自动清理
+- `item/completed(agentMessage)` 构造的 BridgeMessage 硬编码 `to: "user"`，不反映实际路由目标
+- `dynamicTools` 未按角色过滤（所有角色收到相同 3 个工具），可做 L1 硬约束但尚未实现

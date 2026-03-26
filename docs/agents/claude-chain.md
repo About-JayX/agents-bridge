@@ -290,12 +290,78 @@ cmd.arg(mcp_config_path.to_string_lossy().to_string());
 - 只有 `from` 在 `ALLOWED_SENDERS` 且 `to == claude_role` 时 channel 通知才会发出
 - `codex_role` 默认为 `"coder"`，`claude_role` 默认为 `"lead"`
 
+### 2026-03-26: Bridge 角色身份注入
+
+#### 问题描述
+
+`channel_instructions()` 是静态字符串，bridge 不知道 Claude 被赋予的角色（lead/coder/reviewer 等）。MCP `instructions` 中缺少 "Your role: ..." 声明，Claude 不知道自己在多 agent 系统中的身份。
+
+#### 修复
+
+1. `mcp.rs` 在 `.mcp.json` 中写入 `"env": { "AGENTBRIDGE_ROLE": "lead" }`
+2. bridge `main.rs` 读取 `AGENTBRIDGE_ROLE` 环境变量
+3. `mcp_protocol.rs` 的 `initialize_result(role)` 在 instructions 末尾追加 `"Your role: {role}"`
+4. `channel_instructions` 从函数改为 `CHANNEL_INSTRUCTIONS` 常量，运行时通过 `format!` 拼接角色
+
+**文件:** `mcp.rs`(Tauri), `main.rs`(bridge), `mcp.rs`(bridge), `mcp_protocol.rs`
+
+**限制:** `register_mcp` 当前硬编码 role="lead"。前端切角色后需重新 register + 重启 Claude 才能更新 bridge env。
+
+**验证:** ✅ bridge 启动日志显示 `role=lead`
+
+### 2026-03-26: Claude 角色注入方案研究
+
+#### 研究结论
+
+Claude Code CLI 支持多种注入机制，按强制性排序：
+
+| 机制 | 强制性 | 用途 |
+|------|--------|------|
+| `--tools` / `--disallowedTools` | L1 硬约束 | 物理移除工具，reviewer 可限定只有 Read/Grep/Glob |
+| `--agents '{"role":{...}}'` + `--agent role` | L1+L4 | 自定义 subagent：限定 tools + permissionMode + system prompt |
+| `permissionMode: "plan"` | L3 硬约束 | read-only 探索模式 |
+| `--append-system-prompt` | L4 软约束 | 追加到 system prompt 末尾，高遵从度 |
+| MCP `instructions` | L5 软约束 | 当前唯一 Claude 侧注入点，行为指引但不能限制工具 |
+| CLAUDE.md | L6 最弱 | 项目级上下文 |
+
+**当前实现:** 仅用 MCP `instructions`（L5）+ routing gating（L2）。
+**可加强:** 通过 `--agents` JSON + `--agent` 注入角色定义（含 tools 白名单），当前未实现。
+**产品定位:** 自动化执行工具，权限全开，不做限制。instructions 只规范路由和回复格式。
+
+#### MCP instructions 扩充
+
+`CHANNEL_INSTRUCTIONS` 从简短格式说明扩展为完整指引：
+- 角色图谱（user/lead/coder/reviewer/tester 职责）
+- 路由规则（按上下文决定 reply 目标）
+- 工作风格（权限全开、主动汇报、简洁消息）
+- `initialize_result(role)` 动态追加 `"Your role: {role}"`
+
+**文件:** `bridge/src/mcp_protocol.rs`
+
+### 2026-03-26: 诊断陷阱 — WS 测试导致 bridge 注册丢失
+
+#### 陷阱 1: is_allowed_agent 拒绝后静默断连
+
+用非法 agentId（如 `"test-user"`、`"test-monitor"`）连接 daemon 控制 WS 时，`is_allowed_agent` 返回 false → handler `break` → 连接立即关闭。后续 `agent_reply` 永远不会被处理，但没有任何客户端错误提示。
+
+**只允许 `"claude"` 和 `"codex"` 两个 agentId。**
+
+#### 陷阱 2: 连接为 "claude" 会覆盖真实 bridge
+
+用 `agentId: "claude"` 连接 WS 时，`attached_agents.insert("claude", new_tx)` 会覆盖真实 bridge 的 tx。断开后 `attached_agents.remove("claude")` 清除条目。此时真实 bridge 的 WS 连接仍然活着，但已不在 `attached_agents` 中 — 所有发给 Claude 的消息都会被 buffer 而非 deliver。
+
+**唯一恢复方式:** 重启 app 或重启 Claude（让 bridge 重新连接并发 `agent_connect`）。
+
+**架构隐患:** bridge 的 daemon_client 不感知 tx 被替换，不会主动重新注册。后续可考虑在 daemon 侧检测同 agentId 重复连接并拒绝/通知。
+
 ## 当前已知限制
 
 - Channel preview 是实验性功能，需要 `--dangerously-load-development-channels`
 - 依赖 Claude Code >= 2.1.80 / permission relay >= 2.1.81
 - 当前只有 `reply` 一个 tool
-- 不支持 `--agent --agents` 角色注入
+- `--agent --agents` 角色注入方案已研究（可行），尚未实现
+- `register_mcp` 中 role 硬编码为 "lead"，切角色需重新注册
 - meta key 不能包含连字符（会被 Claude Code 静默丢弃）
 - `chat_targets` eviction 是随机的（HashMap 无序），长会话可能影响活跃对话
 - bridge 重连时不重发 pending permission requests
+- 同 agentId 重复 WS 连接会覆盖已有注册，无保护机制

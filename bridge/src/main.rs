@@ -16,8 +16,16 @@ async fn main() {
             std::process::exit(1);
         });
     let agent_id = std::env::var("AGENTBRIDGE_AGENT").unwrap_or_else(|_| "claude".into());
+    let role_raw = std::env::var("AGENTBRIDGE_ROLE").unwrap_or_else(|_| "lead".into());
+    let role = match role_raw.as_str() {
+        "user" | "lead" | "coder" | "reviewer" | "tester" => role_raw,
+        _ => {
+            eprintln!("[Bridge] unknown role '{role_raw}', defaulting to 'lead'");
+            "lead".into()
+        }
+    };
 
-    eprintln!("[Bridge/{agent_id}] starting, daemon port {control_port}");
+    eprintln!("[Bridge/{agent_id}] starting, daemon port {control_port}, role {role}");
 
     // daemon_client → mcp: push routed messages as Channel notifications
     let (push_tx, push_rx) = tokio::sync::mpsc::channel::<types::DaemonInbound>(64);
@@ -30,7 +38,7 @@ async fn main() {
         push_tx,
         reply_rx,
     ));
-    let mcp_task = tokio::spawn(mcp::run(agent_id, push_rx, reply_tx));
+    let mcp_task = tokio::spawn(mcp::run(agent_id, role, push_rx, reply_tx));
 
     let _ = tokio::join!(dc, mcp_task);
 }

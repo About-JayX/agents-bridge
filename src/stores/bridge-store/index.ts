@@ -4,10 +4,10 @@ import type { BridgeState } from "./types";
 import {
   initListeners,
   logError,
-  syncStatusSnapshot,
   nextLogId,
   clearUnlisteners,
 } from "./helpers";
+import { syncStatusSnapshot } from "./sync";
 
 export type { TerminalLine, BridgeState } from "./types";
 
@@ -36,6 +36,12 @@ export const useBridgeStore = create<BridgeState>((set, get) => {
     claudeNeedsAttention: false,
     claudeRole: "lead",
     codexRole: "coder",
+    codexStream: {
+      thinking: false,
+      currentDelta: "",
+      lastMessage: "",
+      turnStatus: "",
+    },
     draft: "",
 
     setDraft: (text) => set({ draft: text }),

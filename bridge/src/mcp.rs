@@ -6,6 +6,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 
 pub async fn run(
     agent_id: String,
+    role: String,
     mut push_rx: tokio::sync::mpsc::Receiver<DaemonInbound>,
     reply_tx: tokio::sync::mpsc::Sender<BridgeOutbound>,
 ) {
@@ -28,6 +29,7 @@ pub async fn run(
                 let was_initialized = initialized;
                 if !handle_rpc_message(
                     &agent_id,
+                    &role,
                     &mut initialized,
                     &mut channel_state,
                     &mut writer,
@@ -69,6 +71,7 @@ pub async fn run(
 /// Returns false if stdout write failed.
 async fn handle_rpc_message(
     agent_id: &str,
+    role: &str,
     initialized: &mut bool,
     channel_state: &mut ChannelState,
     writer: &mut tokio::io::BufWriter<tokio::io::Stdout>,
@@ -78,11 +81,11 @@ async fn handle_rpc_message(
     match msg.method.as_deref() {
         Some("initialize") => {
             *initialized = true;
-            eprintln!("[Bridge/{agent_id}] MCP initialize complete");
+            eprintln!("[Bridge/{agent_id}] MCP initialize complete, role={role}");
             let resp = serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": id_to_value(&msg.id),
-                "result": initialize_result()
+                "result": initialize_result(role)
             });
             if !write_line(writer, &resp).await {
                 return false;

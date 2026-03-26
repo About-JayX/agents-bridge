@@ -63,7 +63,7 @@
                 │ invoke / listen
                 ▼
 ┌─ React 前端 ────────────────────────────────────────────────────┐
-│ bridge-store      → 监听 agent_message / system_log / status     │
+│ bridge-store      → 监听 agent_message / system_log / codex_stream│
 │ ClaudePanel       → register_mcp + launch_claude_terminal        │
 │ AgentStatus/      → CodexPanel / RoleSelect / StatusDot          │
 │ MessagePanel      → 消息与日志与 Permission 审批                  │
@@ -314,6 +314,7 @@ src/
 │   ├── bridge-store/
 │   │   ├── index.ts
 │   │   ├── helpers.ts
+│   │   ├── sync.ts
 │   │   └── types.ts
 │   └── codex-account-store.ts
 ├── components/
@@ -337,6 +338,7 @@ src/
 │   ├── MessagePanel/
 │   │   ├── index.tsx
 │   │   ├── ClaudeTerminalPane.tsx
+│   │   ├── CodexStreamIndicator.tsx
 │   │   ├── claude-terminal-config.ts
 │   │   ├── PermissionQueue.tsx
 │   │   ├── SourceBadge.tsx

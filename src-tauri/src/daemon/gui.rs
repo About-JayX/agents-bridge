@@ -105,6 +105,20 @@ pub fn emit_claude_terminal_attention(app: &AppHandle) {
     let _ = app.emit("claude_terminal_attention", ());
 }
 
+/// Codex streaming event — thinking, deltas, and agent messages.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum CodexStreamPayload {
+    Thinking,
+    Delta { text: String },
+    Message { text: String },
+    TurnDone { status: String },
+}
+
+pub fn emit_codex_stream(app: &AppHandle, payload: CodexStreamPayload) {
+    let _ = app.emit("codex_stream", payload);
+}
+
 pub fn emit_agent_status(app: &AppHandle, agent: &str, online: bool, exit_code: Option<i32>) {
     let _ = app.emit(
         "agent_status",

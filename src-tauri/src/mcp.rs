@@ -58,10 +58,15 @@ pub fn register_mcp(cwd: Option<String>) -> Result<bool, String> {
         "[MCP] register agentbridge in {project_dir} using absolute command {}",
         bridge_cmd
     );
-    write_mcp_config(&project_dir, &bridge_cmd, &[])
+    write_mcp_config(&project_dir, &bridge_cmd, &[], "lead")
 }
 
-fn write_mcp_config(project_dir: &str, command: &str, args: &[&str]) -> Result<bool, String> {
+fn write_mcp_config(
+    project_dir: &str,
+    command: &str,
+    args: &[&str],
+    role: &str,
+) -> Result<bool, String> {
     let mcp_path = std::path::Path::new(project_dir).join(".mcp.json");
 
     let config: serde_json::Value = if mcp_path.exists() {
@@ -71,7 +76,7 @@ fn write_mcp_config(project_dir: &str, command: &str, args: &[&str]) -> Result<b
         serde_json::json!({})
     };
 
-    let (config, changed) = upsert_mcp_server(config, command, args)?;
+    let (config, changed) = upsert_mcp_server(config, command, args, role)?;
     if mcp_path.exists() && !changed {
         return Ok(true);
     }
@@ -86,6 +91,7 @@ fn upsert_mcp_server(
     mut config: serde_json::Value,
     command: &str,
     args: &[&str],
+    role: &str,
 ) -> Result<(serde_json::Value, bool), String> {
     let before = config.clone();
 
@@ -95,7 +101,10 @@ fn upsert_mcp_server(
         .entry("mcpServers")
         .or_insert_with(|| serde_json::json!({}));
 
-    let mut entry = serde_json::json!({ "command": command });
+    let mut entry = serde_json::json!({
+        "command": command,
+        "env": { "AGENTBRIDGE_ROLE": role }
+    });
     if !args.is_empty() {
         entry["args"] = serde_json::json!(args);
     }
@@ -150,13 +159,14 @@ mod tests {
             "mcpServers": {
                 "agentbridge": {
                     "command": "/tmp/bridge",
-                    "args": ["--foo"]
+                    "args": ["--foo"],
+                    "env": { "AGENTBRIDGE_ROLE": "lead" }
                 }
             }
         });
 
         let (next, changed) =
-            upsert_mcp_server(config.clone(), "/tmp/bridge", &["--foo"]).unwrap();
+            upsert_mcp_server(config.clone(), "/tmp/bridge", &["--foo"], "lead").unwrap();
         assert_eq!(next, config);
         assert!(!changed);
     }
@@ -171,7 +181,7 @@ mod tests {
             }
         });
 
-        let (next, changed) = upsert_mcp_server(config, "/tmp/new", &[]).unwrap();
+        let (next, changed) = upsert_mcp_server(config, "/tmp/new", &[], "lead").unwrap();
         assert!(changed);
         assert_eq!(next["mcpServers"]["agentbridge"]["command"], "/tmp/new");
     }

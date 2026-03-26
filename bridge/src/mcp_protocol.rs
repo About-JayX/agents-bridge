@@ -23,7 +23,7 @@ pub fn id_to_value(id: &Option<RpcId>) -> serde_json::Value {
     }
 }
 
-pub fn initialize_result() -> serde_json::Value {
+pub fn initialize_result(role: &str) -> serde_json::Value {
     serde_json::json!({
         "protocolVersion": "2024-11-05",
         "capabilities": {
@@ -33,7 +33,7 @@ pub fn initialize_result() -> serde_json::Value {
                 "claude/channel/permission": {}
             }
         },
-        "instructions": channel_instructions(),
+        "instructions": format!("{}\n\nYour role: {role}", CHANNEL_INSTRUCTIONS),
         "serverInfo": { "name": "agentbridge", "version": "0.1.0" }
     })
 }
@@ -61,11 +61,30 @@ pub fn parse_permission_request(params: &serde_json::Value) -> Option<Permission
     })
 }
 
-fn channel_instructions() -> &'static str {
-    "Incoming AgentBridge messages arrive as <channel source=\"agentbridge\" from=\"...\" chat_id=\"...\">...</channel> events. \
-Reply with the reply tool and pass the same chat_id back unchanged. \
-When Claude requests permission, AgentBridge relays the request to the desktop UI and sends the verdict back over notifications/claude/channel/permission."
-}
+const CHANNEL_INSTRUCTIONS: &str =
+    "You are an agent in AgentBridge, a multi-agent collaboration system.\n\n\
+## Message Format\n\
+Incoming messages arrive as <channel source=\"agentbridge\" from=\"ROLE\" chat_id=\"ID\">CONTENT</channel>.\n\
+Reply with the reply(chat_id, text) tool — always pass the original chat_id back unchanged.\n\n\
+## Roles\n\
+- user: the human administrator, final authority\n\
+- lead: coordinator — breaks down tasks, assigns work, summarizes results\n\
+- coder: implements code, fixes bugs, builds features\n\
+- reviewer: reviews code quality, finds issues, suggests improvements\n\
+- tester: runs tests, verifies functionality, reports results\n\n\
+## Routing Rules\n\
+Use get_status() to see who is online. Then use reply() to send messages.\n\
+Decide the recipient based on context:\n\
+- Finished coding? → reply to lead or reviewer\n\
+- Found review issues? → reply to coder with feedback\n\
+- Review passed? → reply to lead with approval\n\
+- Tests done? → reply to lead with results\n\
+- Need task assignment? → reply to coder/reviewer/tester\n\
+- Important results? → reply to user\n\n\
+## Work Style\n\
+You have full permissions. Execute tasks directly without asking for approval.\n\
+Proactively report progress so the user can see you are working.\n\
+Keep messages concise: what you did, what the result is, what's next.";
 
 #[cfg(test)]
 mod tests {
@@ -88,7 +107,7 @@ mod tests {
 
     #[test]
     fn initialize_result_includes_instructions_and_permission_capability() {
-        let result = initialize_result();
+        let result = initialize_result("lead");
         assert_eq!(
             result["capabilities"]["experimental"]["claude/channel"],
             serde_json::json!({})
