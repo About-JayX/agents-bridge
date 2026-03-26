@@ -10,7 +10,6 @@ import { CodexConfigRows } from "./CodexConfigRows";
 
 interface CodexPanelProps {
   codexTuiRunning: boolean;
-  codexReady: boolean;
   threadId: string | null;
   stopCodexTui: () => void;
   profile: { name?: string; planType?: string } | null;
@@ -21,7 +20,6 @@ interface CodexPanelProps {
 
 export function CodexPanel({
   codexTuiRunning,
-  codexReady,
   threadId,
   stopCodexTui,
   profile,
@@ -121,17 +119,11 @@ export function CodexPanel({
         "rounded-lg border bg-card p-3 card-depth transition-all duration-300",
         codexTuiRunning
           ? "border-codex/40 glow-codex-subtle border-glow-codex"
-          : codexReady
-            ? "border-yellow-500/30"
-            : "border-input hover:border-input/80",
+          : "border-input hover:border-input/80",
         justConnected && "card-connect-anim",
       )}
     >
-      <CodexHeader
-        running={codexTuiRunning}
-        ready={codexReady}
-        threadId={threadId}
-      />
+      <CodexHeader running={codexTuiRunning} threadId={threadId} />
 
       {locked && usage && (
         <CodexUsageSection
@@ -171,7 +163,7 @@ export function CodexPanel({
         <Button
           className="w-full mt-2 bg-codex text-white hover:bg-codex/90 hover:shadow-[0_0_16px_#22c55e40] active:scale-[0.98] transition-all duration-200 btn-ripple"
           size="sm"
-          disabled={!codexReady || connecting}
+          disabled={!!codexTuiRunning || connecting}
           onClick={handleConnect}
         >
           {connecting ? (
@@ -187,7 +179,7 @@ export function CodexPanel({
 
       {!locked && <AuthActions />}
 
-      {!codexReady && (
+      {!!codexTuiRunning && (
         <div className="mt-1.5 text-[11px] text-muted-foreground">
           Codex app-server is starting...
         </div>

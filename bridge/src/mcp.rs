@@ -35,22 +35,32 @@ pub async fn run(
                     break;
                 }
                 if !was_initialized && initialized {
-                    let mut replay_ok = true;
-                    for buffered in pre_init_buffer.drain(..) {
+                    let buf = std::mem::take(&mut pre_init_buffer);
+                    let mut failed = false;
+                    for item in buf {
+                        if failed {
+                            pre_init_buffer.push(item);
+                            continue;
+                        }
                         if !handle_daemon_inbound_checked(
-                            &agent_id, &mut channel_state, &mut writer, buffered,
+                            &agent_id, &mut channel_state, &mut writer, item,
                         ).await {
-                            replay_ok = false;
-                            break;
+                            failed = true;
                         }
                     }
-                    if !replay_ok { break; }
+                    if failed {
+                        eprintln!("[Bridge/{agent_id}] pre-init replay failed, {} items kept", pre_init_buffer.len());
+                        break;
+                    }
                 }
             }
             Some(inbound) = push_rx.recv() => {
                 if !initialized {
-                    eprintln!("[Bridge/{agent_id}] pre-init: buffering inbound");
-                    pre_init_buffer.push(inbound);
+                    if pre_init_buffer.len() < 128 {
+                        pre_init_buffer.push(inbound);
+                    } else {
+                        eprintln!("[Bridge/{agent_id}] pre-init buffer full, dropping");
+                    }
                     continue;
                 }
                 if !handle_daemon_inbound_checked(
@@ -102,7 +112,18 @@ async fn handle_rpc_message(
                     request.request_id, request.tool_name
                 );
                 channel_state.register_permission(request.clone());
-                let _ = reply_tx.send(BridgeOutbound::PermissionRequest(request)).await;
+                if reply_tx.send(BridgeOutbound::PermissionRequest(request.clone())).await.is_err() {
+                    eprintln!("[Bridge/{agent_id}] daemon channel closed, auto-denying permission {}", request.request_id);
+                    // Auto-deny so Claude doesn't hang forever
+                    if let Some(deny) = channel_state.permission_notification(
+                        crate::types::PermissionVerdict {
+                            request_id: request.request_id,
+                            behavior: crate::types::PermissionBehavior::Deny,
+                        },
+                    ) {
+                        let _ = write_line(writer, &deny).await;
+                    }
+                }
             }
         }
         Some("notifications/initialized") | None => {}

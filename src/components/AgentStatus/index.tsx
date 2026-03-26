@@ -56,7 +56,6 @@ export function AgentStatusPanel({ agents, connected }: AgentStatusProps) {
         {/* Codex */}
         <CodexPanel
           codexTuiRunning={codexConnected}
-          codexReady={true}
           threadId={null}
           stopCodexTui={stopCodexTui}
           profile={profile}

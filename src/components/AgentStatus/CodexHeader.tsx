@@ -3,16 +3,15 @@ import { StatusDot } from "./StatusDot";
 
 interface CodexHeaderProps {
   running: boolean;
-  ready: boolean;
   threadId: string | null;
 }
 
-export function CodexHeader({ running, ready, threadId }: CodexHeaderProps) {
+export function CodexHeader({ running, threadId }: CodexHeaderProps) {
   return (
     <>
       <div className="flex items-center gap-2">
         <StatusDot
-          status={running ? "connected" : ready ? "connecting" : "disconnected"}
+          status={running ? "connected" : "disconnected"}
           variant="codex"
         />
         <span className="flex-1 text-[13px] font-medium text-card-foreground">
@@ -20,10 +19,10 @@ export function CodexHeader({ running, ready, threadId }: CodexHeaderProps) {
         </span>
         <RoleSelect agent="codex" disabled={running} />
         <span
-          key={running ? "c" : ready ? "r" : "s"}
+          key={running ? "c" : "d"}
           className="text-[11px] uppercase text-secondary-foreground status-flash"
         >
-          {running ? "connected" : ready ? "ready" : "starting..."}
+          {running ? "connected" : "disconnected"}
         </span>
       </div>
 
