@@ -121,7 +121,39 @@
 ```
 需确认是否与 Codex 期望的 dynamic tool call response 格式匹配。
 
-**状态:** 需运行时测试验证。
+**状态:** ✅ 运行时验证通过（v0.116.0）。`contentItems` 格式仍然有效。
+
+### 2026-03-26: codex v0.88.0 — `--listen` 不存在，exit status: 2
+
+**问题:** 启动 Codex 时日志出现 `Codex process exited prematurely with status: exit status: 2`。
+
+**根因:** `codex 0.88.0` 没有 `--listen` flag。该 flag 是在 2026-02-11 PR #11370 "Reapply 'Add app-server transport layer with websocket support'" 加入的，v0.88.0（2026-01-21 发布）早于该 PR，app-server 在 v0.88.0 中只支持 stdio 模式，不监听 TCP/WebSocket 端口。
+
+**修复:** 升级 codex 至 v0.116.0（`brew upgrade codex`）。
+
+**验证:** ✅ 升级后 `codex app-server --listen ws://127.0.0.1:4500` 正常启动，输出:
+```
+codex app-server (WebSockets)
+  listening on: ws://127.0.0.1:4500
+  readyz: http://127.0.0.1:4500/readyz
+  healthz: http://127.0.0.1:4500/healthz
+```
+
+### 2026-03-26: codex v0.116.0 — `item/tool/call` params.name → params.tool
+
+**问题:** 升级到 v0.116.0 后 dynamic tool handler 不触发，Codex 不会调用 `reply`/`check_messages`/`get_status`。
+
+**根因:** `item/tool/call` 通知的参数结构在 v0.116.0 中变更：
+- 旧: `{"method":"item/tool/call","id":N,"params":{"name":"reply","arguments":{...}}}`
+- 新: `{"method":"item/tool/call","id":N,"params":{"threadId":"...","turnId":"...","callId":"...","tool":"reply","arguments":{...}}}`
+
+`session.rs` 读 `v["params"]["name"]`，新版返回 `undefined`，导致 handler 永不匹配。
+
+**修复:** `session.rs` 优先读 `v["params"]["tool"]`，降级兜底读 `v["params"]["name"]`（向后兼容）。
+
+**文件:** `src-tauri/src/daemon/codex/session.rs`
+
+**验证:** ✅ tool call response 格式（`contentItems`）仍然有效；turn 成功完成。
 
 ## 当前已知限制
 

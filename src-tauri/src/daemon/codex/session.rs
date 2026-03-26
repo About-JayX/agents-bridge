@@ -62,7 +62,9 @@ async fn event_loop(
                 let Some(Ok(msg)) = msg_opt else { break };
                 let Ok(v) = serde_json::from_str::<Value>(&msg.to_text().unwrap_or("")) else { continue };
                 if v["method"].as_str() == Some("item/tool/call") {
-                    if let (Some(id), Some(name)) = (v["id"].as_u64(), v["params"]["name"].as_str()) {
+                    // v0.116.0+: field is "tool", not "name"
+                    let name_field = v["params"]["tool"].as_str().or_else(|| v["params"]["name"].as_str());
+                    if let (Some(id), Some(name)) = (v["id"].as_u64(), name_field) {
                         let args = v["params"]["arguments"].clone();
                         handler::handle_dynamic_tool(id, name, &args, role_id, state, app, &ws_tx).await;
                     }
