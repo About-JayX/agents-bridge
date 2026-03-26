@@ -1,13 +1,11 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { MessageMarkdown } from "@/components/MessageMarkdown";
 import { useBridgeStore } from "@/stores/bridge-store";
 import type { BridgeMessage } from "@/types";
 import { PermissionQueue } from "./PermissionQueue";
-import { SourceBadge } from "./SourceBadge";
 import { TabBtn } from "./TabBtn";
+import { MessageList } from "./MessageList";
 import { ClaudeTerminalPane } from "./ClaudeTerminalPane";
-import { CodexStreamIndicator } from "./CodexStreamIndicator";
 
 type Tab = "messages" | "claude" | "logs" | "approvals";
 
@@ -24,9 +22,7 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
     setTabState(t);
     onTabChange?.(t);
   };
-  const bottomRef = useRef<HTMLDivElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
 
   const clearMessages = useBridgeStore((s) => s.clearMessages);
   const allTerminalLines = useBridgeStore((s) => s.terminalLines);
@@ -49,19 +45,6 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
     () => allTerminalLines.filter((l) => l.kind === "error"),
     [allTerminalLines],
   );
-
-  // Smart auto-scroll: only if user is near the bottom
-  const isNearBottom = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return true;
-    return el.scrollHeight - el.scrollTop - el.clientHeight < 100;
-  }, []);
-
-  useEffect(() => {
-    if (tab === "messages" && isNearBottom()) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages, tab, isNearBottom]);
 
   useEffect(() => {
     if (!prevClaudeRef.current.connected && claudeConnected)
@@ -117,44 +100,7 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
         )}
         <div className="absolute bottom-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-primary/15 to-transparent" />
       </div>
-      {tab === "messages" && (
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-2">
-          {chatMessages.length === 0 && (
-            <div className="py-10 text-center text-[13px] text-muted-foreground animate-in fade-in duration-500">
-              No messages yet. Connect Claude and Codex to start bridging.
-            </div>
-          )}
-          {chatMessages.map((msg) => {
-            const isUser = msg.from === "user";
-            return (
-              <div
-                key={msg.id}
-                className={`flex py-2.5 msg-enter ${isUser ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-[80%] rounded-xl px-3 py-2 ${
-                    isUser
-                      ? "bg-sky-500/15 border border-sky-500/30"
-                      : "bg-card/60 border border-border/50"
-                  }`}
-                >
-                  <div
-                    className={`flex items-center gap-2 mb-1 ${isUser ? "justify-end" : ""}`}
-                  >
-                    <SourceBadge source={msg.from} />
-                    <span className="font-mono text-[11px] text-muted-foreground">
-                      {new Date(msg.timestamp).toLocaleTimeString()}
-                    </span>
-                  </div>
-                  <MessageMarkdown content={msg.content} />
-                </div>
-              </div>
-            );
-          })}
-          <CodexStreamIndicator />
-          <div ref={bottomRef} />
-        </div>
-      )}
+      {tab === "messages" && <MessageList messages={chatMessages} />}
       {tab === "logs" && (
         <div
           ref={logRef}

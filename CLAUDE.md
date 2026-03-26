@@ -337,6 +337,8 @@ src/
 │   │   └── helpers.ts
 │   ├── MessagePanel/
 │   │   ├── index.tsx
+│   │   ├── MessageList.tsx
+│   │   ├── MessageBubble.tsx
 │   │   ├── ClaudeTerminalPane.tsx
 │   │   ├── CodexStreamIndicator.tsx
 │   │   ├── claude-terminal-config.ts

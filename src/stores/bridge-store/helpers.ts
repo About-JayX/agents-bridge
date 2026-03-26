@@ -138,10 +138,11 @@ export function initListeners(
             };
           }
           case "message":
+            // Turn might continue (tool calls, more reasoning). Keep thinking=true.
+            // Only turnDone clears thinking.
             return {
               codexStream: {
                 ...s.codexStream,
-                thinking: false,
                 lastMessage: p.text ?? "",
                 currentDelta: "",
               },
@@ -149,10 +150,10 @@ export function initListeners(
           case "turnDone":
             return {
               codexStream: {
-                ...s.codexStream,
                 thinking: false,
                 currentDelta: "",
-                turnStatus: p.status ?? "done",
+                lastMessage: "",
+                turnStatus: "",
               },
             };
           default:

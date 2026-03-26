@@ -218,6 +218,30 @@ Codex app-server → WS :4500 → session.rs handle_codex_event()
 
 **验证:** ✅ 用户可见 thinking → 流式文本 → 完成消息渲染到 Messages 面板。
 
+### 2026-03-26: 消息列表虚拟化与滚动修复
+
+**问题（3 个）：**
+1. 返回底部按钮反复闪动——手动 scroll 事件 + `isNearBottom` 在内容变高时误触发
+2. 返回底部只滚到一半——`scrollToIndex("LAST")` 不含 Footer 区域
+3. Codex 会话未结束时 thinking 消失——`message` 事件过早清除 `thinking` 状态
+
+**根因：**
+- Footer 变高（每次 delta）触发 Virtuoso 重算→scroll 跳动→`atBottom` 抖动
+- `scrollToIndex` 只算 data 项不含 Footer
+- `thinking` 在 `message` 事件被置 false，但 Codex turn 可能还有后续 tool call / reasoning
+
+**修复：**
+1. 消息列表改用 `react-virtuoso` 虚拟列表，只渲染可视区域
+2. Streaming 指示器作为 Virtuoso 的最后一个虚拟项（`totalCount = messages.length + 1`），不用 Footer
+3. `followOutput="smooth"` 自动追底，`atBottomStateChange` 检测用户滚动
+4. `scrollToIndex({ index: "LAST" })` 使用 Virtuoso 原生 API 避免 stale closure
+5. `thinking` 只在 `turnDone` 时清除，`message` 事件保持 `thinking=true`
+6. 提取 `MessageBubble.tsx`（气泡）+ `MessageList.tsx`（Virtuoso 封装）
+
+**文件:** `MessageList.tsx`, `MessageBubble.tsx`, `CodexStreamIndicator.tsx`, `index.tsx`, `helpers.ts`
+
+**验证:** ✅ 消息自动追底、用户滚动暂停追底并显示按钮、thinking 持续到 turn 结束。
+
 ### 2026-03-26: 角色 instructions 重构与强制性研究
 
 #### 研究结论：指令约束力分层
