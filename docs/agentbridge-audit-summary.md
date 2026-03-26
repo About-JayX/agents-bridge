@@ -183,6 +183,19 @@
 
 - 当前代码主链已明显稳定，但自动化验证层仍落后于这几轮修复速度。
 
+### 4. 新增问题：user 输入会显示两条 message 气泡
+
+- [未修复] 这不是事件重复监听，也不是 daemon 重复广播，而是消息模型层次混淆。
+- [未修复] 当前前端在 `auto` 模式下会把一次用户输入拆成多条 transport 级 `BridgeMessage`，分别发给多个 target。
+- [未修复] daemon 又会把每条 transport 消息都 `emit_agent_message` 到 GUI。
+- [未修复] 消息面板只按 `from === "user"` 渲染 user 样式，不展示 `to`，于是多条发往不同 target 的用户消息会显示成两条一模一样的 user 气泡。
+
+结论：
+
+- 根因不是“重复发消息”，而是“展示层直接消费 transport 副本”。
+- 这条问题应通过“单次 user echo + daemon 内部 fan-out”修复，而不是做文本去重。
+- 已补充专项计划：`docs/superpowers/plans/2026-03-27-user-single-bubble.md`
+
 ## 当前仍需保留的已知限制
 
 - [已知限制] `threadId` 尚未从 daemon 暴露到前端，Codex 头部无法显示真实 thread。
