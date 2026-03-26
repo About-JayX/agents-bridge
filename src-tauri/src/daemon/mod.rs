@@ -55,10 +55,18 @@ pub fn channel() -> (mpsc::Sender<DaemonCmd>, mpsc::Receiver<DaemonCmd>) {
     mpsc::channel(64)
 }
 
-async fn set_role(state: &SharedState, field: fn(&mut DaemonState) -> &mut String, new: String) {
+/// Set a role, rejecting if the other agent already holds it.
+async fn set_role(
+    state: &SharedState,
+    field: fn(&mut DaemonState) -> &mut String,
+    other: fn(&DaemonState) -> &str,
+    new: String,
+) -> bool {
     let mut s = state.write().await;
+    if other(&s) == new { return false; } // conflict: other agent holds this role
     let old = std::mem::replace(field(&mut s), new.clone());
     if old != new { s.migrate_buffered_role(&old, &new); }
+    true
 }
 
 async fn stop_codex_session(
@@ -94,10 +102,7 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
 
     while let Some(cmd) = cmd_rx.recv().await {
         match cmd {
-            DaemonCmd::SendMessage(msg) => {
-                routing::route_message(&state, &app, msg).await;
-            }
-
+            DaemonCmd::SendMessage(msg) => routing::route_message(&state, &app, msg).await,
             DaemonCmd::LaunchCodex {
                 role_id,
                 cwd,
@@ -125,14 +130,10 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
                 let _ = reply.send(launch_result);
             }
 
-            DaemonCmd::StopCodex => {
-                stop_codex_session(&mut codex_handle, &state, &app).await;
-            }
-
+            DaemonCmd::StopCodex => stop_codex_session(&mut codex_handle, &state, &app).await,
             DaemonCmd::Shutdown { reply } => {
                 stop_codex_session(&mut codex_handle, &state, &app).await;
-                let _ = reply.send(());
-                break;
+                let _ = reply.send(()); break;
             }
 
             DaemonCmd::ReadClaudeRole { reply } => {
@@ -140,8 +141,12 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
                 let _ = reply.send(role);
             }
 
-            DaemonCmd::SetClaudeRole(role) => set_role(&state, |s| &mut s.claude_role, role).await,
-            DaemonCmd::SetCodexRole(role) => set_role(&state, |s| &mut s.codex_role, role).await,
+            DaemonCmd::SetClaudeRole(role) => {
+                set_role(&state, |s| &mut s.claude_role, |s| &s.codex_role, role).await;
+            }
+            DaemonCmd::SetCodexRole(role) => {
+                set_role(&state, |s| &mut s.codex_role, |s| &s.claude_role, role).await;
+            }
 
             DaemonCmd::ReadStatusSnapshot { reply } => {
                 let snapshot = state.read().await.status_snapshot();

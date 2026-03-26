@@ -121,7 +121,9 @@ async fn handle_rpc_message(
                             behavior: crate::types::PermissionBehavior::Deny,
                         },
                     ) {
-                        let _ = write_line(writer, &deny).await;
+                        if !write_line(writer, &deny).await {
+                            return false; // stdout dead — exit MCP loop
+                        }
                     }
                 }
             }
