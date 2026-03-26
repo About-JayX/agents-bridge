@@ -72,7 +72,7 @@ Rust daemon
 ### `bridge/**`
 
 - 只负责 Claude channel 协议转换，不承载产品业务状态
-- bridge 内只保留会话级 `chat_id -> reply target` 和 pending permission 这类短期协议状态
+- bridge 内只保留 pending permission 短期协议状态，不做路由映射
 - `bridge/src/types.rs` 必须和 `src-tauri/src/daemon/types.rs` 保持字段兼容
 - 新增或修改 bridge tool 时，同时检查 daemon 路由和前端文档
 

@@ -7,7 +7,6 @@ use tokio::io::AsyncWriteExt;
 /// Handle tool/call and produce a JSON-RPC response.
 pub(crate) async fn tool_call_response(
     agent_id: &str,
-    channel_state: &mut ChannelState,
     reply_tx: &tokio::sync::mpsc::Sender<BridgeOutbound>,
     msg: &crate::mcp_protocol::RpcMessage,
 ) -> serde_json::Value {
@@ -15,12 +14,11 @@ pub(crate) async fn tool_call_response(
         .params
         .as_ref()
         .and_then(|params| handle_tool_call(params, agent_id))
-        .and_then(|bridge_msg| channel_state.rewrite_reply(bridge_msg))
     {
         Some(bridge_msg) => {
             eprintln!(
-                "[Bridge/{agent_id}] reply tool -> {} (reply_to={:?})",
-                bridge_msg.to, bridge_msg.reply_to
+                "[Bridge/{agent_id}] reply tool → {}",
+                bridge_msg.to
             );
             match reply_tx.send(BridgeOutbound::AgentReply(bridge_msg)).await {
                 Ok(()) => serde_json::json!({
@@ -38,7 +36,7 @@ pub(crate) async fn tool_call_response(
         None => serde_json::json!({
             "jsonrpc": "2.0",
             "id": id_to_value(&msg.id),
-            "error": { "code": -32000, "message": "unknown chat_id or unsupported tool call" }
+            "error": { "code": -32000, "message": "unsupported tool call" }
         }),
     }
 }
@@ -65,7 +63,7 @@ pub(crate) async fn handle_daemon_inbound_checked(
             let notif = channel_state.permission_notification(verdict.clone());
             if notif.is_some() {
                 eprintln!(
-                    "[Bridge/{agent_id}] permission verdict {} -> {:?}",
+                    "[Bridge/{agent_id}] permission verdict {} → {:?}",
                     verdict.request_id, verdict.behavior
                 );
             }

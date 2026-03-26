@@ -28,18 +28,12 @@ pub async fn run(
                 let Ok(msg) = serde_json::from_str::<RpcMessage>(trimmed) else { continue };
                 let was_initialized = initialized;
                 if !handle_rpc_message(
-                    &agent_id,
-                    &role,
-                    &mut initialized,
-                    &mut channel_state,
-                    &mut writer,
-                    &reply_tx,
-                    msg,
+                    &agent_id, &role, &mut initialized, &mut channel_state,
+                    &mut writer, &reply_tx, msg,
                 ).await {
                     eprintln!("[Bridge/{agent_id}] stdout write failed, exiting MCP loop");
                     break;
                 }
-                // Replay any messages buffered before initialization
                 if !was_initialized && initialized {
                     let mut replay_ok = true;
                     for buffered in pre_init_buffer.drain(..) {
@@ -55,7 +49,7 @@ pub async fn run(
             }
             Some(inbound) = push_rx.recv() => {
                 if !initialized {
-                    eprintln!("[Bridge/{agent_id}] pre-init: buffering inbound (not yet initialized)");
+                    eprintln!("[Bridge/{agent_id}] pre-init: buffering inbound");
                     pre_init_buffer.push(inbound);
                     continue;
                 }
@@ -69,7 +63,6 @@ pub async fn run(
     }
 }
 
-/// Returns false if stdout write failed.
 async fn handle_rpc_message(
     agent_id: &str,
     role: &str,
@@ -88,9 +81,7 @@ async fn handle_rpc_message(
                 "id": id_to_value(&msg.id),
                 "result": initialize_result(role)
             });
-            if !write_line(writer, &resp).await {
-                return false;
-            }
+            if !write_line(writer, &resp).await { return false; }
         }
         Some("tools/list") => {
             let resp = serde_json::json!({
@@ -98,15 +89,11 @@ async fn handle_rpc_message(
                 "id": id_to_value(&msg.id),
                 "result": { "tools": [crate::tools::reply_tool_schema()] }
             });
-            if !write_line(writer, &resp).await {
-                return false;
-            }
+            if !write_line(writer, &resp).await { return false; }
         }
         Some("tools/call") => {
-            let resp = tool_call_response(agent_id, channel_state, reply_tx, &msg).await;
-            if !write_line(writer, &resp).await {
-                return false;
-            }
+            let resp = tool_call_response(agent_id, reply_tx, &msg).await;
+            if !write_line(writer, &resp).await { return false; }
         }
         Some("notifications/claude/channel/permission_request") => {
             if let Some(request) = msg.params.as_ref().and_then(parse_permission_request) {
@@ -115,9 +102,7 @@ async fn handle_rpc_message(
                     request.request_id, request.tool_name
                 );
                 channel_state.register_permission(request.clone());
-                let _ = reply_tx
-                    .send(BridgeOutbound::PermissionRequest(request))
-                    .await;
+                let _ = reply_tx.send(BridgeOutbound::PermissionRequest(request)).await;
             }
         }
         Some("notifications/initialized") | None => {}

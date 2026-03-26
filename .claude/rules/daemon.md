@@ -26,7 +26,7 @@ paths:
 ## 工具边界
 
 - bridge 当前只暴露 `reply` MCP tool
-- `reply` tool 契约固定为 `chat_id + text`，不能回退到内部路由字段 `to`
+- `reply` tool 契约为 `to + text`，Claude 自行决定路由目标，bridge 纯转发
 - Claude channel initialize 结果必须带 `instructions`，并显式声明 `experimental['claude/channel']` 与 `experimental['claude/channel/permission']`
 - 如果要给 Claude 增加新 tool，必须同时更新：
   - `bridge/src/tools.rs`
@@ -41,7 +41,7 @@ paths:
 - 连接成功后必须立即发 `agent_connect`
 - 断线后只能重连 daemon，不要在 bridge 内缓存长期业务状态
 - bridge 只允许把 `user`、`system`、`lead`、`coder`、`reviewer`、`tester` 这些内部 sender 转成 Claude channel 事件
-- `chat_id -> reply target` 和 pending permission 只允许做短期会话态缓存，不能演变成业务状态数据库
+- bridge 只保留 pending permission 短期缓存，不能演变成业务状态数据库
 
 ## 文件规模
 

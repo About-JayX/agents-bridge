@@ -369,7 +369,7 @@ src/
 - Rust bridge sidecar（Cargo workspace 成员）
 - Claude 项目级 `.mcp.json` 注册
 - Claude channel preview 启动链路与版本 preflight
-- Claude channel `instructions` / `reply(chat_id, text)` / permission relay
+- Claude channel `instructions` / `reply(to, text)` / permission relay
 - 外部终端启动 Claude CLI
 - Codex account / OAuth / models / usage
 - 临时 `CODEX_HOME` + `auth.json` symlink + `config.toml`

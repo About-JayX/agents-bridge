@@ -1,22 +1,25 @@
 use crate::types::BridgeMessage;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static MSG_SEQ: AtomicU64 = AtomicU64::new(0);
 
 pub fn reply_tool_schema() -> serde_json::Value {
     serde_json::json!({
         "name": "reply",
-        "description": "Reply to an AgentBridge channel message using the original chat_id.",
+        "description": "Send a message to another agent role in AgentBridge. The system routes it automatically.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "chat_id": {
+                "to": {
                     "type": "string",
-                    "description": "chat_id from the incoming <channel ...> event"
+                    "description": "Target role: user, lead, coder, reviewer, or tester"
                 },
                 "text": {
                     "type": "string",
                     "description": "Message content"
                 }
             },
-            "required": ["chat_id", "text"]
+            "required": ["to", "text"]
         }
     })
 }
@@ -27,15 +30,16 @@ pub fn handle_tool_call(params: &serde_json::Value, from: &str) -> Option<Bridge
         return None;
     }
     let args = params.get("arguments")?;
-    let chat_id = args.get("chat_id")?.as_str()?;
+    let to = args.get("to")?.as_str()?;
     let text = args.get("text")?.as_str()?;
+    let seq = MSG_SEQ.fetch_add(1, Ordering::Relaxed);
     Some(BridgeMessage {
-        id: format!("claude_{}", chrono::Utc::now().timestamp_millis()),
+        id: format!("claude_{}_{seq}", chrono::Utc::now().timestamp_millis()),
         from: from.to_string(),
-        to: chat_id.to_string(),
+        to: to.to_string(),
         content: text.to_string(),
         timestamp: chrono::Utc::now().timestamp_millis() as u64,
-        reply_to: Some(chat_id.to_string()),
+        reply_to: None,
         priority: None,
     })
 }
@@ -45,24 +49,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reply_schema_uses_chat_id_contract() {
+    fn reply_schema_uses_to_field() {
         let schema = reply_tool_schema();
-        assert!(schema["inputSchema"]["properties"]["chat_id"].is_object());
+        assert!(schema["inputSchema"]["properties"]["to"].is_object());
         assert_eq!(
             schema["inputSchema"]["required"],
-            serde_json::json!(["chat_id", "text"])
+            serde_json::json!(["to", "text"])
         );
-        assert!(schema["inputSchema"]["properties"]["to"].is_null());
+        // chat_id no longer exists
+        assert!(schema["inputSchema"]["properties"]["chat_id"].is_null());
     }
 
     #[test]
     fn handle_reply_tool() {
         let params = serde_json::json!({
             "name": "reply",
-            "arguments": { "chat_id": "chat-1", "text": "hello" }
+            "arguments": { "to": "lead", "text": "hello" }
         });
         let msg = handle_tool_call(&params, "coder").unwrap();
-        assert_eq!(msg.reply_to.as_deref(), Some("chat-1"));
+        assert_eq!(msg.to, "lead");
         assert_eq!(msg.content, "hello");
         assert_eq!(msg.from, "coder");
     }

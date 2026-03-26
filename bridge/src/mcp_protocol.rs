@@ -39,13 +39,13 @@ pub fn initialize_result(role: &str) -> serde_json::Value {
 }
 
 #[cfg(test)]
-pub fn channel_notification(content: &str, chat_id: &str, from: &str) -> serde_json::Value {
+pub fn channel_notification(content: &str, from: &str) -> serde_json::Value {
     serde_json::json!({
         "jsonrpc": "2.0",
         "method": "notifications/claude/channel",
         "params": {
             "content": content,
-            "meta": { "from": from, "chat_id": chat_id }
+            "meta": { "from": from }
         }
     })
 }
@@ -64,8 +64,8 @@ pub fn parse_permission_request(params: &serde_json::Value) -> Option<Permission
 const CHANNEL_INSTRUCTIONS: &str =
     "You are an agent in AgentBridge, a multi-agent collaboration system.\n\n\
 ## Message Format\n\
-Incoming messages arrive as <channel source=\"agentbridge\" from=\"ROLE\" chat_id=\"ID\">CONTENT</channel>.\n\
-Reply with the reply(chat_id, text) tool — always pass the original chat_id back unchanged.\n\n\
+Incoming messages arrive as <channel source=\"agentbridge\" from=\"ROLE\">CONTENT</channel>.\n\
+Use reply(to, text) to send messages to any role. You decide who to send to.\n\n\
 ## Roles\n\
 - user: the human administrator, final authority\n\
 - lead: coordinator — breaks down tasks, assigns work, summarizes results\n\
@@ -124,7 +124,7 @@ mod tests {
 
     #[test]
     fn serialize_channel_notification() {
-        let n = channel_notification("hello", "msg-1", "coder");
+        let n = channel_notification("hello", "coder");
         let s = serde_json::to_string(&n).unwrap();
         assert!(s.contains("notifications/claude/channel"));
         assert!(s.contains("hello"));
