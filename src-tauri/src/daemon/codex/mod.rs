@@ -93,7 +93,7 @@ pub async fn start(
         poll_delay = (poll_delay * 2).min(std::time::Duration::from_millis(500));
     }
 
-    let (inject_tx, inject_rx) = mpsc::channel::<String>(64);
+    let (inject_tx, inject_rx) = mpsc::channel::<(String, bool)>(64);
     let opts = SessionOpts {
         role_id: role_id.clone(),
         cwd: cwd.clone(),
@@ -135,7 +135,8 @@ pub async fn start(
         s.take_buffered_for(&role_id)
     };
     for msg in buffered {
-        let _ = inject_tx.send(crate::daemon::routing::format_codex_input(&msg)).await;
+        let from_user = msg.from == "user";
+        let _ = inject_tx.send((crate::daemon::routing::format_codex_input(&msg), from_user)).await;
     }
     gui::emit_agent_status(&app, "codex", true, None);
     gui::emit_system_log(&app, "info", &format!("[Codex] ready role={role_id} thread={thread_id}"));

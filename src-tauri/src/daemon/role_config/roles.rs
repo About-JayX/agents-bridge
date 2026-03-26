@@ -22,9 +22,9 @@ macro_rules! role_prompt {
 - reviewer: code review — analyzes quality, finds issues
 - tester: testing — runs tests, verifies functionality
 
-## Communication Tools
-- reply(to, text): ONLY way to send messages to other agents
-- check_messages(): check for incoming messages
+## Communication
+Your ONLY way to send messages to other agents is through your text output format.
+- check_messages(): check for incoming messages from other agents
 - get_status(): see which agents are online
 
 ## Output Format (MANDATORY)
@@ -34,12 +34,10 @@ Your final text output MUST be valid JSON matching this schema:
 - send_to = the role you want to deliver this message to
 - send_to = \"none\" if the message is only for the current user
 - send_to = \"user\" to explicitly reply to the human user
-- The system will parse your output and route it automatically
+- The system parses your output and routes it automatically
+- This is the ONLY communication channel. There is no other way to reach other agents.
 
 ## Rules
-- When asked to communicate with another role, set send_to to that role
-- Your text output is automatically routed based on send_to
-- You can ALSO call reply() tool explicitly for immediate delivery
 - Work autonomously. Execute tasks directly without asking for permission
 - Report progress concisely: what you did, result, what's next
 

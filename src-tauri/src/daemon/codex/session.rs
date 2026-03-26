@@ -22,7 +22,7 @@ pub async fn run(
     opts: SessionOpts,
     state: SharedState,
     app: AppHandle,
-    mut inject_rx: mpsc::Receiver<String>,
+    mut inject_rx: mpsc::Receiver<(String, bool)>,
     ready_tx: tokio::sync::oneshot::Sender<String>,
 ) {
     match super::handshake::handshake(port, &opts, &app).await {
@@ -41,11 +41,14 @@ async fn event_loop(
     role_id: &str,
     state: &SharedState,
     app: &AppHandle,
-    inject_rx: &mut mpsc::Receiver<String>,
+    inject_rx: &mut mpsc::Receiver<(String, bool)>,
     ws_tx: WsTx,
     mut stream: WsStream,
 ) {
     let mut next_id: u64 = 100;
+    // Turn-level schema-routing: only user-initiated turns get routed
+    let mut user_turn_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut pending_from_user = false; // consumed by next turn/started
     loop {
         tokio::select! {
             msg_opt = stream.next() => {
@@ -53,10 +56,28 @@ async fn event_loop(
                 let Ok(v) = serde_json::from_str::<Value>(&msg.to_text().unwrap_or("")) else {
                     continue;
                 };
-                handle_codex_event(&v, role_id, state, app, &ws_tx).await;
+                // Register turn_id when turn/started arrives
+                if v["method"].as_str() == Some("turn/started") {
+                    if let Some(tid) = v["params"]["turn"]["id"].as_str() {
+                        if pending_from_user {
+                            user_turn_ids.insert(tid.to_string());
+                        }
+                        pending_from_user = false;
+                    }
+                }
+                // Check if this event's turn is user-initiated
+                let turn_id = v["params"]["turnId"].as_str()
+                    .or_else(|| v["params"]["turn"]["id"].as_str())
+                    .unwrap_or("");
+                let route_ok = user_turn_ids.contains(turn_id);
+                handle_codex_event(&v, role_id, route_ok, state, app, &ws_tx).await;
+                if v["method"].as_str() == Some("turn/completed") {
+                    user_turn_ids.remove(turn_id);
+                }
             }
             inject = inject_rx.recv() => {
-                let Some(text) = inject else { break };
+                let Some((text, from_user)) = inject else { break };
+                pending_from_user = from_user;
                 let id = next_id; next_id += 1;
                 let mut turn_params = json!({
                     "threadId": &thread_id,
@@ -85,6 +106,7 @@ async fn event_loop(
 async fn handle_codex_event(
     v: &Value,
     role_id: &str,
+    schema_route_enabled: bool,
     state: &SharedState,
     app: &AppHandle,
     ws_tx: &WsTx,
@@ -122,10 +144,14 @@ async fn handle_codex_event(
                 gui::emit_codex_stream(app, CodexStreamPayload::Message {
                     text: display_text.clone(),
                 });
-                // Determine routing target from structured output
-                let valid_target = send_to.as_deref().filter(|t| {
-                    matches!(*t, "lead" | "coder" | "reviewer" | "tester")
-                });
+                // Only schema-route on user-initiated turns (prevents feedback loops)
+                let valid_target = if schema_route_enabled {
+                    send_to.as_deref().filter(|t| {
+                        matches!(*t, "lead" | "coder" | "reviewer" | "tester")
+                    })
+                } else {
+                    None
+                };
                 if let Some(target) = valid_target {
                     // Route to another agent — route_message emits to GUI internally
                     let msg = build_msg(role_id, target, &display_text);

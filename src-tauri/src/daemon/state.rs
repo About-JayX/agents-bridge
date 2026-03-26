@@ -24,7 +24,8 @@ pub struct DaemonState {
     pub buffered_messages: Vec<BridgeMessage>,
     pending_permissions: HashMap<String, PendingPermission>,
     buffered_verdicts: HashMap<String, Vec<PermissionVerdict>>,
-    pub codex_inject_tx: Option<mpsc::Sender<String>>,
+    /// (text, from_user) — from_user=true enables schema-routing on the response
+    pub codex_inject_tx: Option<mpsc::Sender<(String, bool)>>,
     pub claude_role: String,
     pub codex_role: String,
     /// Singleton session manager — shared across all Codex launches to avoid

@@ -73,7 +73,7 @@ fn expired_permissions_are_rejected() {
 fn status_snapshot_reports_current_online_agents() {
     let mut s = DaemonState::new();
     let (claude_tx, _claude_rx) = tokio::sync::mpsc::channel::<ToAgent>(1);
-    let (codex_tx, _codex_rx) = tokio::sync::mpsc::channel::<String>(1);
+    let (codex_tx, _codex_rx) = tokio::sync::mpsc::channel::<(String, bool)>(1);
     s.attached_agents.insert("claude".into(), claude_tx);
     s.codex_inject_tx = Some(codex_tx);
 

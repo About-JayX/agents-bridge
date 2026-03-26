@@ -4,6 +4,7 @@ use tokio::time::Duration;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 const MAX_RETRIES: u32 = 20;
+const BACKOFF_BUF_CAP: usize = 64;
 
 pub async fn run(
     port: u16,
@@ -13,6 +14,7 @@ pub async fn run(
 ) {
     let url = format!("ws://127.0.0.1:{port}/ws");
     let mut attempt = 0u32;
+    let mut pending: Vec<BridgeOutbound> = Vec::new();
 
     loop {
         match connect_async(&url).await {
@@ -32,53 +34,31 @@ pub async fn run(
                     continue;
                 }
 
+                // Replay messages buffered during backoff
+                for m in pending.drain(..) {
+                    if let Ok(s) = serialize_outbound(&agent_id, &m) {
+                        if sink.send(Message::Text(s.into())).await.is_err() {
+                            break;
+                        }
+                    }
+                }
+
                 loop {
                     tokio::select! {
                         msg = stream.next() => {
                             match msg {
                                 Some(Ok(Message::Text(txt))) => {
-                                    match serde_json::from_str::<DaemonMsg>(&txt) {
-                                        Ok(dm) => {
-                                            match dm {
-                                                DaemonMsg::RoutedMessage { message } => {
-                                                    if push_tx.send(DaemonInbound::RoutedMessage(message)).await.is_err() {
-                                                        eprintln!("[Bridge/{agent_id}] push channel closed, exiting");
-                                                        return;
-                                                    }
-                                                }
-                                                DaemonMsg::PermissionVerdict { verdict } => {
-                                                    if push_tx.send(DaemonInbound::PermissionVerdict(verdict)).await.is_err() {
-                                                        eprintln!("[Bridge/{agent_id}] push channel closed, exiting");
-                                                        return;
-                                                    }
-                                                }
-                                                DaemonMsg::Status { .. } => {}
-                                            }
-                                        }
-                                        Err(e) => {
-                                            eprintln!("[Bridge/{agent_id}] failed to parse daemon msg: {e}");
-                                        }
-                                    }
+                                    handle_inbound(&agent_id, &txt, &push_tx).await;
                                 }
                                 Some(Ok(_)) => {}
                                 _ => break,
                             }
                         }
                         Some(outbound) = reply_rx.recv() => {
-                            let serialized = match outbound {
-                                BridgeOutbound::AgentReply(reply) => serde_json::to_string(&BridgeMsg::AgentReply {
-                                    message: &reply,
-                                }),
-                                BridgeOutbound::PermissionRequest(request) => serde_json::to_string(&BridgeMsg::PermissionRequest {
-                                    request: &request,
-                                }),
-                            };
-                            let Ok(msg) = serialized else {
-                                eprintln!("[Bridge/{agent_id}] failed to serialize outbound message");
-                                continue;
-                            };
-                            if sink.send(Message::Text(msg.into())).await.is_err() {
-                                break;
+                            if let Ok(s) = serialize_outbound(&agent_id, &outbound) {
+                                if sink.send(Message::Text(s.into())).await.is_err() {
+                                    break;
+                                }
                             }
                         }
                     }
@@ -98,21 +78,68 @@ pub async fn run(
                 eprintln!(
                     "[Bridge/{agent_id}] connect failed (attempt {attempt}): {e}, retry in {delay:?}"
                 );
-                // Drain outbound queue during backoff to prevent MCP stdin blocking
+                // Buffer outbound during backoff — replayed after reconnect
                 let deadline = tokio::time::Instant::now() + delay;
                 loop {
                     tokio::select! {
                         _ = tokio::time::sleep_until(deadline) => break,
                         msg = reply_rx.recv() => {
-                            if msg.is_none() {
-                                eprintln!("[Bridge/{agent_id}] reply channel closed during backoff");
-                                return;
+                            match msg {
+                                Some(m) => {
+                                    if pending.len() < BACKOFF_BUF_CAP {
+                                        pending.push(m);
+                                    } else {
+                                        eprintln!("[Bridge/{agent_id}] backoff buffer full, dropping");
+                                    }
+                                }
+                                None => {
+                                    eprintln!("[Bridge/{agent_id}] reply channel closed");
+                                    return;
+                                }
                             }
-                            // Discard — we have no connection to send on
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+fn serialize_outbound(agent_id: &str, outbound: &BridgeOutbound) -> Result<String, ()> {
+    let result = match outbound {
+        BridgeOutbound::AgentReply(reply) => {
+            serde_json::to_string(&BridgeMsg::AgentReply { message: reply })
+        }
+        BridgeOutbound::PermissionRequest(request) => {
+            serde_json::to_string(&BridgeMsg::PermissionRequest { request })
+        }
+    };
+    result.map_err(|e| {
+        eprintln!("[Bridge/{agent_id}] failed to serialize outbound: {e}");
+    })
+}
+
+async fn handle_inbound(
+    agent_id: &str,
+    txt: &str,
+    push_tx: &tokio::sync::mpsc::Sender<DaemonInbound>,
+) {
+    match serde_json::from_str::<DaemonMsg>(txt) {
+        Ok(dm) => match dm {
+            DaemonMsg::RoutedMessage { message } => {
+                if push_tx.send(DaemonInbound::RoutedMessage(message)).await.is_err() {
+                    eprintln!("[Bridge/{agent_id}] push channel closed");
+                }
+            }
+            DaemonMsg::PermissionVerdict { verdict } => {
+                if push_tx.send(DaemonInbound::PermissionVerdict(verdict)).await.is_err() {
+                    eprintln!("[Bridge/{agent_id}] push channel closed");
+                }
+            }
+            DaemonMsg::Status { .. } => {}
+        },
+        Err(e) => {
+            eprintln!("[Bridge/{agent_id}] failed to parse daemon msg: {e}");
         }
     }
 }

@@ -74,7 +74,20 @@ pub async fn handle_connection(socket: WebSocket, state: SharedState, app: AppHa
                 gui::emit_agent_status(&app, &id, true, None);
                 gui::emit_system_log(&app, "info", &format!("[Control] {id} connected"));
             }
-            FromAgent::AgentReply { message } => {
+            FromAgent::AgentReply { mut message } => {
+                // Bind message.from to the authenticated agent's role
+                // (prevents spoofing — bridge can't claim to be a different sender)
+                if let Some(id) = agent_id.as_deref() {
+                    let role = {
+                        let s = state.read().await;
+                        match id {
+                            "claude" => s.claude_role.clone(),
+                            "codex" => s.codex_role.clone(),
+                            _ => id.to_string(),
+                        }
+                    };
+                    message.from = role;
+                }
                 routing::route_message(&state, &app, message).await;
             }
             FromAgent::PermissionRequest { request } => {

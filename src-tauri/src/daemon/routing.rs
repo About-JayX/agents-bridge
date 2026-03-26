@@ -19,7 +19,7 @@ pub async fn route_message_inner(state: &SharedState, msg: BridgeMessage) -> Rou
 
     enum Target {
         Claude(tokio::sync::mpsc::Sender<ToAgent>),
-        Codex(tokio::sync::mpsc::Sender<String>, String),
+        Codex(tokio::sync::mpsc::Sender<(String, bool)>, String, bool),
         NeedBuffer,
     }
 
@@ -37,7 +37,8 @@ pub async fn route_message_inner(state: &SharedState, msg: BridgeMessage) -> Rou
             }
         } else if s.codex_role == msg.to {
             if let Some(tx) = s.codex_inject_tx.clone() {
-                Target::Codex(tx, format_codex_input(&msg))
+                let from_user = msg.from == "user";
+                Target::Codex(tx, format_codex_input(&msg), from_user)
             } else {
                 Target::NeedBuffer
             }
@@ -61,8 +62,8 @@ pub async fn route_message_inner(state: &SharedState, msg: BridgeMessage) -> Rou
                 RouteResult::Buffered
             }
         }
-        Target::Codex(tx, input) => {
-            if tx.send(input).await.is_ok() {
+        Target::Codex(tx, input, from_user) => {
+            if tx.send((input, from_user)).await.is_ok() {
                 RouteResult::Delivered
             } else {
                 state.write().await.buffer_message(msg);
@@ -77,8 +78,11 @@ pub async fn route_message_inner(state: &SharedState, msg: BridgeMessage) -> Rou
 }
 
 pub async fn route_message(state: &SharedState, app: &AppHandle, msg: BridgeMessage) {
-    gui::emit_agent_message(app, &msg);
     let result = route_message_inner(state, msg.clone()).await;
+    // Only show in GUI after confirming the route result (no ghost messages)
+    if !matches!(result, RouteResult::Dropped) {
+        gui::emit_agent_message(app, &msg);
+    }
     let tag = match &result {
         RouteResult::Delivered => "delivered",
         RouteResult::Buffered => "buffered",
