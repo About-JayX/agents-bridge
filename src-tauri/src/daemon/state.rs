@@ -10,7 +10,18 @@ use tokio::sync::{mpsc, Mutex};
 
 pub const PERMISSION_TTL_MS: u64 = 10 * 60 * 1000;
 
-pub type AgentSender = mpsc::Sender<ToAgent>;
+/// Agent connection with generation ID to prevent stale disconnect from removing new connections.
+#[derive(Clone)]
+pub struct AgentSender {
+    pub tx: mpsc::Sender<ToAgent>,
+    pub gen: u64,
+}
+
+impl AgentSender {
+    pub fn new(tx: mpsc::Sender<ToAgent>, gen: u64) -> Self {
+        Self { tx, gen }
+    }
+}
 
 struct PendingPermission {
     agent_id: String,
@@ -24,13 +35,12 @@ pub struct DaemonState {
     pub buffered_messages: Vec<BridgeMessage>,
     pending_permissions: HashMap<String, PendingPermission>,
     buffered_verdicts: HashMap<String, Vec<PermissionVerdict>>,
-    /// (text, from_user) — from_user=true enables schema-routing on the response
     pub codex_inject_tx: Option<mpsc::Sender<(String, bool)>>,
     pub claude_role: String,
     pub codex_role: String,
-    /// Singleton session manager — shared across all Codex launches to avoid
-    /// stale-session cleanup killing live sessions.
     pub session_mgr: Arc<Mutex<SessionManager>>,
+    /// Monotonic counter for agent connection generations.
+    pub next_agent_gen: u64,
 }
 
 impl Default for DaemonState {
@@ -44,6 +54,7 @@ impl Default for DaemonState {
             claude_role: "lead".into(),
             codex_role: "coder".into(),
             session_mgr: Arc::new(Mutex::new(SessionManager::new())),
+            next_agent_gen: 0,
         }
     }
 }

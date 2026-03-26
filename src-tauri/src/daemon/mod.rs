@@ -163,13 +163,13 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
                     continue;
                 };
 
-                let sender = { state.read().await.attached_agents.get(&agent_id).cloned() };
+                let sender_tx = state.read().await.attached_agents.get(&agent_id).map(|s| s.tx.clone());
                 let verdict = match &outbound {
                     types::ToAgent::PermissionVerdict { verdict } => Some(verdict.clone()),
                     _ => None,
                 };
 
-                match sender {
+                match sender_tx {
                     Some(tx) if tx.send(outbound).await.is_ok() => {
                         gui::emit_system_log(
                             &app,

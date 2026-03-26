@@ -16,6 +16,7 @@ pub async fn handle_connection(socket: WebSocket, state: SharedState, app: AppHa
     let (mut sink, mut stream) = socket.split();
     let (tx, mut rx) = mpsc::channel::<ToAgent>(64);
     let mut agent_id: Option<String> = None;
+    let mut my_gen: u64 = 0;
 
     // Forward outbound messages to WS sink
     tokio::spawn(async move {
@@ -45,7 +46,13 @@ pub async fn handle_connection(socket: WebSocket, state: SharedState, app: AppHa
                 agent_id = Some(id.clone());
                 let (buffered_messages, buffered_verdicts) = {
                     let mut daemon = state.write().await;
-                    daemon.attached_agents.insert(id.clone(), tx.clone());
+                    let gen = daemon.next_agent_gen;
+                    daemon.next_agent_gen += 1;
+                    my_gen = gen;
+                    daemon.attached_agents.insert(
+                        id.clone(),
+                        crate::daemon::state::AgentSender::new(tx.clone(), gen),
+                    );
                     let role = match id.as_str() {
                         "claude" => Some(daemon.claude_role.clone()),
                         "codex" => Some(daemon.codex_role.clone()),
@@ -114,8 +121,19 @@ pub async fn handle_connection(socket: WebSocket, state: SharedState, app: AppHa
     }
 
     if let Some(id) = &agent_id {
-        state.write().await.attached_agents.remove(id);
-        gui::emit_agent_status(&app, id, false, None);
-        gui::emit_system_log(&app, "info", &format!("[Control] {id} disconnected"));
+        let mut daemon = state.write().await;
+        let is_ours = daemon
+            .attached_agents
+            .get(id.as_str())
+            .map_or(false, |s| s.gen == my_gen);
+        if is_ours {
+            daemon.attached_agents.remove(id);
+            drop(daemon);
+            gui::emit_agent_status(&app, id, false, None);
+            gui::emit_system_log(&app, "info", &format!("[Control] {id} disconnected"));
+        } else {
+            drop(daemon);
+            gui::emit_system_log(&app, "info", &format!("[Control] {id} stale connection closed"));
+        }
     }
 }

@@ -62,9 +62,9 @@ export const useBridgeStore = create<BridgeState>((set, get) => {
       if (target && target !== "auto") {
         sendOne(target);
       } else {
-        // Auto: broadcast to all connected agents
-        sendOne(claudeRole);
-        sendOne(codexRole);
+        // Auto: broadcast to all connected agents (dedupe if same role)
+        const targets = new Set([claudeRole, codexRole]);
+        for (const t of targets) sendOne(t);
       }
     },
 

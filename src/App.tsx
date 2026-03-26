@@ -7,7 +7,9 @@ export default function App() {
   const messages = useBridgeStore((s) => s.messages);
   const agents = useBridgeStore((s) => s.agents);
   const connected = useBridgeStore((s) => s.connected);
-  const codexConnected = agents.codex?.status === "connected";
+  const anyAgentConnected =
+    agents.codex?.status === "connected" ||
+    agents.claude?.status === "connected";
 
   return (
     <div
@@ -27,15 +29,12 @@ export default function App() {
           </span>
           <div className="absolute bottom-0 left-4 right-4 h-px bg-linear-to-r from-transparent via-claude/30 to-transparent" />
         </div>
-        <AgentStatusPanel
-          agents={agents}
-          connected={connected}
-        />
+        <AgentStatusPanel agents={agents} connected={connected} />
       </div>
 
       <div className="flex-1 flex flex-col min-w-0 animate-in fade-in duration-500">
         <MessagePanel messages={messages} />
-        <ReplyInput connected={codexConnected} />
+        <ReplyInput connected={anyAgentConnected} />
       </div>
     </div>
   );

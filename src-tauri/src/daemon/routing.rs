@@ -30,8 +30,8 @@ pub async fn route_message_inner(state: &SharedState, msg: BridgeMessage) -> Rou
             if msg.from != "user" && msg.from != "system" && msg.from != s.codex_role {
                 return RouteResult::Dropped;
             }
-            if let Some(tx) = s.attached_agents.get("claude") {
-                Target::Claude(tx.clone())
+            if let Some(agent) = s.attached_agents.get("claude") {
+                Target::Claude(agent.tx.clone())
             } else {
                 Target::NeedBuffer
             }

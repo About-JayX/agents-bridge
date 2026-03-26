@@ -74,7 +74,7 @@ fn status_snapshot_reports_current_online_agents() {
     let mut s = DaemonState::new();
     let (claude_tx, _claude_rx) = tokio::sync::mpsc::channel::<ToAgent>(1);
     let (codex_tx, _codex_rx) = tokio::sync::mpsc::channel::<(String, bool)>(1);
-    s.attached_agents.insert("claude".into(), claude_tx);
+    s.attached_agents.insert("claude".into(), crate::daemon::state::AgentSender::new(claude_tx, 0));
     s.codex_inject_tx = Some(codex_tx);
 
     let snapshot = s.status_snapshot();
