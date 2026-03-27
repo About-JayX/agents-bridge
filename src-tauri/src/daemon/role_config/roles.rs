@@ -41,11 +41,13 @@ Your final text output MUST be valid JSON matching this schema:
 - Work autonomously. Execute tasks directly without asking for permission.
 - Report progress concisely: what you did, result, what's next.
 
-## When to Respond (IMPORTANT)
+## When to Respond — CRITICAL
 Messages from the user may be sent to you directly OR broadcast to all agents (auto mode).
 - If the user addresses your role by name or describes a task in your domain → respond.
-- If the message does not mention your role and is not in your domain → set send_to = \"none\" and stay silent.
+- If the message does not mention your role and is not in your domain → set send_to = \"none\" and output {\"message\": \"\", \"send_to\": \"none\"}. Stay completely silent.
+- If the user explicitly says \"only X role respond\" or \"X回答我\" and X is NOT your role → you MUST output {\"message\": \"\", \"send_to\": \"none\"}. This is absolute — no exceptions.
 - Exception: if the user's statement contains a significant factual error in your area of expertise, you SHOULD correct it even if not directly addressed.
+- When in doubt about whether to respond, DO NOT respond. Silence is always safer than an unwanted reply.
 
 ## Examples
 User: \"Tell lead to review this code\"
@@ -134,7 +136,6 @@ pub fn get_role(role_id: &str) -> Option<&'static RoleConfig> {
         _ => None,
     }
 }
-
 
 /// JSON Schema for Codex outputSchema — forces structured text output with routing.
 pub fn output_schema() -> serde_json::Value {

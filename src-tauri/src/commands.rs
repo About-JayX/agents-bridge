@@ -68,11 +68,15 @@ pub async fn daemon_set_claude_role(
     if !crate::daemon::is_valid_agent_role(&role) {
         return Err(format!("invalid role: {role}"));
     }
+    let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
     sender
         .0
-        .send(DaemonCmd::SetClaudeRole(role))
+        .send(DaemonCmd::SetClaudeRole { role, reply: reply_tx })
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    reply_rx
+        .await
+        .map_err(|_| "daemon dropped role reply".to_string())?
 }
 
 #[tauri::command]
@@ -83,11 +87,15 @@ pub async fn daemon_set_codex_role(
     if !crate::daemon::is_valid_agent_role(&role) {
         return Err(format!("invalid role: {role}"));
     }
+    let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
     sender
         .0
-        .send(DaemonCmd::SetCodexRole(role))
+        .send(DaemonCmd::SetCodexRole { role, reply: reply_tx })
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    reply_rx
+        .await
+        .map_err(|_| "daemon dropped role reply".to_string())?
 }
 
 #[tauri::command]

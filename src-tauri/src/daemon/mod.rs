@@ -18,38 +18,19 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 /// Shared daemon state accessible from all submodules.
 pub type SharedState = Arc<RwLock<DaemonState>>;
 
-/// Commands sent from Tauri commands/frontend to the daemon task.
 pub enum DaemonCmd {
-    /// User typed a message — daemon emits ONE GUI echo and fans out internally.
     SendUserInput { content: String, target: String },
-    /// Launch a Codex session for the given role.
     LaunchCodex {
-        role_id: String,
-        cwd: String,
-        model: Option<String>,
+        role_id: String, cwd: String, model: Option<String>,
         reply: oneshot::Sender<Result<(), String>>,
     },
-    /// Stop the current Codex session.
     StopCodex,
-    /// Stop active agents and let the app exit without orphaned child processes.
     Shutdown { reply: oneshot::Sender<()> },
-    /// Read the current runtime status snapshot for frontend hydration.
-    ReadStatusSnapshot {
-        reply: oneshot::Sender<types::DaemonStatusSnapshot>,
-    },
-    /// Read current Claude role for system prompt injection at launch.
-    ReadClaudeRole {
-        reply: oneshot::Sender<String>,
-    },
-    /// Update which role Claude is playing (affects routing).
-    SetClaudeRole(String),
-    /// Update which role Codex is playing (affects routing).
-    SetCodexRole(String),
-    /// Send a permission verdict back to the bridge for Claude Code.
-    RespondPermission {
-        request_id: String,
-        behavior: types::PermissionBehavior,
-    },
+    ReadStatusSnapshot { reply: oneshot::Sender<types::DaemonStatusSnapshot> },
+    ReadClaudeRole { reply: oneshot::Sender<String> },
+    SetClaudeRole { role: String, reply: oneshot::Sender<Result<(), String>> },
+    SetCodexRole { role: String, reply: oneshot::Sender<Result<(), String>> },
+    RespondPermission { request_id: String, behavior: types::PermissionBehavior },
 }
 
 /// Create the command channel.  Call before spawning to avoid the DaemonSender race.
@@ -73,6 +54,18 @@ async fn set_role(
     let old = std::mem::replace(field(&mut s), new.clone());
     if old != new { s.migrate_buffered_role(&old, &new); }
     true
+}
+
+async fn apply_role(
+    state: &SharedState, app: &AppHandle, agent: &str, role: String,
+    field: fn(&mut DaemonState) -> &mut String, other: fn(&DaemonState) -> &str,
+) -> Result<(), String> {
+    if set_role(state, field, other, role.clone()).await {
+        Ok(())
+    } else {
+        gui::emit_system_log(app, "warn", &format!("[Daemon] {agent} role rejected: {role}"));
+        Err(format!("role '{role}' conflict or invalid"))
+    }
 }
 
 async fn stop_codex_session(
@@ -141,59 +134,52 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
             DaemonCmd::ReadClaudeRole { reply } => {
                 let _ = reply.send(state.read().await.claude_role.clone());
             }
-            DaemonCmd::SetClaudeRole(r) => {
-                if !set_role(&state, |s| &mut s.claude_role, |s| &s.codex_role, r.clone()).await {
-                    gui::emit_system_log(&app, "warn", &format!("[Daemon] claude role rejected: {r}"));
-                }
+            DaemonCmd::SetClaudeRole { role: r, reply } => {
+                let _ = reply.send(apply_role(&state, &app, "claude", r, |s| &mut s.claude_role, |s| &s.codex_role).await);
             }
-            DaemonCmd::SetCodexRole(r) => {
-                if !set_role(&state, |s| &mut s.codex_role, |s| &s.claude_role, r.clone()).await {
-                    gui::emit_system_log(&app, "warn", &format!("[Daemon] codex role rejected: {r}"));
-                }
+            DaemonCmd::SetCodexRole { role: r, reply } => {
+                let _ = reply.send(apply_role(&state, &app, "codex", r, |s| &mut s.codex_role, |s| &s.claude_role).await);
             }
             DaemonCmd::ReadStatusSnapshot { reply } => {
                 let snapshot = state.read().await.status_snapshot();
                 let _ = reply.send(snapshot);
             }
-            DaemonCmd::RespondPermission {
-                request_id,
-                behavior,
-            } => {
-                let resolved = {
-                    let mut daemon = state.write().await;
-                    daemon.resolve_permission(
-                        &request_id,
-                        behavior,
-                        chrono::Utc::now().timestamp_millis() as u64,
-                    )
-                };
-
-                let Some((agent_id, outbound)) = resolved else {
-                    gui::emit_system_log(&app, "warn",
-                        &format!("[Daemon] permission {request_id} unknown/expired"));
-                    continue;
-                };
-
-                let sender_tx = state.read().await.attached_agents.get(&agent_id).map(|s| s.tx.clone());
-                let verdict = match &outbound {
-                    types::ToAgent::PermissionVerdict { verdict } => Some(verdict.clone()),
-                    _ => None,
-                };
-
-                match sender_tx {
-                    Some(tx) if tx.send(outbound).await.is_ok() => {
-                        gui::emit_system_log(&app, "info",
-                            &format!("[Daemon] verdict delivered to {agent_id}"));
-                    }
-                    _ => {
-                        if let Some(v) = verdict {
-                            state.write().await.buffer_permission_verdict(&agent_id, v);
-                        }
-                        gui::emit_system_log(&app, "warn",
-                            &format!("[Daemon] {agent_id} offline, buffered verdict {request_id}"));
-                    }
-                }
+            DaemonCmd::RespondPermission { request_id, behavior } => {
+                handle_permission_verdict(&state, &app, request_id, behavior).await;
             }
+        }
+    }
+}
+
+async fn handle_permission_verdict(
+    state: &SharedState,
+    app: &AppHandle,
+    request_id: String,
+    behavior: types::PermissionBehavior,
+) {
+    let resolved = {
+        let mut daemon = state.write().await;
+        daemon.resolve_permission(&request_id, behavior, chrono::Utc::now().timestamp_millis() as u64)
+    };
+    let Some((agent_id, outbound)) = resolved else {
+        gui::emit_system_log(app, "warn", &format!("[Daemon] permission {request_id} unknown/expired"));
+        return;
+    };
+    let sender_tx = state.read().await.attached_agents.get(&agent_id).map(|s| s.tx.clone());
+    let verdict = match &outbound {
+        types::ToAgent::PermissionVerdict { verdict } => Some(verdict.clone()),
+        _ => None,
+    };
+    match sender_tx {
+        Some(tx) if tx.send(outbound).await.is_ok() => {
+            gui::emit_system_log(app, "info", &format!("[Daemon] verdict delivered to {agent_id}"));
+        }
+        _ => {
+            if let Some(v) = verdict {
+                state.write().await.buffer_permission_verdict(&agent_id, v);
+            }
+            gui::emit_system_log(app, "warn",
+                &format!("[Daemon] {agent_id} offline, buffered verdict {request_id}"));
         }
     }
 }

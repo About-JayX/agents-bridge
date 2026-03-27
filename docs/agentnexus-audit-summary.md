@@ -319,6 +319,35 @@ cargo clippy --workspace --all-targets -- -D warnings
 - `bun run build`：通过
 - `cargo clippy --workspace --all-targets -- -D warnings`：通过
 
+### 14. [已修复] 2026-03-27 reviewer 首轮严格审计修复
+
+- [已修复] **撤销前端 30s auto-clear timeout**：`ClaudeStreamIndicator.tsx` 中的 `THINKING_TIMEOUT_MS` 定时器已完全移除。该定时器会在 30 秒后把 `thinking` 强制设为 `false`，导致后续真实 `preview` 事件被 `listener-setup.ts` 的 `thinking` 守卫丢弃。daemon 已有完整的完成信号链路（`Done` 在 Claude reply 时由 `control/handler.rs` 发出，`Reset` 在 Claude 断开/终端退出时发出），前端不需要猜测超时。
+- [已修复] **bridge CHANNEL_INSTRUCTIONS 与 claude_prompt.rs 一致性**：`bridge/src/mcp_protocol.rs` 的 `CHANNEL_INSTRUCTIONS` 已与 `claude_prompt.rs` 的严格静默规则同步。移除了"Proactively report progress"等宽松表述，新增"Stay completely silent" / "Do NOT call reply()" / "This is absolute" 等约束，确保 Claude channel instructions 与 system prompt 不产生指令冲突。新增回归测试 `initialize_result_includes_silence_rules` 验证这些约束存在且不含宽松指令。
+- [已修复] **text_utils.rs 测试覆盖**：`src-tauri/src/claude_session/text_utils.rs` 新增 10 项单元测试，覆盖 CSI 序列清洗、OSC + BEL 终止、OSC + ST 终止、独立 BEL 清理、控制字符过滤、换行/制表符保留、混合场景、`tail_chars`、`normalize_prompt_text`、`extract_terminal_preview` 的 chrome 跳过。
+- [已修复] 清理无关未跟踪文件 `hello.ts`。
+
+### 15. [已修复] 2026-03-27 reviewer 二轮深度链路审计修复
+
+- [已修复] **P0: Claude 静默时 thinking 永远不消失** — `src-tauri/src/daemon/gui.rs` 新增 daemon 侧 idle timeout。机制：`emit_claude_stream` 在 `ThinkingStarted` 和 `Preview` 时 bump 一个 `AtomicU64` generation 并 spawn 15 秒延迟任务；`Done` 和 `Reset` 只 bump generation（使待定 timeout 失效）。若 15 秒内无 Preview 也无 Reply，延迟任务检查 generation 未变则 emit `Done`。这与被移除的前端 30s timeout 本质不同：(a) 由 daemon 权威发出而非前端猜测；(b) 每次 Preview 重置倒计时，不会中断活跃的 thinking；(c) 不修改前端 store，不阻断后续事件链。
+- [已修复] **P1: RoleSelect 与 daemon 真值分叉** — `DaemonCmd::SetClaudeRole` 和 `SetCodexRole` 改为携带 `oneshot::Sender<Result<(), String>>` reply channel。`commands.rs` 的 `daemon_set_*_role` 现在 await daemon 真实校验结果并回传前端。前端 `setRole()` 改为 optimistic + rollback：先写 store 保持 UI 响应，invoke 失败（冲突/非法 role）时立即回滚到 prev 值并通过 `logError` 展示错误。
+- [已修复] **P1: Codex raw_delta 无上限内存增长** — `src-tauri/src/daemon/codex/structured_output.rs` 的 `ingest_delta()` 新增 `RAW_DELTA_CAP = 512_000` 字节上限。超出时从 buffer 前端按 char boundary 裁剪，保留最近 512KB。与前端 100K 字符 preview 截断形成双层保护。
+- [已修复] **P2: 前端 ANSI regex CSI final byte 覆盖不完整** — `MessageMarkdown.tsx` 和 `ClaudeStreamIndicator.tsx` 的 CSI 正则从 `[A-Za-z]` 修正为 `[@-~]`（覆盖完整 0x40-0x7E final byte range）。两处去重提取为共享 `src/lib/strip-escapes.ts`，与 Rust `text_utils.rs` 语义对齐。新增 `tests/strip-escapes.test.ts` 8 项测试，覆盖 bracketed paste (`ESC[200~`) 等此前遗漏的序列。
+- [已知限制] **P3: Claude terminal attention 单次触发** — `claude_session/prompt.rs` 的 `attention_fired` 在 PTY 生命周期内只触发一次，后续交互 prompt 不再 emit attention。此为已知限制，不阻断主链路。
+
+### 16. [已修复] 2026-03-27 reviewer 三轮修复补充
+
+- [已修复] **setRole 并发竞态** — 前端 `setRole` 从 optimistic + rollback 改为 **非 optimistic**：store 只在 `invoke` 成功后才更新 role 值。daemon 回复通过 oneshot channel 几乎零延迟，UI 感知不到等待。彻底消除了多次快速切换时 stale rollback 覆盖正确值的竞态。
+- [已修复] **RAW_DELTA_CAP 截断后 preview 泄漏 JSON wrapper** — `StreamPreviewState` 新增 `truncated: bool` 标志。一旦 `raw_delta` 因超 512KB 被截断，`ingest_delta()` 直接返回 `None`，保持 `last_preview` 不变（最后一个有效 preview）。`reset()` 清除该标志。新增 3 项回归测试：`raw_delta_cap_enforced`、`truncation_does_not_leak_json_wrapper`（验证 `send_to` 不泄漏）、`truncated_flag_resets_on_new_turn`。
+
+## 验证记录（本轮 #16）
+
+- `cargo test --manifest-path src-tauri/Cargo.toml`：通过（72 tests）
+- `cargo test --manifest-path bridge/Cargo.toml`：通过（14 tests）
+- `bun test tests/`：通过（15 tests across 3 files）
+- `cargo clippy --workspace --all-targets -- -D warnings`：通过
+- `bun run build`：通过
+- `bun x tsc --noEmit -p tsconfig.app.json`：通过
+
 ## 相关文档
 
 - `docs/agents/claude-chain.md`

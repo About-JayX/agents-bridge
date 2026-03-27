@@ -1,19 +1,33 @@
 use serde_json::Value;
 
+/// Max bytes in raw delta buffer; bounds Rust-side memory for long responses.
+const RAW_DELTA_CAP: usize = 512_000;
+
 #[derive(Default)]
 pub(super) struct StreamPreviewState {
     raw_delta: String,
     last_preview: String,
+    /// Once truncation destroys the JSON prefix, stop re-parsing.
+    truncated: bool,
 }
 
 impl StreamPreviewState {
     pub(super) fn reset(&mut self) {
         self.raw_delta.clear();
         self.last_preview.clear();
+        self.truncated = false;
     }
 
     pub(super) fn ingest_delta(&mut self, text: &str) -> Option<String> {
         self.raw_delta.push_str(text);
+        if self.raw_delta.len() > RAW_DELTA_CAP {
+            let drop = self.raw_delta.len() - RAW_DELTA_CAP;
+            let mut b = drop;
+            while b < self.raw_delta.len() && !self.raw_delta.is_char_boundary(b) { b += 1; }
+            self.raw_delta.drain(..b);
+            self.truncated = true;
+        }
+        if self.truncated { return None; }
         let preview = extract_structured_message_preview(&self.raw_delta)?;
         if preview == self.last_preview {
             return None;
@@ -28,32 +42,25 @@ impl StreamPreviewState {
     }
 }
 
-/// Parse Codex structured output `{ "message": "...", "send_to": "..." }`.
-/// Falls back to raw text if not valid JSON.
 pub(super) fn parse_structured_output(raw: &str) -> (String, Option<String>) {
     if let Ok(v) = serde_json::from_str::<Value>(raw) {
-        let message = v["message"].as_str().unwrap_or(raw).to_string();
-        let send_to = v["send_to"].as_str().map(|s| s.to_string());
-        (message, send_to)
+        (v["message"].as_str().unwrap_or(raw).to_string(),
+         v["send_to"].as_str().map(str::to_string))
     } else {
         (raw.to_string(), None)
     }
 }
 
-pub(super) fn should_emit_final_message(text: &str) -> bool {
-    !text.trim().is_empty()
-}
+pub(super) fn should_emit_final_message(text: &str) -> bool { !text.trim().is_empty() }
 
 fn extract_structured_message_preview(raw: &str) -> Option<String> {
     if let Ok(v) = serde_json::from_str::<Value>(raw) {
-        let message = v["message"].as_str().unwrap_or("").to_string();
-        return should_emit_final_message(&message).then_some(message);
+        let msg = v["message"].as_str().unwrap_or("").to_string();
+        return should_emit_final_message(&msg).then_some(msg);
     }
-
     if !raw.trim_start().starts_with('{') {
         return should_emit_final_message(raw).then_some(raw.to_string());
     }
-
     let start = find_message_value_start(raw)?;
     let preview = decode_partial_json_string(&raw[start..]);
     should_emit_final_message(&preview).then_some(preview)
@@ -134,49 +141,56 @@ fn decode_partial_json_string(raw: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        extract_structured_message_preview, parse_structured_output,
-        should_emit_final_message,
-    };
+    use super::*;
+
+    fn preview(raw: &str) -> Option<String> { extract_structured_message_preview(raw) }
 
     #[test]
-    fn preview_extracts_message_from_complete_json() {
-        let raw = r#"{"message":"Hello world","send_to":"none"}"#;
-        assert_eq!(
-            extract_structured_message_preview(raw),
-            Some("Hello world".to_string())
-        );
+    fn preview_complete_json() {
+        assert_eq!(preview(r#"{"message":"Hello world","send_to":"none"}"#), Some("Hello world".into()));
     }
-
     #[test]
-    fn preview_extracts_partial_message_without_showing_json_wrapper() {
-        let raw = r#"{"message":"Hello wor"#;
-        assert_eq!(
-            extract_structured_message_preview(raw),
-            Some("Hello wor".to_string())
-        );
+    fn preview_partial_message() {
+        assert_eq!(preview(r#"{"message":"Hello wor"#), Some("Hello wor".into()));
     }
-
     #[test]
-    fn preview_decodes_basic_escape_sequences() {
-        let raw = r#"{"message":"line 1\nline 2\tok"#;
-        assert_eq!(
-            extract_structured_message_preview(raw),
-            Some("line 1\nline 2\tok".to_string())
-        );
+    fn preview_decodes_escapes() {
+        assert_eq!(preview(r#"{"message":"line 1\nline 2\tok"#), Some("line 1\nline 2\tok".into()));
     }
-
     #[test]
-    fn preview_is_none_before_message_field_appears() {
-        let raw = r#"{"send_to":"lead"}"#;
-        assert_eq!(extract_structured_message_preview(raw), None);
+    fn preview_none_without_message_field() {
+        assert_eq!(preview(r#"{"send_to":"lead"}"#), None);
     }
-
     #[test]
-    fn final_empty_message_is_not_emitted() {
-        let (display_text, send_to) =
-            parse_structured_output(r#"{"message":"   ","send_to":"lead"}"#);
-        assert_eq!(send_to.as_deref(), Some("lead"));
-        assert!(!should_emit_final_message(&display_text));
+    fn final_empty_message_not_emitted() {
+        let (text, to) = parse_structured_output(r#"{"message":"   ","send_to":"lead"}"#);
+        assert_eq!(to.as_deref(), Some("lead"));
+        assert!(!should_emit_final_message(&text));
+    }
+    #[test]
+    fn raw_delta_cap_enforced() {
+        let mut s = StreamPreviewState::default();
+        s.ingest_delta(&"x".repeat(RAW_DELTA_CAP + 100));
+        assert!(s.raw_delta.len() <= RAW_DELTA_CAP);
+    }
+    #[test]
+    fn truncation_does_not_leak_json_wrapper() {
+        let mut s = StreamPreviewState::default();
+        s.ingest_delta(r#"{"message":"Hello preview"#);
+        assert_eq!(s.last_preview, "Hello preview");
+        let rest = format!("{}{}","A".repeat(RAW_DELTA_CAP + 200), r#"","send_to":"lead"}"#);
+        assert!(s.ingest_delta(&rest).is_none(), "no new preview after truncation");
+        assert!(!s.last_preview.contains("send_to"));
+        assert_eq!(s.last_preview, "Hello preview");
+        assert!(s.truncated);
+    }
+    #[test]
+    fn truncated_flag_resets_on_new_turn() {
+        let mut s = StreamPreviewState::default();
+        s.ingest_delta(&"x".repeat(RAW_DELTA_CAP + 100));
+        assert!(s.truncated);
+        s.reset();
+        assert!(!s.truncated);
+        assert!(s.raw_delta.is_empty());
     }
 }

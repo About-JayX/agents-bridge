@@ -33,15 +33,38 @@ pub fn strip_ansi(raw: &str) -> String {
     let mut chars = raw.chars().peekable();
     while let Some(ch) = chars.next() {
         if ch == '\u{1b}' {
-            if matches!(chars.peek(), Some('[')) {
-                chars.next();
-                for esc in chars.by_ref() {
-                    if ('@'..='~').contains(&esc) {
-                        break;
+            match chars.peek() {
+                // CSI sequence: ESC [ ... <final byte>
+                Some('[') => {
+                    chars.next();
+                    for esc in chars.by_ref() {
+                        if ('@'..='~').contains(&esc) {
+                            break;
+                        }
                     }
                 }
-                continue;
+                // OSC sequence: ESC ] ... (BEL | ESC \)
+                Some(']') => {
+                    chars.next();
+                    while let Some(osc) = chars.next() {
+                        if osc == '\x07' {
+                            break;
+                        }
+                        if osc == '\u{1b}' && matches!(chars.peek(), Some('\\')) {
+                            chars.next();
+                            break;
+                        }
+                    }
+                }
+                // Other ESC sequences (single char after ESC)
+                _ => {
+                    chars.next();
+                }
             }
+            continue;
+        }
+        // Strip other common control chars (BEL, etc.) but keep \n \r \t
+        if ch.is_control() && ch != '\n' && ch != '\r' && ch != '\t' {
             continue;
         }
         out.push(ch);
@@ -114,34 +137,47 @@ fn is_terminal_chrome_line(line: &str) -> bool {
 fn is_box_drawing_only(line: &str) -> bool {
     line.chars().all(|ch| {
         ch.is_whitespace()
-            || matches!(
-                ch,
-                '│'
-                    | '─'
-                    | '╭'
-                    | '╮'
-                    | '╰'
-                    | '╯'
-                    | '┌'
-                    | '┐'
-                    | '└'
-                    | '┘'
-                    | '├'
-                    | '┤'
-                    | '┬'
-                    | '┴'
-                    | '┼'
-                    | '═'
-                    | '║'
-                    | '╔'
-                    | '╗'
-                    | '╚'
-                    | '╝'
-                    | '╠'
-                    | '╣'
-                    | '╦'
-                    | '╩'
-                    | '╬'
-            )
+            || ('\u{2500}'..='\u{257F}').contains(&ch) // Box Drawing block
+            || ('\u{2580}'..='\u{259F}').contains(&ch) // Block Elements
+            || matches!(ch, '╭' | '╮' | '╰' | '╯')   // rounded corners (U+256D–U+2570)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strip_ansi_csi() {
+        assert_eq!(strip_ansi("\x1b[31mhello\x1b[0m"), "hello");
+        assert_eq!(strip_ansi("\x1b[1;34mcolored\x1b[0m text"), "colored text");
+    }
+    #[test]
+    fn strip_ansi_osc_bel() { assert_eq!(strip_ansi("\x1b]0;title\x07text"), "text"); }
+    #[test]
+    fn strip_ansi_osc_st() { assert_eq!(strip_ansi("\x1b]0;title\x1b\\text"), "text"); }
+    #[test]
+    fn strip_ansi_standalone_bel() { assert_eq!(strip_ansi("a\x07b"), "ab"); }
+    #[test]
+    fn strip_ansi_keeps_whitespace() { assert_eq!(strip_ansi("a\nb\tc"), "a\nb\tc"); }
+    #[test]
+    fn strip_ansi_control_chars() { assert_eq!(strip_ansi("a\x01\x02b"), "ab"); }
+    #[test]
+    fn strip_ansi_mixed() {
+        assert_eq!(strip_ansi("\x1b]0;t\x07\x1b[32mg\x1b[0m n"), "g n");
+    }
+    #[test]
+    fn tail_chars_basic() {
+        assert_eq!(tail_chars("abcdef", 3), "def");
+        assert_eq!(tail_chars("ab", 5), "ab");
+    }
+    #[test]
+    fn normalize_strips_and_joins() {
+        assert_eq!(normalize_prompt_text("\x1b[1m  hello   world  \x1b[0m"), "hello world");
+    }
+    #[test]
+    fn preview_skips_chrome() {
+        let input = "Esc to interrupt\n╭──────╮\nreal content\n╰──────╯\n";
+        assert_eq!(extract_terminal_preview(input).as_deref(), Some("real content"));
+    }
 }

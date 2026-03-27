@@ -118,13 +118,12 @@ export const useBridgeStore = create<BridgeState>((set, get) => {
     },
 
     setRole: (agent, role) => {
-      if (agent === "claude") {
-        set({ claudeRole: role });
-        invoke("daemon_set_claude_role", { role }).catch(logError(set));
-      } else {
-        set({ codexRole: role });
-        invoke("daemon_set_codex_role", { role }).catch(logError(set));
-      }
+      const cmd =
+        agent === "claude" ? "daemon_set_claude_role" : "daemon_set_codex_role";
+      const key = agent === "claude" ? "claudeRole" : "codexRole";
+      invoke(cmd, { role })
+        .then(() => set({ [key]: role }))
+        .catch(logError(set));
     },
 
     cleanup: () => {

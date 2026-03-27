@@ -1,5 +1,6 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { stripEscapes } from "@/lib/strip-escapes";
 
 const remarkPlugins = [remarkGfm];
 
@@ -97,10 +98,11 @@ interface MessageMarkdownProps {
 }
 
 export function MessageMarkdown({ content }: MessageMarkdownProps) {
+  const cleaned = stripEscapes(content);
   return (
     <div className="space-y-3 break-words text-[13px] leading-relaxed">
       <ReactMarkdown remarkPlugins={remarkPlugins} components={mdComponents}>
-        {content}
+        {cleaned}
       </ReactMarkdown>
     </div>
   );
