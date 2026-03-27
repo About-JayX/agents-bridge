@@ -1,5 +1,6 @@
 use super::{
     drain_log_lines, extract_terminal_preview, needs_user_attention,
+    next_attention_event,
     should_auto_confirm_development_prompt, should_emit_attention,
 };
 
@@ -134,4 +135,35 @@ fn terminal_preview_returns_last_meaningful_block() {
 fn terminal_preview_strips_ansi_from_meaningful_text() {
     let preview = extract_terminal_preview("\u{1b}[32mAnalyzing\u{1b}[0m repo\n").unwrap();
     assert_eq!(preview, "Analyzing repo");
+}
+
+#[test]
+fn attention_event_debounces_while_same_prompt_stays_visible() {
+    let transcript = "Select an action:\n1. Continue\n2. Cancel\n";
+
+    let first = next_attention_event(false, transcript, true, false);
+    assert!(first.emit);
+    assert!(first.active);
+
+    let second = next_attention_event(first.active, transcript, true, false);
+    assert!(!second.emit);
+    assert!(second.active);
+}
+
+#[test]
+fn attention_event_refires_after_prompt_clears_and_returns() {
+    let prompt = "Continue?\n";
+    let cleared = "Working...\n";
+
+    let first = next_attention_event(false, prompt, true, false);
+    assert!(first.emit);
+    assert!(first.active);
+
+    let idle = next_attention_event(first.active, cleared, true, false);
+    assert!(!idle.emit);
+    assert!(!idle.active);
+
+    let second = next_attention_event(idle.active, prompt, true, false);
+    assert!(second.emit);
+    assert!(second.active);
 }

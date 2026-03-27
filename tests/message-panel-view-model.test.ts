@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   filterRenderableChatMessages,
+  getClaudeTerminalPlaceholder,
   getClaudeAttentionResolution,
   getTransientIndicators,
 } from "../src/components/MessagePanel/view-model";
@@ -65,6 +66,20 @@ describe("getTransientIndicators", () => {
       ),
     ).toEqual([]);
   });
+
+  test("ignores Claude preview-only state and only shows active thinking", () => {
+    expect(
+      getTransientIndicators(
+        { thinking: false, previewText: "garbled preview", lastUpdatedAt: 1 },
+        {
+          thinking: false,
+          currentDelta: "",
+          lastMessage: "",
+          turnStatus: "",
+        },
+      ),
+    ).toEqual([]);
+  });
 });
 
 describe("getClaudeAttentionResolution", () => {
@@ -87,5 +102,29 @@ describe("getClaudeAttentionResolution", () => {
       nextTab: null,
       clearStoreAttention: false,
     });
+  });
+});
+
+describe("getClaudeTerminalPlaceholder", () => {
+  test("shows a waiting hint when Claude is connected but no terminal output arrived yet", () => {
+    expect(getClaudeTerminalPlaceholder(true, false, 0)).toBe(
+      "Claude is connected. Waiting for terminal output…",
+    );
+  });
+
+  test("shows startup hint while terminal is launching with no chunks", () => {
+    expect(getClaudeTerminalPlaceholder(false, true, 0)).toBe(
+      "Claude terminal is starting. Waiting for output…",
+    );
+  });
+
+  test("returns idle hint only when Claude is fully inactive", () => {
+    expect(getClaudeTerminalPlaceholder(false, false, 0)).toBe(
+      "Claude terminal is idle. Connect Claude to start an embedded session.",
+    );
+  });
+
+  test("returns null once terminal output exists", () => {
+    expect(getClaudeTerminalPlaceholder(true, true, 2)).toBeNull();
   });
 });

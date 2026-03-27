@@ -25,7 +25,7 @@ pub fn spawn_auto_confirm_thread(
             let mut transcript = String::new();
             let mut pending_log = String::new();
             let mut confirmed = false;
-            let mut attention_fired = false;
+            let mut attention_active = false;
             let mut last_preview = String::new();
 
             loop {
@@ -57,8 +57,14 @@ pub fn spawn_auto_confirm_thread(
                                 }
                             }
                         }
-                        if !attention_fired && should_emit_attention(&transcript, confirmed, dev_prompt) {
-                            attention_fired = true;
+                        let attention = next_attention_event(
+                            attention_active,
+                            &transcript,
+                            confirmed,
+                            dev_prompt,
+                        );
+                        attention_active = attention.active;
+                        if attention.emit {
                             crate::daemon::gui::emit_claude_terminal_attention(&app);
                         }
                         if confirmed || !dev_prompt {
@@ -171,6 +177,25 @@ fn needs_user_attention(transcript: &str) -> bool {
 
 fn should_emit_attention(transcript: &str, confirmed: bool, dev_prompt: bool) -> bool {
     (!confirmed && dev_prompt) || needs_user_attention(transcript)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct AttentionEvent {
+    active: bool,
+    emit: bool,
+}
+
+fn next_attention_event(
+    was_active: bool,
+    transcript: &str,
+    confirmed: bool,
+    dev_prompt: bool,
+) -> AttentionEvent {
+    let active = should_emit_attention(transcript, confirmed, dev_prompt);
+    AttentionEvent {
+        active,
+        emit: active && !was_active,
+    }
 }
 
 use super::text_utils::{normalize_prompt_compact_text, normalize_prompt_text, strip_ansi, tail_chars};

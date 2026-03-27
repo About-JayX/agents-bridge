@@ -6,6 +6,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import type { ClaudeTerminalChunk } from "@/stores/bridge-store/types";
 import { createClaudeTerminalOptions } from "./claude-terminal-config";
+import { getClaudeTerminalPlaceholder } from "./view-model";
 
 interface ClaudeTerminalPaneProps {
   chunks: ClaudeTerminalChunk[];
@@ -98,11 +99,17 @@ export function ClaudeTerminalPane({
     };
   }, [focusNonce]);
 
+  const placeholder = getClaudeTerminalPlaceholder(
+    connected,
+    running,
+    chunks.length,
+  );
+
   return (
     <div className="flex flex-1 flex-col min-h-0 bg-[#090b10]">
-      {!connected && chunks.length === 0 && (
+      {placeholder && (
         <div className="flex flex-1 items-center justify-center px-6 text-center text-[13px] text-muted-foreground">
-          Claude terminal is idle. Connect Claude to start an embedded session.
+          {placeholder}
         </div>
       )}
       {!running && chunks.length > 0 && detail && (

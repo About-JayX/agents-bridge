@@ -453,6 +453,11 @@ AGENTS.md、Skills、MCP 工具、developer_sections 全部通过 `input[]` 或 
 
 - [未修复] `StreamPreviewState.raw_delta` 仍无长度上限。虽然前端 `codexStream.currentDelta` 已在 listener 层裁剪到最近 100,000 个字符，但 daemon 侧 `structured_output.rs::ingest_delta()` 仍会把整段原始 delta 持续累加到同一个 `String`，直到 `turn/completed` 才 `reset()`。长回复场景下，Rust 侧内存增长仍然存在。
 
+### 2026-03-27: 现场故障修复（Port 4500 残留）
+
+- [已修复] Codex 启动前现在会主动清理占用 4500 端口的孤儿 app-server。`codex::start()` 不再只是等 5 秒看端口会不会自己释放，而是先执行 `ensure_port_available()`，在端口被占用时调用 `kill_port_holder()` 再重试。
+- [已修复] 新增测试：`ensure_port_available_runs_cleanup_before_failing` 与 `ensure_port_available_times_out_when_cleanup_cannot_free_port`，锁住“先清理、后失败”的启动策略。
+
 ## 当前已知限制
 
 - 端口 4500 固定，不可配置

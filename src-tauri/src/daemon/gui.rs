@@ -3,6 +3,8 @@ use serde::Serialize;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
+use tauri::async_runtime;
+use super::window_focus::focus_main_window;
 
 /// Generation counter for Claude thinking idle timeout.
 /// Each ThinkingStarted/Preview bumps this and spawns a delayed Done check.
@@ -112,6 +114,7 @@ pub fn emit_claude_terminal_status(
 
 /// Emitted when Claude terminal shows an interactive prompt needing user input.
 pub fn emit_claude_terminal_attention(app: &AppHandle) {
+    focus_main_window(app);
     let _ = app.emit("claude_terminal_attention", ());
 }
 
@@ -156,7 +159,7 @@ pub fn emit_claude_stream(app: &AppHandle, payload: ClaudeStreamPayload) {
 fn spawn_thinking_idle_timeout(app: &AppHandle) {
     let gen = CLAUDE_THINKING_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     let app = app.clone();
-    tokio::spawn(async move {
+    async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_secs(CLAUDE_THINKING_IDLE_SECS)).await;
         if CLAUDE_THINKING_GEN.load(Ordering::SeqCst) == gen {
             let _ = app.emit("claude_stream", ClaudeStreamPayload::Done);

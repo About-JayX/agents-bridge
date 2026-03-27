@@ -6,6 +6,7 @@ mod structured_output;
 
 use crate::daemon::{gui, role_config, SharedState};
 use session::SessionOpts;
+use std::future::Future;
 use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::{mpsc, Mutex};
@@ -32,6 +33,40 @@ impl CodexHandle {
     }
 }
 
+async fn ensure_port_available<F, Fut>(
+    codex_port: u16,
+    timeout: std::time::Duration,
+    mut cleanup: F,
+) -> anyhow::Result<()>
+where
+    F: FnMut(u16) -> Fut,
+    Fut: Future<Output = ()>,
+{
+    let deadline = tokio::time::Instant::now() + timeout;
+    let mut cleanup_attempted = false;
+
+    while tokio::net::TcpStream::connect(format!("127.0.0.1:{codex_port}"))
+        .await
+        .is_ok()
+    {
+        if !cleanup_attempted {
+            cleanup(codex_port).await;
+            cleanup_attempted = true;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            let suffix = if timeout.as_secs() > 0 {
+                format!(" after {}s", timeout.as_secs())
+            } else {
+                format!(" after {}ms", timeout.as_millis())
+            };
+            anyhow::bail!("Port {codex_port} still in use{suffix}");
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+
+    Ok(())
+}
+
 /// Start a Codex app-server for the given role and wire it up to the daemon state.
 pub async fn start(
     role_id: String,
@@ -54,17 +89,12 @@ pub async fn start(
     let codex_home = session_mgr.lock().await
         .create_session(&session_id, &sandbox_mode, &approval_policy)?;
 
-    // Wait for port to be free before spawning (previous process may still hold it)
-    let port_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
-    while tokio::net::TcpStream::connect(format!("127.0.0.1:{codex_port}"))
-        .await
-        .is_ok()
-    {
-        if tokio::time::Instant::now() >= port_deadline {
-            anyhow::bail!("Port {codex_port} still in use after 5s");
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-    }
+    // If a previous Codex session crashed, a port-holder orphan may survive.
+    // Proactively clean it before giving up on launch.
+    ensure_port_available(codex_port, std::time::Duration::from_secs(5), |port| {
+        lifecycle::kill_port_holder(port)
+    })
+    .await?;
 
     let child = lifecycle::start(codex_port, &codex_home, &cwd, &sandbox_mode, &approval_policy)
         .await?;
@@ -195,3 +225,7 @@ fn spawn_health_monitor(
         }
     });
 }
+
+#[cfg(test)]
+#[path = "start_tests.rs"]
+mod start_tests;

@@ -218,7 +218,7 @@
 ### 9. [已修复] 2026-03-27 交互链路修复（Messages / Claude Terminal / Thinking）
 
 - [已修复] Codex streaming 现在只显示结构化输出中的 `message`，不再把 `{"message":"...","send_to":"..."}` 原样泄漏到消息区。daemon 在 `item/agentMessage/delta` 阶段维护原始缓冲，并提取可展示 preview；前端 `codex_stream.delta` 语义同步收紧为“当前可展示 message 预览”，不再做字符串拼接。
-- [已修复] Claude 新增 `claude_stream` 事件链（`thinkingStarted` / `preview` / `done` / `reset`）。Messages 面板会在消息成功投递给 Claude 后显示稳定的 Claude thinking 占位，并用 PTY 原始输出生成降噪 preview；Claude 回 reply、终端退出、显式断开或手动 stop 时会清空 thinking。
+- [已修复] Claude 新增 `claude_stream` 事件链（`thinkingStarted` / `preview` / `done` / `reset`）。Messages 面板会在消息成功投递给 Claude 后显示稳定的 Claude thinking 占位；当前前端已不再消费 preview 文本，避免 PTY 摘要噪音直接进入消息区。Claude 回 reply、终端退出、显式断开或手动 stop 时会清空 thinking。
 - [已修复] Claude terminal attention 现在不仅会自动切到 `Claude Terminal` tab，还会通过前端 `claudeFocusNonce` 强制把键盘焦点放进 xterm，不再要求用户再点一次。该聚焦不依赖 `connected === true`，启动期 prompt 也能抢到输入焦点。
 - [已修复] 切回 `Messages` tab 时，`react-virtuoso` 会在组件重新挂载后立即跳到 `LAST`，不再回到顶部；tab 内正常 followOutput 和手动“Back to bottom”行为保持不变。
 - [已修复] 空消息过滤已收口到多层：
@@ -255,6 +255,22 @@
 
 - [已知问题] Codex 结构化输出 preview 虽然已经在前端 store 做了 100,000 字符上限，但 daemon 侧 `StreamPreviewState.raw_delta` 仍是无上限累积：`ingest_delta()` 每个 delta 都 `push_str()` 到同一个 `String`，直到 turn 完成才 `reset()`。长回复场景下，前端不会继续膨胀，但 Rust 进程内存仍会跟着整段原始输出增长。
 - [已知问题] `RoleSelect` / store 的 optimistic role 更新仍未真正闭环。前端 `setRole()` 先直接写 `claudeRole` / `codexRole`，而 Tauri `daemon_set_*_role` command 只返回“命令是否成功入队”；daemon 内部若因为重复 role 拒绝变更，只会写一条 system log，不会把拒绝结果回传给前端，因此 UI role 仍可能和实际 daemon 路由状态分叉。
+
+### 14. [已修复] 2026-03-27 现场故障修复（Codex 4500 端口 / Claude 终端空白）
+
+- [已修复] Codex 启动前不再只是被动等待 4500 端口释放。当前 `codex::start()` 先走 `ensure_port_available()`，如果发现端口仍被旧 app-server 占用，会主动调用 `kill_port_holder()` 清理孤儿持有者后再重试；只有清理后仍未释放才报 `Port 4500 still in use ...`。新增回归测试覆盖“cleanup 后成功启动”和“cleanup 无效时超时失败”两条路径。
+- [已修复] Claude 终端在“channel 已连接 / PTY 正在启动，但还没有任何 terminal chunk”时，不再显示一块没有内容的黑面板。当前 `ClaudeTerminalPane` 会给出明确占位文案：
+  - `Claude terminal is starting. Waiting for output…`
+  - `Claude is connected. Waiting for terminal output…`
+  从而区分“还没输出”和“真正卡死/空白”。
+
+### 15. [已知问题] 2026-03-27 Claude Terminal 历史回溯定位
+
+- [已知问题] `Claude Terminal` “不会自动 force 焦点 / 之后的交互 prompt 不再抢焦点”这条回归，历史上是两次改动叠加出来的：
+  - `5480b0f3`（`fix: attention event debounce — fire once, not per PTY chunk`）在 `src-tauri/src/claude_session/prompt.rs` 引入了会话级 `attention_fired` 一次性门闩。它解决了 attention storm，但也意味着同一个 PTY session 内后续 prompt 不会再次发 `claude_terminal_attention`。
+  - `90fa8994`（`fix: interaction chain — streaming display, empty filter, routing split`）把 `ClaudeTerminalPane` 的 focus effect 从 `connected` 驱动改成只由 `focusNonce` 驱动。结果是：终端是否自动拿到键盘焦点，完全依赖新的 attention 事件；一旦上游因为 `attention_fired` 不再发事件，键盘上下操作也就跟着失效，除非手动点击终端。
+- [说明] `404396bd`（`fix: terminal rendering — remove WebGL, fix scroll, cursor, PTY size, attention`）不是这次“不会 force/不能上下操作”的责任提交。它改的是 WebGL renderer、viewport overflow 和终端主题，方向上是在修复滚动/渲染问题，不是引入当前这条焦点回归。
+- [状态] 上述回归现已修复：`prompt.rs` 已从会话级一次性门闩改成 prompt 可见性的边沿触发。
 
 ## 当前仍需保留的已知限制
 
@@ -332,7 +348,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 - [已修复] **P1: RoleSelect 与 daemon 真值分叉** — `DaemonCmd::SetClaudeRole` 和 `SetCodexRole` 改为携带 `oneshot::Sender<Result<(), String>>` reply channel。`commands.rs` 的 `daemon_set_*_role` 现在 await daemon 真实校验结果并回传前端。前端 `setRole()` 改为 optimistic + rollback：先写 store 保持 UI 响应，invoke 失败（冲突/非法 role）时立即回滚到 prev 值并通过 `logError` 展示错误。
 - [已修复] **P1: Codex raw_delta 无上限内存增长** — `src-tauri/src/daemon/codex/structured_output.rs` 的 `ingest_delta()` 新增 `RAW_DELTA_CAP = 512_000` 字节上限。超出时从 buffer 前端按 char boundary 裁剪，保留最近 512KB。与前端 100K 字符 preview 截断形成双层保护。
 - [已修复] **P2: 前端 ANSI regex CSI final byte 覆盖不完整** — `MessageMarkdown.tsx` 和 `ClaudeStreamIndicator.tsx` 的 CSI 正则从 `[A-Za-z]` 修正为 `[@-~]`（覆盖完整 0x40-0x7E final byte range）。两处去重提取为共享 `src/lib/strip-escapes.ts`，与 Rust `text_utils.rs` 语义对齐。新增 `tests/strip-escapes.test.ts` 8 项测试，覆盖 bracketed paste (`ESC[200~`) 等此前遗漏的序列。
-- [已知限制] **P3: Claude terminal attention 单次触发** — `claude_session/prompt.rs` 的 `attention_fired` 在 PTY 生命周期内只触发一次，后续交互 prompt 不再 emit attention。此为已知限制，不阻断主链路。
+- [已修复] **P3: Claude terminal attention 单次触发** — `claude_session/prompt.rs` 不再使用会话级 `attention_fired` 一次性门闩，而是改成“prompt 可见性边沿触发”。同一个 prompt 持续可见时不会重复 emit，prompt 消失后再次出现时会重新 emit `claude_terminal_attention`。这条修复直接恢复了后续交互 prompt 的自动 force focus，终端方向键输入也随之恢复。
 
 ### 16. [已修复] 2026-03-27 reviewer 三轮修复补充
 
@@ -347,6 +363,32 @@ cargo clippy --workspace --all-targets -- -D warnings
 - `cargo clippy --workspace --all-targets -- -D warnings`：通过
 - `bun run build`：通过
 - `bun x tsc --noEmit -p tsconfig.app.json`：通过
+
+### 17. [已修复] 2026-03-27 现场复核补充（Claude force focus / PTY watcher panic）
+
+- [已修复] **主窗口前置缺口** — 上一轮修复只做到了前端 `ClaudeTerminalPane.terminal.focus()`，但没有在 attention 到来时把 Tauri 主窗口本身拉回前台。现场如果 App 已失焦或被最小化，方向键仍不会进入 xterm，看起来就像“不会自己 force”。当前 daemon 在 `emit_claude_terminal_attention()` 前会先对主窗口执行 `show -> unminimize -> set_focus`，然后前端再用 `claudeFocusNonce` 聚焦 xterm。
+- [已修复] **`claude-pty-watch` 运行态 panic** — 现场日志显示 `thread 'claude-pty-watch' panicked ... there is no reactor running`。根因是 PTY watcher 跑在普通 `std::thread`，但 `gui.rs` 的 Claude thinking idle timeout 用了 `tokio::spawn`。当 watcher 线程里发出 `claude_stream.preview` 时，会直接在无 Tokio reactor 的线程上 panic，导致 preview / attention / auto-confirm 后续全部失效。当前已改为 `tauri::async_runtime::spawn`，不再依赖调用线程自带 Tokio runtime。
+
+### 18. [已修复] 2026-03-27 Claude thinking UI 做减法
+
+- [已修复] **Claude preview 不再进入前端状态/UI** — 由于 PTY 摘要无法稳定捕捉，当前前端改为只保留单一 Claude `thinking…` 占位。`listener-setup.ts` 里的 `handleClaudeStreamEvent()` 现在直接忽略 `preview` payload，不再把文本写进 `claudeStream.previewText`。
+- [已修复] **Claude indicator 只依赖 `thinking`** — `MessageList` / `view-model` 不再把 `previewText` 当成 Claude indicator 的显示条件；`ClaudeStreamIndicator.tsx` 也不再渲染 preview 内容。即使 daemon 仍发 `claude_stream.preview`，消息区只会看到一个稳定的 Claude thinking 卡片。
+
+## 验证记录（本轮 #18）
+
+- `bun test tests/message-panel-view-model.test.ts`：通过（11 tests）
+- `bun test tests/claude-stream-reduction.test.ts`：通过（1 test）
+- `bun test tests/`：通过（20 tests across 4 files）
+- `bun run build`：通过
+
+## 验证记录（本轮 #17）
+
+- `cargo test --manifest-path src-tauri/Cargo.toml`：通过（78 tests）
+- `cargo test --manifest-path bridge/Cargo.toml`：通过（14 tests）
+- `bun test tests/`：通过（19 tests across 3 files）
+- `cargo clippy --workspace --all-targets -- -D warnings`：通过
+- `bun run build`：通过
+- `bun run tauri dev` 现场重建后未再复现 `claude-pty-watch` 的 `there is no reactor running` panic
 
 ## 相关文档
 

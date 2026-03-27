@@ -87,7 +87,7 @@ pub async fn stop(child: &mut Child, port: u16) {
     kill_port_holder(port).await;
 }
 
-async fn kill_port_holder(port: u16) {
+pub(super) async fn kill_port_holder(port: u16) {
     let self_pid = std::process::id() as i32;
     let Ok(output) = tokio::process::Command::new("lsof")
         .arg(format!("-ti:{port}"))

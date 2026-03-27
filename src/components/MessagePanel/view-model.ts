@@ -21,9 +21,7 @@ export function getTransientIndicators(
   codexStream: CodexStreamState,
 ): StreamIndicatorId[] {
   return [
-    ...(claudeStream.thinking || !!claudeStream.previewText
-      ? (["claude"] as const)
-      : []),
+    ...(claudeStream.thinking ? (["claude"] as const) : []),
     ...(codexStream.thinking || !!codexStream.currentDelta
       ? (["codex"] as const)
       : []),
@@ -55,4 +53,21 @@ export function getClaudeAttentionResolution(
     nextTab: "claude",
     clearStoreAttention: true,
   };
+}
+
+export function getClaudeTerminalPlaceholder(
+  connected: boolean,
+  running: boolean,
+  chunkCount: number,
+): string | null {
+  if (chunkCount > 0) {
+    return null;
+  }
+  if (running) {
+    return "Claude terminal is starting. Waiting for output…";
+  }
+  if (connected) {
+    return "Claude is connected. Waiting for terminal output…";
+  }
+  return "Claude terminal is idle. Connect Claude to start an embedded session.";
 }

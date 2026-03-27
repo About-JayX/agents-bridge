@@ -1,13 +1,10 @@
 import { useBridgeStore } from "@/stores/bridge-store";
-import { stripEscapes } from "@/lib/strip-escapes";
 import { SourceBadge } from "./SourceBadge";
 
 export function ClaudeStreamIndicator() {
-  const { thinking, previewText } = useBridgeStore((s) => s.claudeStream);
+  const thinking = useBridgeStore((s) => s.claudeStream.thinking);
 
-  if (!thinking && !previewText) return null;
-
-  const cleanPreview = previewText ? stripEscapes(previewText).trim() : "";
+  if (!thinking) return null;
 
   return (
     <div className="py-2">
@@ -22,11 +19,6 @@ export function ClaudeStreamIndicator() {
               Live in Claude Terminal
             </span>
           </div>
-          {cleanPreview && (
-            <div className="text-[13px] text-foreground/80 whitespace-pre-wrap max-h-40 overflow-y-auto">
-              {cleanPreview}
-            </div>
-          )}
         </div>
       </div>
     </div>

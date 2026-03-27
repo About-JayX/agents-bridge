@@ -129,30 +129,37 @@ pub async fn daemon_get_status_snapshot(
         .map_err(|_| "daemon dropped status snapshot reply".to_string())
 }
 
-/// Stop the tracked Claude CLI session.
-/// When Claude exits, its channel subprocess should drop too and daemon status
-/// will fall back to disconnected once the control websocket closes.
+/// Stop the tracked Claude CLI session and/or force-disconnect the bridge agent.
+/// Handles both managed PTY sessions and externally-connected Claude instances.
 #[tauri::command]
 pub async fn stop_claude(
     session: State<'_, Arc<ClaudeSessionManager>>,
+    sender: State<'_, DaemonSender>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
-    crate::claude_session::stop(session.inner().as_ref()).await?;
-    crate::daemon::gui::emit_claude_stream(&app, crate::daemon::gui::ClaudeStreamPayload::Reset);
-    crate::daemon::gui::emit_claude_terminal_status(
-        &app,
-        false,
-        None,
-        Some("Claude terminal stopped by user".into()),
-    );
-    crate::daemon::gui::emit_claude_terminal_data(
-        &app,
-        "\r\n[AgentNexus] Claude terminal stopped by user\r\n",
-    );
-    crate::daemon::gui::emit_system_log(&app, "info", "[Claude PTY] stopped by user");
-    // Defensive: emit claude offline immediately (WS disconnect will also emit later)
-    crate::daemon::gui::emit_agent_status(&app, "claude", false, None);
-    eprintln!("[Claude] stop: terminated managed Claude PTY session");
+    // Try to stop managed PTY session (may not exist if Claude connected externally)
+    let had_pty = crate::claude_session::stop(session.inner().as_ref()).await.is_ok();
+    if had_pty {
+        crate::daemon::gui::emit_claude_terminal_status(
+            &app,
+            false,
+            None,
+            Some("Claude terminal stopped by user".into()),
+        );
+        crate::daemon::gui::emit_claude_terminal_data(
+            &app,
+            "\r\n[AgentNexus] Claude terminal stopped by user\r\n",
+        );
+        eprintln!("[Claude] stop: terminated managed Claude PTY session");
+    }
+    // Force-disconnect the bridge agent (handles externally-connected Claude)
+    let _ = sender
+        .0
+        .send(DaemonCmd::ForceDisconnectAgent {
+            agent_id: "claude".into(),
+        })
+        .await;
+    crate::daemon::gui::emit_system_log(&app, "info", "[Claude] disconnected by user");
     Ok(())
 }
 

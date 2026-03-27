@@ -116,7 +116,7 @@ function resetClaudeStream(state: BridgeState): BridgeState["claudeStream"] {
   };
 }
 
-function handleClaudeStreamEvent(
+export function handleClaudeStreamEvent(
   state: BridgeState,
   payload: ClaudeStreamPayload,
 ): Partial<BridgeState> {
@@ -130,16 +130,7 @@ function handleClaudeStreamEvent(
         },
       };
     case "preview":
-      if (!state.claudeStream.thinking || !(payload.text ?? "").trim()) {
-        return {};
-      }
-      return {
-        claudeStream: {
-          ...state.claudeStream,
-          previewText: payload.text ?? "",
-          lastUpdatedAt: Date.now(),
-        },
-      };
+      return {};
     case "done":
     case "reset":
       return { claudeStream: resetClaudeStream(state) };

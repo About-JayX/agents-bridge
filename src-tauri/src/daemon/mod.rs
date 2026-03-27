@@ -8,6 +8,7 @@ pub mod routing_user_input;
 pub mod session_manager;
 pub mod state;
 pub mod types;
+mod window_focus;
 
 pub use state::DaemonState;
 
@@ -31,6 +32,9 @@ pub enum DaemonCmd {
     SetClaudeRole { role: String, reply: oneshot::Sender<Result<(), String>> },
     SetCodexRole { role: String, reply: oneshot::Sender<Result<(), String>> },
     RespondPermission { request_id: String, behavior: types::PermissionBehavior },
+    /// Force-disconnect an agent by removing it from attached_agents.
+    /// Dropping the sender causes the WS outbound task to end and the connection to close.
+    ForceDisconnectAgent { agent_id: String },
 }
 
 /// Create the command channel.  Call before spawning to avoid the DaemonSender race.
@@ -146,6 +150,19 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
             }
             DaemonCmd::RespondPermission { request_id, behavior } => {
                 handle_permission_verdict(&state, &app, request_id, behavior).await;
+            }
+            DaemonCmd::ForceDisconnectAgent { agent_id } => {
+                let removed = {
+                    let mut daemon = state.write().await;
+                    daemon.attached_agents.remove(&agent_id).is_some()
+                };
+                if removed {
+                    if agent_id == "claude" {
+                        gui::emit_claude_stream(&app, gui::ClaudeStreamPayload::Reset);
+                    }
+                    gui::emit_agent_status(&app, &agent_id, false, None);
+                    gui::emit_system_log(&app, "info", &format!("[Daemon] force-disconnected {agent_id}"));
+                }
             }
         }
     }

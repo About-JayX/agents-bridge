@@ -215,12 +215,12 @@ tool 调用通过 `CallToolRequestSchema` handler 处理，返回格式:
 - **文件**: `src/stores/bridge-store/helpers.ts:101`
 - **验证**: ✅ Connect Claude 后终端 tab 不再自动切换；只有真实交互 prompt 出现时才触发 attention
 
-#### [已知限制] `attention_fired` 每次 PTY 生命周期只触发一次
+#### [已修复] Claude terminal attention 改为 prompt 边沿触发
 
-- **现象**: `attention_fired` 标志在首次 attention 后永久为 true，同一 PTY session 内后续 prompt 不再触发 tab badge
-- **根因**: `prompt.rs` 中 `attention_fired` 设为 true 后无重置机制
-- **影响**: 低频场景（同一 session 内多次需要用户关注）会漏发 attention 事件
-- **建议**: 在 `confirmed` 从 false → true 时重置 `attention_fired`，允许后续真实 prompt 再次触发
+- **现象**: 之前 `attention_fired` 在首次 attention 后永久为 true，同一 PTY session 内后续 prompt 不再触发 tab badge，也不会再次递增 `claudeFocusNonce`
+- **根因**: `prompt.rs` 使用会话级一次性门闩去抑制 attention storm，结果把“同一 prompt 不要连发”误实现成了“整个 session 只发一次”
+- **修复**: `prompt.rs` 现在改成 prompt 可见性的边沿触发。当前 prompt 仍然可见时不重复 emit；prompt 消失后再次出现时，会重新 emit `claude_terminal_attention`
+- **结果**: 后续真实交互 prompt 会再次自动切到 `Claude Terminal` 并 force focus，方向键等键盘输入不再要求用户先手动点击终端
 
 ### 2026-03-26: Bridge 未被 Claude 启动 ("1 MCP server failed")
 
@@ -357,21 +357,36 @@ Claude Code CLI 支持多种注入机制，按强制性排序：
 ### 2026-03-27: Claude thinking 与终端强制聚焦
 
 - [已修复] Claude 现在有独立的 `claude_stream` 事件链：`thinkingStarted`、`preview`、`done`、`reset`。当消息成功投递给 Claude 时，Messages 面板会出现 Claude thinking 占位；Claude 回 reply、终端退出、显式断开或用户 stop 时会清空状态。
-- [已修复] Claude thinking 的 preview 来源于 PTY watcher，但不会直接把原始终端垃圾搬进消息区。当前实现会先 `strip_ansi`、处理 `\r` 覆盖写入、过滤空白帧/box-drawing-only 块/明显 terminal chrome，然后只把“最近一个有意义文本块”作为 preview 发给前端。
-- [已修复] `claude_terminal_attention` 现在不只负责切 tab，前端还会递增 `claudeFocusNonce`，让 `ClaudeTerminalPane` 在 tab 可见时直接 `terminal.focus()`。这条逻辑不再依赖 Claude bridge 已连接，因此 development prompt / 启动期交互 prompt 也能直接接收键盘输入。
+- [已修复] Claude thinking 现在按“直接做减法”收口。虽然 daemon 侧仍保留 `claude_stream.preview` 生命周期事件，但前端不再消费 preview 文本，也不再尝试把 PTY 内容摘要渲染进消息区；Messages 面板只显示一个稳定的 Claude `thinking…` 占位。
+- [已修复] `claude_terminal_attention` 现在不只负责切 tab，daemon 还会先尝试 `show -> unminimize -> set_focus` 主窗口，前端再递增 `claudeFocusNonce` 让 `ClaudeTerminalPane` 在 tab 可见时直接 `terminal.focus()`。这条逻辑不再依赖 Claude bridge 已连接，因此 development prompt / 启动期交互 prompt 也能直接接收键盘输入。
 - [已修复] bridge `reply` tool 现在拒绝空白 `text`，避免 Claude 产生空消息后污染 daemon 路由和消息历史。
 
-**验证:** ✅ Claude terminal attention 触发后无需鼠标点击即可直接输入；Messages 面板可显示 Claude thinking 与降噪 preview；Claude 发送空 reply 时不会出现空白消息气泡。
+**验证:** ✅ Claude terminal attention 触发后无需鼠标点击即可直接输入；Messages 面板只显示单一 Claude thinking 占位；Claude 发送空 reply 时不会出现空白消息气泡。
+
+### 2026-03-27: 现场复核补充（runtime panic / 窗口前置）
+
+- [已修复] `claude-pty-watch` 线程之前会在运行态直接 panic。根因是 `prompt.rs` 的 PTY watcher 运行在普通 `std::thread` 中，但 `gui.rs` 的 `emit_claude_stream(Preview)` 内部又调用了 `tokio::spawn` 来挂 thinking idle timeout；该线程没有 Tokio reactor，于是现场报错 `there is no reactor running` 并直接打死 watcher。当前已改为 `tauri::async_runtime::spawn`，不再依赖调用线程本身挂着 Tokio runtime。
+- [已修复] 仅靠前端 `terminal.focus()` 还不足以覆盖“App 窗口本身已经失焦或被最小化”的场景。当前 daemon 在发 `claude_terminal_attention` 前，会先尝试拉起主窗口，再由前端聚焦 xterm，从而把“自动切 tab”补全为真正可输入的 force focus。
+
+**验证:** ✅ `cargo test --manifest-path src-tauri/Cargo.toml` 通过（78 tests）；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`bun run build` 通过；dev 模式下重建后未再复现 `there is no reactor running` panic。
 
 ### 2026-03-27: Superpowers 复核收口
 
 - [已修复] `claude_terminal_attention` 在用户已经停留在 Claude tab 时，不再把 `claudeNeedsAttention` 脏状态残留在 store。当前前端通过 `getClaudeAttentionResolution()` 同时决定“是否切 tab”和“是否清空 store attention”，避免后续切去别的 tab 时被强行弹回 Claude。
 - [已修复] `claudeNeedsAttention` 的清理不再通过组件内 `useBridgeStore.setState(...)` 直接写 store；前端 store 新增 `clearClaudeAttention()` action，保持 attention 生命周期与其它 bridge 状态更新路径一致。
 - [已修复] `ClaudeTerminalPane` 的强制 focus effect 已缩减为只由 `focusNonce` 驱动；`connected` / `running` 状态变化不再隐式触发 `terminal.focus()`。
-- [已修复] Claude preview 文本清洗补了 ANSI 有效内容测试，保证含颜色控制符的真实终端输出在进入 `claude_stream.preview` 前仍能保留语义文本。
+- [说明] Claude preview 文本清洗链路仍保留在 daemon 侧，但当前前端已不再消费该 preview；UI 行为以单一 thinking 占位为准。
 - [已修复] Claude thinking 的启动判定现在与真实路由结果绑定在同一份 daemon state 快照里，不再依赖 `route_message_with_display()` 额外读取一次 `claude_role`。角色切换瞬间不会再出现“消息已按旧角色投递、thinking 却按新角色判断”的竞态。
 
 **验证:** ✅ `cargo test --manifest-path src-tauri/Cargo.toml` 通过；`bun test tests/message-panel-view-model.test.ts` 通过；attention 留存与强制 focus 回归路径已覆盖。
+
+### 2026-03-27: 现场故障修复（终端空白等待态）
+
+- [已修复] Claude terminal 在“channel 已连接 / PTY 正在启动，但 아직没有任何 terminal chunk”时，不再显示空白黑屏。当前前端通过 `getClaudeTerminalPlaceholder()` 区分三种状态：
+  - idle: `Claude terminal is idle. Connect Claude to start an embedded session.`
+  - starting: `Claude terminal is starting. Waiting for output…`
+  - connected/no-output: `Claude is connected. Waiting for terminal output…`
+- [已修复] 这样即使 Claude 还没开始打印任何 ANSI 输出，用户也能知道它是“正在等输出”，不是前端已经失去响应。
 
 ## 当前已知限制
 
