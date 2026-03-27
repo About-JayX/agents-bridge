@@ -138,11 +138,11 @@ pub async fn route_user_input(
         let s = state.read().await;
         resolve_user_targets(&s, &target)
     };
-    let display_to = if targets.len() == 1 {
-        targets[0].clone()
-    } else {
-        target
-    };
+    if targets.is_empty() {
+        gui::emit_system_log(app, "warn", "[Route] no online targets for user input");
+        return;
+    }
+    let display_to = if targets.len() == 1 { targets[0].clone() } else { target };
     let now = chrono::Utc::now().timestamp_millis() as u64;
     let echo = BridgeMessage {
         id: format!("user_{now}"),
@@ -154,9 +154,6 @@ pub async fn route_user_input(
         priority: None,
     };
     gui::emit_agent_message(app, &echo);
-    if targets.is_empty() {
-        gui::emit_system_log(app, "warn", "[Route] no online targets for user input");
-    }
     for role in targets {
         let msg = BridgeMessage {
             id: format!("user_{now}_{role}"),

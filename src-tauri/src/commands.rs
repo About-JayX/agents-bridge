@@ -27,6 +27,9 @@ pub async fn daemon_send_user_input(
     target: String,
     sender: State<'_, DaemonSender>,
 ) -> Result<(), String> {
+    if target != "auto" && !crate::daemon::is_valid_agent_role(&target) {
+        return Err(format!("invalid target role: {target}"));
+    }
     sender
         .0
         .send(DaemonCmd::SendUserInput { content, target })
@@ -41,6 +44,9 @@ pub async fn daemon_launch_codex(
     model: Option<String>,
     sender: State<'_, DaemonSender>,
 ) -> Result<(), String> {
+    if !crate::daemon::is_valid_agent_role(&role_id) {
+        return Err(format!("invalid role: {role_id}"));
+    }
     let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
     sender
         .0
@@ -71,6 +77,9 @@ pub async fn daemon_set_claude_role(
     role: String,
     sender: State<'_, DaemonSender>,
 ) -> Result<(), String> {
+    if !crate::daemon::is_valid_agent_role(&role) {
+        return Err(format!("invalid role: {role}"));
+    }
     sender
         .0
         .send(DaemonCmd::SetClaudeRole(role))
@@ -83,6 +92,9 @@ pub async fn daemon_set_codex_role(
     role: String,
     sender: State<'_, DaemonSender>,
 ) -> Result<(), String> {
+    if !crate::daemon::is_valid_agent_role(&role) {
+        return Err(format!("invalid role: {role}"));
+    }
     sender
         .0
         .send(DaemonCmd::SetCodexRole(role))

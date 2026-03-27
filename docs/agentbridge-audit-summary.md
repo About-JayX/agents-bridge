@@ -198,6 +198,12 @@
 - [已修复] `route_user_input` 在零目标时 emit 系统日志警告，用户可观测。
 - [已修复] 补充回归测试：`auto_excludes_user_role`、`migrate_buffered_role_retargets_messages`、`take_buffered_for_drains_only_matching_role`、`buffered_verdicts_round_trip`、`buffered_verdicts_cap_at_50`。
 
+### 6. [已修复] 2026-03-27 深度复核（基于 `0a9b833f`）发现的残余问题
+
+- [已修复] daemon API 边界 role 白名单：`AGENT_ROLES` 白名单 + `is_valid_agent_role()` 校验已加入 `set_role`、`daemon_set_claude_role`、`daemon_set_codex_role`、`daemon_launch_codex`、`daemon_send_user_input`。`”user”` 和非法 role 在 Tauri command 层即被拒绝。
+- [已修复] zero-target 语义：`route_user_input` 现在在 `targets.is_empty()` 时 **不再** emit GUI echo，只写 warn 日志并直接 return，避免”看似已发送”的假气泡。
+- [已修复] 行为级回归测试：新增 `auto_fanout_delivers_to_both_agents`、`explicit_user_target_routes_to_gui`、`valid_roles_accepted`、`user_role_rejected`、`unknown_role_rejected`（共 5 项），覆盖 fan-out 投递、user target 路由、role 白名单。
+
 ## 当前仍需保留的已知限制
 
 - [已知限制] `threadId` 尚未从 daemon 暴露到前端，Codex 头部无法显示真实 thread。
@@ -206,7 +212,7 @@
   - Codex inject replay tail 保留
   - MCP pre-init buffer 安全
   - permission auto-deny + write failure exit
-- [已知限制] `RoleSelect` 与 daemon role 拒绝结果之间仍缺少显式回传，role 唯一性在 UI 边界上没有完全闭环。
+- [已知限制] `RoleSelect` 与 daemon role 拒绝结果之间仍缺少显式回传（daemon 返回 `Err` 但前端 optimistic 更新 store，需要回滚逻辑）。
 
 ## 验证记录
 
@@ -229,6 +235,13 @@ cargo clippy --workspace --all-targets -- -D warnings
 - `cargo test`：通过（49 tests）
 - `bun run build`：通过（修复 `react-virtuoso` 依赖安装后）
 - `cargo clippy --workspace --all-targets -- -D warnings`：通过（修复 12 项 lint 问题后）
+
+在 2026-03-27 对 `0a9b833f` 的深度审查时再次复核：
+
+- `cargo test`：通过
+- `cargo clippy --workspace --all-targets -- -D warnings`：通过
+- `bun run build`：通过
+- 结论：单气泡修复、依赖补齐、clippy 清理都已落地；但 role 白名单仍未在 daemon API 边界强制，zero-target 路径仍会留下“看似已发送”的 user 气泡，`route_user_input` 也还缺少真正的行为级回归测试。
 
 ## 相关文档
 

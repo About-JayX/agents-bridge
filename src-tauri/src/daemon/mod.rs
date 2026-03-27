@@ -57,15 +57,19 @@ pub fn channel() -> (mpsc::Sender<DaemonCmd>, mpsc::Receiver<DaemonCmd>) {
     mpsc::channel(64)
 }
 
-/// Set a role, rejecting if the other agent already holds it.
+const AGENT_ROLES: &[&str] = &["lead", "coder", "reviewer", "tester"];
+
+pub fn is_valid_agent_role(role: &str) -> bool { AGENT_ROLES.contains(&role) }
+
 async fn set_role(
     state: &SharedState,
     field: fn(&mut DaemonState) -> &mut String,
     other: fn(&DaemonState) -> &str,
     new: String,
 ) -> bool {
+    if !is_valid_agent_role(&new) { return false; }
     let mut s = state.write().await;
-    if other(&s) == new { return false; } // conflict: other agent holds this role
+    if other(&s) == new { return false; }
     let old = std::mem::replace(field(&mut s), new.clone());
     if old != new { s.migrate_buffered_role(&old, &new); }
     true
@@ -85,10 +89,8 @@ async fn stop_codex_session(
     gui::emit_agent_status(app, "codex", false, None);
 }
 
-/// Run the daemon.  Consumes `cmd_rx`; should be spawned via `tauri::async_runtime::spawn`.
 pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
     let state: SharedState = Arc::new(RwLock::new(DaemonState::new()));
-
     // WS control server — bridge processes connect here
     {
         let s = state.clone();
@@ -99,9 +101,7 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
             }
         });
     }
-
     let mut codex_handle: Option<codex::CodexHandle> = None;
-
     while let Some(cmd) = cmd_rx.recv().await {
         match cmd {
             DaemonCmd::SendMessage(msg) => routing::route_message(&state, &app, msg).await,
@@ -134,23 +134,23 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
                     };
                 let _ = reply.send(launch_result);
             }
-
             DaemonCmd::StopCodex => stop_codex_session(&mut codex_handle, &state, &app).await,
             DaemonCmd::Shutdown { reply } => {
                 stop_codex_session(&mut codex_handle, &state, &app).await;
                 let _ = reply.send(()); break;
             }
-
             DaemonCmd::ReadClaudeRole { reply } => {
-                let role = state.read().await.claude_role.clone();
-                let _ = reply.send(role);
+                let _ = reply.send(state.read().await.claude_role.clone());
             }
-
-            DaemonCmd::SetClaudeRole(role) => {
-                set_role(&state, |s| &mut s.claude_role, |s| &s.codex_role, role).await;
+            DaemonCmd::SetClaudeRole(r) => {
+                if !set_role(&state, |s| &mut s.claude_role, |s| &s.codex_role, r.clone()).await {
+                    gui::emit_system_log(&app, "warn", &format!("[Daemon] claude role rejected: {r}"));
+                }
             }
-            DaemonCmd::SetCodexRole(role) => {
-                set_role(&state, |s| &mut s.codex_role, |s| &s.claude_role, role).await;
+            DaemonCmd::SetCodexRole(r) => {
+                if !set_role(&state, |s| &mut s.codex_role, |s| &s.claude_role, r.clone()).await {
+                    gui::emit_system_log(&app, "warn", &format!("[Daemon] codex role rejected: {r}"));
+                }
             }
             DaemonCmd::ReadStatusSnapshot { reply } => {
                 let snapshot = state.read().await.status_snapshot();
