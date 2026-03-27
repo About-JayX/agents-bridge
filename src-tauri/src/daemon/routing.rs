@@ -1,9 +1,11 @@
 use crate::daemon::{
-    gui,
-    state::DaemonState,
+    routing_display,
     types::{BridgeMessage, ToAgent},
     SharedState,
 };
+pub use crate::daemon::routing_user_input::route_user_input;
+#[cfg(test)]
+pub use crate::daemon::routing_user_input::resolve_user_targets;
 use tauri::AppHandle;
 
 pub enum RouteResult {
@@ -13,9 +15,17 @@ pub enum RouteResult {
     ToGui,
 }
 
-pub async fn route_message_inner(state: &SharedState, msg: BridgeMessage) -> RouteResult {
+struct RouteOutcome {
+    result: RouteResult,
+    emit_claude_thinking: bool,
+}
+
+async fn route_message_inner_with_meta(state: &SharedState, msg: BridgeMessage) -> RouteOutcome {
     if msg.to == "user" {
-        return RouteResult::ToGui;
+        return RouteOutcome {
+            result: RouteResult::ToGui,
+            emit_claude_thinking: false,
+        };
     }
 
     enum Target {
@@ -25,28 +35,40 @@ pub async fn route_message_inner(state: &SharedState, msg: BridgeMessage) -> Rou
     }
 
     // First try with read lock — avoids write contention on the hot path
-    let target = {
+    let (target, emit_claude_thinking) = {
         let s = state.read().await;
+        let emit_claude_thinking = routing_display::should_emit_claude_thinking_pre(
+            &msg, &s.claude_role,
+        );
         if s.claude_role == msg.to {
             if msg.from != "user" && msg.from != "system" && msg.from != s.codex_role {
-                return RouteResult::Dropped;
+                return RouteOutcome {
+                    result: RouteResult::Dropped,
+                    emit_claude_thinking: false,
+                };
             }
             if let Some(agent) = s.attached_agents.get("claude") {
-                Target::Claude(agent.tx.clone())
+                (Target::Claude(agent.tx.clone()), emit_claude_thinking)
             } else {
-                Target::NeedBuffer
+                (Target::NeedBuffer, false)
             }
         } else if s.codex_role == msg.to {
             if let Some(tx) = s.codex_inject_tx.clone() {
                 let from_user = msg.from == "user";
-                Target::Codex(tx, format_codex_input(&msg), from_user)
+                (
+                    Target::Codex(tx, format_codex_input(&msg), from_user),
+                    false,
+                )
             } else {
-                Target::NeedBuffer
+                (Target::NeedBuffer, false)
             }
         } else if crate::daemon::is_valid_agent_role(&msg.to) {
-            Target::NeedBuffer
+            (Target::NeedBuffer, false)
         } else {
-            return RouteResult::Dropped;
+            return RouteOutcome {
+                result: RouteResult::Dropped,
+                emit_claude_thinking: false,
+            };
         }
     };
 
@@ -59,26 +81,47 @@ pub async fn route_message_inner(state: &SharedState, msg: BridgeMessage) -> Rou
                 .await
                 .is_ok()
             {
-                RouteResult::Delivered
+                RouteOutcome {
+                    result: RouteResult::Delivered,
+                    emit_claude_thinking,
+                }
             } else {
                 state.write().await.buffer_message(msg);
-                RouteResult::Buffered
+                RouteOutcome {
+                    result: RouteResult::Buffered,
+                    emit_claude_thinking: false,
+                }
             }
         }
         Target::Codex(tx, input, from_user) => {
             if tx.send((input, from_user)).await.is_ok() {
-                RouteResult::Delivered
+                RouteOutcome {
+                    result: RouteResult::Delivered,
+                    emit_claude_thinking: false,
+                }
             } else {
                 state.write().await.buffer_message(msg);
-                RouteResult::Buffered
+                RouteOutcome {
+                    result: RouteResult::Buffered,
+                    emit_claude_thinking: false,
+                }
             }
         }
         Target::NeedBuffer => {
             state.write().await.buffer_message(msg);
-            RouteResult::Buffered
+            RouteOutcome {
+                result: RouteResult::Buffered,
+                emit_claude_thinking: false,
+            }
         }
     }
 }
+
+#[cfg(test)]
+pub async fn route_message_inner(state: &SharedState, msg: BridgeMessage) -> RouteResult {
+    route_message_inner_with_meta(state, msg).await.result
+}
+
 pub async fn route_message(state: &SharedState, app: &AppHandle, msg: BridgeMessage) {
     route_message_with_display(state, app, msg, true).await;
 }
@@ -93,99 +136,14 @@ async fn route_message_with_display(
     msg: BridgeMessage,
     display_in_gui: bool,
 ) {
-    let result = route_message_inner(state, msg.clone()).await;
-    if display_in_gui && !matches!(result, RouteResult::Dropped) {
-        gui::emit_agent_message(app, &msg);
-    }
-    let tag = match &result {
-        RouteResult::Delivered => "delivered",
-        RouteResult::Buffered => "buffered",
-        RouteResult::Dropped => "dropped",
-        RouteResult::ToGui => "gui",
-    };
-    eprintln!("[Route] {} → {} {tag}", msg.from, msg.to);
-    match result {
-        RouteResult::Delivered => {
-            gui::emit_system_log(
-                app,
-                "info",
-                &format!("[Route] {} → {} delivered", msg.from, msg.to),
-            );
-        }
-        RouteResult::Buffered => {
-            gui::emit_system_log(
-                app,
-                "warn",
-                &format!("[Route] {} offline, buffered", msg.to),
-            );
-        }
-        RouteResult::Dropped => {
-            let reason = if !crate::daemon::is_valid_agent_role(&msg.to) && msg.to != "user" {
-                format!("[Route] dropped invalid target '{}'", msg.to)
-            } else {
-                format!("[Route] dropped unauthorized sender '{}' → '{}'", msg.from, msg.to)
-            };
-            gui::emit_system_log(app, "warn", &reason);
-        }
-        RouteResult::ToGui => {}
-    }
-}
-
-pub async fn route_user_input(
-    state: &SharedState,
-    app: &AppHandle,
-    content: String,
-    target: String,
-) {
-    let targets = {
-        let s = state.read().await;
-        resolve_user_targets(&s, &target)
-    };
-    if targets.is_empty() {
-        gui::emit_system_log(app, "warn", "[Route] no online targets for user input");
-        return;
-    }
-    let display_to = if targets.len() == 1 { targets[0].clone() } else { target };
-    let now = chrono::Utc::now().timestamp_millis() as u64;
-    let echo = BridgeMessage {
-        id: format!("user_{now}"),
-        from: "user".into(),
-        to: display_to,
-        content: content.clone(),
-        timestamp: now,
-        reply_to: None,
-        priority: None,
-    };
-    gui::emit_agent_message(app, &echo);
-    for role in targets {
-        let msg = BridgeMessage {
-            id: format!("user_{now}_{role}"),
-            from: "user".into(),
-            to: role,
-            content: content.clone(),
-            timestamp: now,
-            reply_to: None,
-            priority: None,
-        };
-        route_message_silent(state, app, msg).await;
-    }
-}
-
-/// "auto" → online agent roles (deduplicated, excludes "user"); otherwise the literal role.
-pub fn resolve_user_targets(state: &DaemonState, target: &str) -> Vec<String> {
-    if target != "auto" {
-        return vec![target.to_string()];
-    }
-    let mut targets = Vec::with_capacity(2);
-    let claude_online = state.attached_agents.contains_key("claude");
-    let codex_online = state.codex_inject_tx.is_some();
-    if claude_online && state.claude_role != "user" {
-        targets.push(state.claude_role.clone());
-    }
-    if codex_online && state.codex_role != "user" && !targets.contains(&state.codex_role) {
-        targets.push(state.codex_role.clone());
-    }
-    targets
+    let outcome = route_message_inner_with_meta(state, msg.clone()).await;
+    routing_display::emit_route_side_effects(
+        app,
+        &msg,
+        &outcome.result,
+        outcome.emit_claude_thinking,
+        display_in_gui,
+    );
 }
 
 pub fn format_codex_input(msg: &BridgeMessage) -> String {

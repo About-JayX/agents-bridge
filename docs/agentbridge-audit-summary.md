@@ -215,6 +215,47 @@
 - [已修复] `routing.rs` 的 `route_message_inner` 对不匹配当前 Claude/Codex role 且不在 `AGENT_ROLES` 白名单中的 target，改为 `RouteResult::Dropped` 而不是 `NeedBuffer`，不再污染 `buffered_messages`。
 - [已修复] 新增测试：`invalid_target_rejected`（bridge）、`reply_schema_has_enum_constraint`（bridge）、`invalid_target_is_dropped_not_buffered`（daemon）、`valid_role_offline_is_buffered`（daemon）。
 
+### 9. [已修复] 2026-03-27 交互链路修复（Messages / Claude Terminal / Thinking）
+
+- [已修复] Codex streaming 现在只显示结构化输出中的 `message`，不再把 `{"message":"...","send_to":"..."}` 原样泄漏到消息区。daemon 在 `item/agentMessage/delta` 阶段维护原始缓冲，并提取可展示 preview；前端 `codex_stream.delta` 语义同步收紧为“当前可展示 message 预览”，不再做字符串拼接。
+- [已修复] Claude 新增 `claude_stream` 事件链（`thinkingStarted` / `preview` / `done` / `reset`）。Messages 面板会在消息成功投递给 Claude 后显示稳定的 Claude thinking 占位，并用 PTY 原始输出生成降噪 preview；Claude 回 reply、终端退出、显式断开或手动 stop 时会清空 thinking。
+- [已修复] Claude terminal attention 现在不仅会自动切到 `Claude Terminal` tab，还会通过前端 `claudeFocusNonce` 强制把键盘焦点放进 xterm，不再要求用户再点一次。该聚焦不依赖 `connected === true`，启动期 prompt 也能抢到输入焦点。
+- [已修复] 切回 `Messages` tab 时，`react-virtuoso` 会在组件重新挂载后立即跳到 `LAST`，不再回到顶部；tab 内正常 followOutput 和手动“Back to bottom”行为保持不变。
+- [已修复] 空消息过滤已收口到多层：
+  - bridge `reply` tool 拒绝空白 `text`
+  - Codex 完成消息若 `message.trim().is_empty()`，不再 emit 最终 message，也不再路由
+  - daemon `routing.rs` 在 GUI 展示前会过滤空 `BridgeMessage.content`
+  - 前端 `MessagePanel` 最终也会过滤空白消息，避免空气泡
+
+当前这轮修复后，主链路的剩余风险已从“交互语义错误”下降为“前端自动化测试覆盖不足”；功能行为以本节与专项链路文档为准。
+
+### 10. [已修复] 2026-03-27 基于 superpowers reviewer 的深度复核收口
+
+- [已修复] `src-tauri/src/daemon/codex/session.rs` 与 `src/stores/bridge-store/helpers.ts` 已拆分回 200 行以内：Codex 结构化输出预览解析被提取到 `src-tauri/src/daemon/codex/structured_output.rs`，前端 listener 逻辑被提取到 `src/stores/bridge-store/listener-setup.ts` 与 `listener-payloads.ts`，单文件复杂度明显下降。
+- [已修复] `item/completed(agentMessage)` 中重复的 `should_emit_final_message(&display_text)` 守卫已收敛为单次 early return；空消息不会再先跑一段 `valid_target` 推导，再进入后续 GUI emit / route 分支。
+- [已修复] `claude_terminal_attention` 在用户已经停留在 `Claude Terminal` tab 时，前端现在会显式清空 store 中的 `claudeNeedsAttention`，不再留下残余 attention 状态把后续 tab 切换强行弹回 Claude。
+- [已修复] `ClaudeTerminalPane` 的 focus effect 已缩减为只由 `focusNonce` 驱动；`connected` / `running` 状态变化不再额外触发 `terminal.focus()`，抢焦点副作用已移除。
+- [已修复] `MessageList` 的冗余 `active` prop 已删除，组件语义恢复为“挂载即跳到底部”；tab 可见性边界继续由 `MessagePanel` 的条件渲染承担。
+- [已修复] reviewer 顺带指出的规则漂移也已同步：`.claude/rules/frontend.md` 与 `.claude/rules/tauri.md` 已补入 `claude_stream` 事件，避免后续链路审查继续基于过时协议。
+
+### 11. [已修复] 2026-03-27 基于 superpowers reviewer 第二轮复核收口
+
+- [已修复] `src-tauri/src/daemon/routing.rs` 已继续拆分到 200 行以内：展示副作用、Claude thinking 判定和 route log 输出被提取到 `src-tauri/src/daemon/routing_display.rs`，主路由文件重新聚焦在 target 解析与投递。
+- [已修复] `MessageList` 初始滚底逻辑不再依赖“组件首次挂载时就已有消息”。当前实现改为基于 `totalCount` 的一次性 auto-scroll：列表若先以空态挂载，后续第一次收到消息时也会跳到底部。
+- [已修复] `MessagePanel` 不再直接调用 `useBridgeStore.setState(...)` 清 `claudeNeedsAttention`；前端 store 新增 `clearClaudeAttention()` action，attention 清理路径与其它状态更新方式保持一致。
+- [已修复] `codex_stream.delta` 在前端 store 中继续采用“覆盖当前 preview”而不是“追加 token”的消费语义，并在 listener 侧补了注释，明确这是 daemon 端结构化 preview 协议的一部分，不是误删了历史累积逻辑。
+
+### 12. [已修复] 2026-03-27 基于 superpowers reviewer 第三轮复核收口
+
+- [已修复] Claude thinking 启动判定不再通过 `route_message_with_display()` 与 `route_message_inner()` 两次分离读 `claude_role` 来完成。当前路由层新增 `RouteOutcome`，把“是否成功投递”和“是否应该启动 Claude thinking”绑定在同一份 daemon state 快照里，消除了角色切换瞬间的竞态窗口。
+- [已修复] `src-tauri/src/daemon/routing.rs` 再次按职责拆分：用户输入 fan-out 与 `auto` 目标解析被提取到 `src-tauri/src/daemon/routing_user_input.rs`，核心路由文件回到 156 行。
+- [已修复] `codex_stream.delta` 的前端消费路径重新补回长度上限，当前 preview state 会截断到最近 100,000 个字符，避免长回复重新引入 UI 内存膨胀回归。
+
+### 13. [已知问题] 2026-03-27 项目级深度复核
+
+- [已知问题] Codex 结构化输出 preview 虽然已经在前端 store 做了 100,000 字符上限，但 daemon 侧 `StreamPreviewState.raw_delta` 仍是无上限累积：`ingest_delta()` 每个 delta 都 `push_str()` 到同一个 `String`，直到 turn 完成才 `reset()`。长回复场景下，前端不会继续膨胀，但 Rust 进程内存仍会跟着整段原始输出增长。
+- [已知问题] `RoleSelect` / store 的 optimistic role 更新仍未真正闭环。前端 `setRole()` 先直接写 `claudeRole` / `codexRole`，而 Tauri `daemon_set_*_role` command 只返回“命令是否成功入队”；daemon 内部若因为重复 role 拒绝变更，只会写一条 system log，不会把拒绝结果回传给前端，因此 UI role 仍可能和实际 daemon 路由状态分叉。
+
 ## 当前仍需保留的已知限制
 
 - [已知限制] `threadId` 尚未从 daemon 暴露到前端，Codex 头部无法显示真实 thread。
@@ -241,11 +282,13 @@ cargo clippy --workspace --all-targets -- -D warnings
 - `npm run build`：通过
 - `cargo clippy --workspace --all-targets -- -D warnings`：未通过，但失败项仍以 lint/样式问题为主
 
-在 2026-03-27 当前工作区复核时：
+在 2026-03-27 当前工作区最新复核时：
 
-- `cargo test`：通过（49 tests）
-- `bun run build`：通过（修复 `react-virtuoso` 依赖安装后）
-- `cargo clippy --workspace --all-targets -- -D warnings`：通过（修复 12 项 lint 问题后）
+- `cargo test --manifest-path src-tauri/Cargo.toml`：通过（59 tests）
+- `cargo test --manifest-path bridge/Cargo.toml`：通过（13 tests）
+- `bun test tests/message-panel-view-model.test.ts`：通过（6 tests）
+- `bun run build`：通过（仅剩 Vite chunk-size warning，不影响构建成功）
+- `cargo clippy --workspace --all-targets -- -D warnings`：通过
 
 在 2026-03-27 对 `0a9b833f` 的深度审查时再次复核：
 
@@ -267,6 +310,14 @@ cargo clippy --workspace --all-targets -- -D warnings
 - `cargo clippy --workspace --all-targets -- -D warnings`：通过
 - `bun run build`：通过
 - 结论：公开 Tauri 旁路 `daemon_send_message` 已移除；当前新增发现是内部 agent 路由对非法 target 仍会走离线缓冲，其中 Claude `reply` tool 缺少目标枚举校验是最直接的入口。
+
+在 2026-03-27 本轮交互修复完成后再次复核：
+
+- `cargo test --manifest-path src-tauri/Cargo.toml`：通过（58 tests）
+- `cargo test --manifest-path bridge/Cargo.toml`：通过（13 tests）
+- `bun test tests/message-panel-view-model.test.ts`：通过（3 tests）
+- `bun run build`：通过
+- `cargo clippy --workspace --all-targets -- -D warnings`：通过
 
 ## 相关文档
 

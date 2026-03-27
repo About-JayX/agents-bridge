@@ -1,6 +1,6 @@
 use super::{
-    drain_log_lines, needs_user_attention, should_auto_confirm_development_prompt,
-    should_emit_attention,
+    drain_log_lines, extract_terminal_preview, needs_user_attention,
+    should_auto_confirm_development_prompt, should_emit_attention,
 };
 
 #[test]
@@ -104,4 +104,34 @@ fn stops_attention_for_dev_prompt_after_auto_confirm() {
         true,
         should_auto_confirm_development_prompt(transcript)
     ));
+}
+
+#[test]
+fn terminal_preview_drops_empty_frames() {
+    assert_eq!(extract_terminal_preview("\u{1b}[32m\r\n\r\n\u{1b}[0m"), None);
+}
+
+#[test]
+fn terminal_preview_handles_carriage_return_overwrite() {
+    let preview = extract_terminal_preview("Thinking...\rDone\n").unwrap();
+    assert_eq!(preview, "Done");
+}
+
+#[test]
+fn terminal_preview_ignores_box_drawing_only_block() {
+    let preview = extract_terminal_preview("╭────╮\n│    │\n╰────╯\n");
+    assert_eq!(preview, None);
+}
+
+#[test]
+fn terminal_preview_returns_last_meaningful_block() {
+    let transcript = "Booting...\n\nAnalyzing repo\nChecking routes\n";
+    let preview = extract_terminal_preview(transcript).unwrap();
+    assert_eq!(preview, "Analyzing repo\nChecking routes");
+}
+
+#[test]
+fn terminal_preview_strips_ansi_from_meaningful_text() {
+    let preview = extract_terminal_preview("\u{1b}[32mAnalyzing\u{1b}[0m repo\n").unwrap();
+    assert_eq!(preview, "Analyzing repo");
 }

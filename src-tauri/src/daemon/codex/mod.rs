@@ -2,6 +2,7 @@ mod handshake;
 pub mod handler;
 pub mod lifecycle;
 pub mod session;
+mod structured_output;
 
 use crate::daemon::{gui, role_config, SharedState};
 use session::SessionOpts;

@@ -12,6 +12,7 @@ interface ClaudeTerminalPaneProps {
   connected: boolean;
   running: boolean;
   detail?: string;
+  focusNonce: number;
 }
 
 export function ClaudeTerminalPane({
@@ -19,6 +20,7 @@ export function ClaudeTerminalPane({
   connected,
   running,
   detail,
+  focusNonce,
 }: ClaudeTerminalPaneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -88,15 +90,13 @@ export function ClaudeTerminalPane({
 
     const raf = window.requestAnimationFrame(() => {
       fitTerminal(terminal, fit);
-      if (connected) {
-        terminal.focus();
-      }
+      terminal.focus();
     });
 
     return () => {
       window.cancelAnimationFrame(raf);
     };
-  }, [connected]);
+  }, [focusNonce]);
 
   return (
     <div className="flex flex-1 flex-col min-h-0 bg-[#090b10]">

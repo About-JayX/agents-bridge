@@ -354,6 +354,25 @@ Claude Code CLI 支持多种注入机制，按强制性排序：
 
 **架构隐患:** bridge 的 daemon_client 不感知 tx 被替换，不会主动重新注册。后续可考虑在 daemon 侧检测同 agentId 重复连接并拒绝/通知。
 
+### 2026-03-27: Claude thinking 与终端强制聚焦
+
+- [已修复] Claude 现在有独立的 `claude_stream` 事件链：`thinkingStarted`、`preview`、`done`、`reset`。当消息成功投递给 Claude 时，Messages 面板会出现 Claude thinking 占位；Claude 回 reply、终端退出、显式断开或用户 stop 时会清空状态。
+- [已修复] Claude thinking 的 preview 来源于 PTY watcher，但不会直接把原始终端垃圾搬进消息区。当前实现会先 `strip_ansi`、处理 `\r` 覆盖写入、过滤空白帧/box-drawing-only 块/明显 terminal chrome，然后只把“最近一个有意义文本块”作为 preview 发给前端。
+- [已修复] `claude_terminal_attention` 现在不只负责切 tab，前端还会递增 `claudeFocusNonce`，让 `ClaudeTerminalPane` 在 tab 可见时直接 `terminal.focus()`。这条逻辑不再依赖 Claude bridge 已连接，因此 development prompt / 启动期交互 prompt 也能直接接收键盘输入。
+- [已修复] bridge `reply` tool 现在拒绝空白 `text`，避免 Claude 产生空消息后污染 daemon 路由和消息历史。
+
+**验证:** ✅ Claude terminal attention 触发后无需鼠标点击即可直接输入；Messages 面板可显示 Claude thinking 与降噪 preview；Claude 发送空 reply 时不会出现空白消息气泡。
+
+### 2026-03-27: Superpowers 复核收口
+
+- [已修复] `claude_terminal_attention` 在用户已经停留在 Claude tab 时，不再把 `claudeNeedsAttention` 脏状态残留在 store。当前前端通过 `getClaudeAttentionResolution()` 同时决定“是否切 tab”和“是否清空 store attention”，避免后续切去别的 tab 时被强行弹回 Claude。
+- [已修复] `claudeNeedsAttention` 的清理不再通过组件内 `useBridgeStore.setState(...)` 直接写 store；前端 store 新增 `clearClaudeAttention()` action，保持 attention 生命周期与其它 bridge 状态更新路径一致。
+- [已修复] `ClaudeTerminalPane` 的强制 focus effect 已缩减为只由 `focusNonce` 驱动；`connected` / `running` 状态变化不再隐式触发 `terminal.focus()`。
+- [已修复] Claude preview 文本清洗补了 ANSI 有效内容测试，保证含颜色控制符的真实终端输出在进入 `claude_stream.preview` 前仍能保留语义文本。
+- [已修复] Claude thinking 的启动判定现在与真实路由结果绑定在同一份 daemon state 快照里，不再依赖 `route_message_with_display()` 额外读取一次 `claude_role`。角色切换瞬间不会再出现“消息已按旧角色投递、thinking 却按新角色判断”的竞态。
+
+**验证:** ✅ `cargo test --manifest-path src-tauri/Cargo.toml` 通过；`bun test tests/message-panel-view-model.test.ts` 通过；attention 留存与强制 focus 回归路径已覆盖。
+
 ## 当前已知限制
 
 - Channel preview 是实验性功能，需要 `--dangerously-load-development-channels`

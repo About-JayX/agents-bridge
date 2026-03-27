@@ -34,8 +34,14 @@ export const useBridgeStore = create<BridgeState>((set, get) => {
     claudeTerminalDetail: undefined,
     permissionPrompts: [],
     claudeNeedsAttention: false,
+    claudeFocusNonce: 0,
     claudeRole: "lead",
     codexRole: "coder",
+    claudeStream: {
+      thinking: false,
+      previewText: "",
+      lastUpdatedAt: 0,
+    },
     codexStream: {
       thinking: false,
       currentDelta: "",
@@ -45,6 +51,7 @@ export const useBridgeStore = create<BridgeState>((set, get) => {
     draft: "",
 
     setDraft: (text) => set({ draft: text }),
+    clearClaudeAttention: () => set({ claudeNeedsAttention: false }),
 
     sendToCodex: (content, target) => {
       invoke("daemon_send_user_input", {

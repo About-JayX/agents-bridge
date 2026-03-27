@@ -38,6 +38,9 @@ pub async fn handle_dynamic_tool(
 async fn handle_reply(args: &Value, from: &str, state: &SharedState, app: &AppHandle) -> String {
     let to = args["to"].as_str().unwrap_or("user");
     let text = args["text"].as_str().unwrap_or("");
+    if text.trim().is_empty() {
+        return format!("Ignored empty message to {to}");
+    }
 
     let msg = BridgeMessage {
         id: format!("codex_{}", chrono::Utc::now().timestamp_millis()),

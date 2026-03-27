@@ -26,6 +26,12 @@ export interface CodexStreamState {
   turnStatus: string;
 }
 
+export interface ClaudeStreamState {
+  thinking: boolean;
+  previewText: string;
+  lastUpdatedAt: number;
+}
+
 export interface BridgeState {
   connected: boolean;
   messages: BridgeMessage[];
@@ -37,12 +43,15 @@ export interface BridgeState {
   claudeTerminalDetail?: string;
   permissionPrompts: PermissionPrompt[];
   claudeNeedsAttention: boolean;
+  claudeFocusNonce: number;
   claudeRole: string;
   codexRole: string;
+  claudeStream: ClaudeStreamState;
   codexStream: CodexStreamState;
   draft: string;
 
   setDraft: (text: string) => void;
+  clearClaudeAttention: () => void;
   sendToCodex: (content: string, target?: string) => void;
   clearMessages: () => void;
   launchCodexTui: () => Promise<void>;

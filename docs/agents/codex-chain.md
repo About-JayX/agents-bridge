@@ -432,6 +432,27 @@ docs/codex/prompts/
 
 AGENTS.md、Skills、MCP 工具、developer_sections 全部通过 `input[]` 或 `tools` 参数注入，**覆盖 `baseInstructions` 不影响这些机制**。`baseInstructions` 只替换 OpenAI API `instructions` 字段（system prompt）。
 
+### 2026-03-27: Codex 结构化输出预览归一化
+
+- [已修复] `item/agentMessage/delta` 之前会把结构化输出原始 JSON token 直接透传到前端，Messages 底部 streaming 区会显示 `{"message":"...","send_to":"..."}` 这类模板文本。当前 daemon 改为维护当前 turn 的原始缓冲，只提取 `message` 字段作为 preview，再通过 `codex_stream.delta` 发给前端。
+- [已修复] 前端 `codex_stream.delta` 的消费语义已从“原始 token 追加”改成“当前完整 preview 替换”，因此 `CodexStreamIndicator` 只显示当前可展示文本，不再自己拼 JSON 片段。
+- [已修复] 若 Codex 最终完成消息的 `message.trim().is_empty()`，daemon 不再 emit 最终 message，也不再做内部路由；只等待 `turn/completed` 清理 thinking，避免空消息或空路由副作用。
+
+**验证:** ✅ Codex streaming 区只显示 `message` 内容；最终空消息不会落入历史消息或内部 route。
+
+### 2026-03-27: Superpowers 复核收口
+
+- [已修复] `src-tauri/src/daemon/codex/session.rs` 已拆分：结构化输出解析、preview 提取和空消息守卫被提取到 `src-tauri/src/daemon/codex/structured_output.rs`，主会话循环回到 200 行以内，职责重新聚焦在握手与事件分发。
+- [已修复] `item/completed(agentMessage)` 路径中重复的 `should_emit_final_message()` 判断已合并成单次 early return，空消息不会再继续进入最终 GUI emit 或 schema-route 判定。
+- [已修复] 前端 `codex_stream.delta` 继续使用“覆盖当前 preview”语义，而不是回到旧的 token append。原因是 daemon 现在每次 delta 都发送“当前完整可展示 preview”，不是原始增量 token；listener 侧已补注释固定这个协议约定。
+- [已修复] `codex_stream.delta` 的前端 preview state 重新补回长度上限，当前只保留最近 100,000 个字符，避免长回复重新把消息面板状态推回无限增长。
+
+**验证:** ✅ `cargo test --manifest-path src-tauri/Cargo.toml` 通过；Codex 结构化输出 preview/空消息测试通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过。
+
+### 2026-03-27: 项目级深度复核补充
+
+- [未修复] `StreamPreviewState.raw_delta` 仍无长度上限。虽然前端 `codexStream.currentDelta` 已在 listener 层裁剪到最近 100,000 个字符，但 daemon 侧 `structured_output.rs::ingest_delta()` 仍会把整段原始 delta 持续累加到同一个 `String`，直到 `turn/completed` 才 `reset()`。长回复场景下，Rust 侧内存增长仍然存在。
+
 ## 当前已知限制
 
 - 端口 4500 固定，不可配置

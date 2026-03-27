@@ -119,6 +119,19 @@ pub fn emit_codex_stream(app: &AppHandle, payload: CodexStreamPayload) {
     let _ = app.emit("codex_stream", payload);
 }
 
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum ClaudeStreamPayload {
+    ThinkingStarted,
+    Preview { text: String },
+    Done,
+    Reset,
+}
+
+pub fn emit_claude_stream(app: &AppHandle, payload: ClaudeStreamPayload) {
+    let _ = app.emit("claude_stream", payload);
+}
+
 pub fn emit_agent_status(app: &AppHandle, agent: &str, online: bool, exit_code: Option<i32>) {
     let _ = app.emit(
         "agent_status",

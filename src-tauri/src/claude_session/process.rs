@@ -98,6 +98,10 @@ pub fn spawn_exit_watcher(
                 let (level, exit_code, summary) = describe_exit(status);
 
                 eprintln!("[Claude] {summary}");
+                crate::daemon::gui::emit_claude_stream(
+                    &app,
+                    crate::daemon::gui::ClaudeStreamPayload::Reset,
+                );
                 crate::daemon::gui::emit_claude_terminal_status(
                     &app,
                     false,

@@ -130,6 +130,7 @@ pub async fn stop_claude(
     app: tauri::AppHandle,
 ) -> Result<(), String> {
     crate::claude_session::stop(session.inner().as_ref()).await?;
+    crate::daemon::gui::emit_claude_stream(&app, crate::daemon::gui::ClaudeStreamPayload::Reset);
     crate::daemon::gui::emit_claude_terminal_status(
         &app,
         false,

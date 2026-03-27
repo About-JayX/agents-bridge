@@ -36,6 +36,9 @@ pub fn handle_tool_call(params: &serde_json::Value, from: &str) -> Option<Bridge
     let to = args.get("to")?.as_str()?;
     if !VALID_REPLY_TARGETS.contains(&to) { return None; }
     let text = args.get("text")?.as_str()?;
+    if text.trim().is_empty() {
+        return None;
+    }
     let seq = MSG_SEQ.fetch_add(1, Ordering::Relaxed);
     Some(BridgeMessage {
         id: format!("claude_{}_{seq}", chrono::Utc::now().timestamp_millis()),
@@ -87,6 +90,24 @@ mod tests {
         let params = serde_json::json!({
             "name": "reply",
             "arguments": { "to": "admin", "text": "hello" }
+        });
+        assert!(handle_tool_call(&params, "coder").is_none());
+    }
+
+    #[test]
+    fn empty_reply_text_rejected() {
+        let params = serde_json::json!({
+            "name": "reply",
+            "arguments": { "to": "lead", "text": "" }
+        });
+        assert!(handle_tool_call(&params, "coder").is_none());
+    }
+
+    #[test]
+    fn whitespace_only_reply_text_rejected() {
+        let params = serde_json::json!({
+            "name": "reply",
+            "arguments": { "to": "lead", "text": " \n\t " }
         });
         assert!(handle_tool_call(&params, "coder").is_none());
     }

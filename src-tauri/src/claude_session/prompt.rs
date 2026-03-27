@@ -3,6 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tauri::AppHandle;
+use crate::daemon::gui::ClaudeStreamPayload;
 
 const CHANNEL_MARKER: &str = "channels: server:agentbridge";
 const LOCAL_DEV_OPTION: &str = "1. i am using this for local development";
@@ -25,6 +26,7 @@ pub fn spawn_auto_confirm_thread(
             let mut pending_log = String::new();
             let mut confirmed = false;
             let mut attention_fired = false;
+            let mut last_preview = String::new();
 
             loop {
                 match reader.read(&mut buf) {
@@ -35,6 +37,15 @@ pub fn spawn_auto_confirm_thread(
                         transcript.push_str(&chunk);
                         trim_transcript(&mut transcript, 8192);
                         let dev_prompt = should_auto_confirm_development_prompt(&transcript);
+                        if let Some(preview) = extract_terminal_preview(&transcript) {
+                            if preview != last_preview {
+                                last_preview = preview.clone();
+                                crate::daemon::gui::emit_claude_stream(
+                                    &app,
+                                    ClaudeStreamPayload::Preview { text: preview },
+                                );
+                            }
+                        }
                         if emit_debug_logs {
                             for line in drain_log_lines(&mut pending_log, &chunk) {
                                 if !line.is_empty() {
@@ -87,6 +98,10 @@ fn trim_transcript(text: &mut String, keep: usize) {
         .map(|(idx, _)| idx)
         .unwrap_or(0);
     *text = text[split_idx..].to_owned();
+}
+
+pub fn extract_terminal_preview(output: &str) -> Option<String> {
+    super::text_utils::extract_terminal_preview(output)
 }
 
 pub fn should_auto_confirm_development_prompt(output: &str) -> bool {

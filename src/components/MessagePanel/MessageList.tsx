@@ -1,9 +1,11 @@
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useBridgeStore } from "@/stores/bridge-store";
 import type { BridgeMessage } from "@/types";
 import { MessageBubble } from "./MessageBubble";
 import { CodexStreamIndicator } from "./CodexStreamIndicator";
+import { ClaudeStreamIndicator } from "./ClaudeStreamIndicator";
+import { getTransientIndicators } from "./view-model";
 
 interface Props {
   messages: BridgeMessage[];
@@ -11,11 +13,13 @@ interface Props {
 
 export function MessageList({ messages }: Props) {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const didInitialScrollRef = useRef(false);
   const [atBottom, setAtBottom] = useState(true);
-  const { thinking, currentDelta } = useBridgeStore((s) => s.codexStream);
-  const hasStream = thinking || !!currentDelta;
+  const codexStream = useBridgeStore((s) => s.codexStream);
+  const claudeStream = useBridgeStore((s) => s.claudeStream);
+  const indicators = getTransientIndicators(claudeStream, codexStream);
 
-  const totalCount = messages.length + (hasStream ? 1 : 0);
+  const totalCount = messages.length + indicators.length;
 
   const handleAtBottomChange = useCallback((bottom: boolean) => {
     setAtBottom(bottom);
@@ -24,6 +28,19 @@ export function MessageList({ messages }: Props) {
   const scrollToBottom = useCallback(() => {
     virtuosoRef.current?.scrollToIndex({ index: "LAST", behavior: "smooth" });
   }, []);
+
+  useEffect(() => {
+    if (totalCount === 0) {
+      didInitialScrollRef.current = false;
+      return;
+    }
+    if (didInitialScrollRef.current) return;
+    didInitialScrollRef.current = true;
+    const raf = window.requestAnimationFrame(() => {
+      virtuosoRef.current?.scrollToIndex({ index: "LAST", behavior: "auto" });
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [totalCount]);
 
   if (totalCount === 0) {
     return (
@@ -45,15 +62,20 @@ export function MessageList({ messages }: Props) {
         followOutput="smooth"
         className="h-full"
         increaseViewportBy={200}
-        itemContent={(index) => (
-          <div className="px-4">
-            {index < messages.length ? (
-              <MessageBubble msg={messages[index]} />
-            ) : (
-              <CodexStreamIndicator />
-            )}
-          </div>
-        )}
+        itemContent={(index) => {
+          const indicator = indicators[index - messages.length];
+          return (
+            <div className="px-4">
+              {index < messages.length ? (
+                <MessageBubble msg={messages[index]} />
+              ) : indicator === "claude" ? (
+                <ClaudeStreamIndicator />
+              ) : (
+                <CodexStreamIndicator />
+              )}
+            </div>
+          );
+        }}
       />
       {!atBottom && (
         <button

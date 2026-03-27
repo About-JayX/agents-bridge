@@ -6,6 +6,10 @@ import { PermissionQueue } from "./PermissionQueue";
 import { TabBtn } from "./TabBtn";
 import { MessageList } from "./MessageList";
 import { ClaudeTerminalPane } from "./ClaudeTerminalPane";
+import {
+  filterRenderableChatMessages,
+  getClaudeAttentionResolution,
+} from "./view-model";
 
 type Tab = "messages" | "claude" | "logs" | "approvals";
 
@@ -34,11 +38,13 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
   const claudeConnected =
     useBridgeStore((s) => s.agents.claude?.status) === "connected";
   const claudeNeedsAttention = useBridgeStore((s) => s.claudeNeedsAttention);
+  const claudeFocusNonce = useBridgeStore((s) => s.claudeFocusNonce);
+  const clearClaudeAttention = useBridgeStore((s) => s.clearClaudeAttention);
   const claudeTerminalAvailable =
     claudeConnected || claudeTerminalRunning || claudeTerminalChunks.length > 0;
 
   const chatMessages = useMemo(
-    () => messages.filter((m) => m.from !== "system"),
+    () => filterRenderableChatMessages(messages),
     [messages],
   );
   const errorLines = useMemo(
@@ -62,11 +68,14 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
 
   useEffect(() => {
     if (tab === "claude") setClaudeTabAttention(false);
-    if (claudeNeedsAttention && tab !== "claude") {
-      setTab("claude");
-      useBridgeStore.setState({ claudeNeedsAttention: false });
+    const attention = getClaudeAttentionResolution(tab, claudeNeedsAttention);
+    if (attention.nextTab) {
+      setTab(attention.nextTab);
     }
-  }, [tab, claudeNeedsAttention]);
+    if (attention.clearStoreAttention) {
+      clearClaudeAttention();
+    }
+  }, [tab, claudeNeedsAttention, clearClaudeAttention]);
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
@@ -133,6 +142,7 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
           connected={claudeConnected}
           running={claudeTerminalRunning}
           detail={claudeTerminalDetail}
+          focusNonce={claudeFocusNonce}
         />
       )}
       {tab === "approvals" && (

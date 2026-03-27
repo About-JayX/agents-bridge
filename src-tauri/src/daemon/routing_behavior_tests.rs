@@ -1,5 +1,6 @@
 use super::*;
 use crate::daemon::{state::DaemonState, types::BridgeMessage};
+use crate::daemon::routing_display::{is_renderable_message, should_emit_claude_thinking};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -109,4 +110,59 @@ async fn valid_role_offline_is_buffered() {
     let result = route_message_inner(&state, msg).await;
     assert!(matches!(result, RouteResult::Buffered));
     assert_eq!(state.read().await.buffered_messages.len(), 1);
+}
+
+#[test]
+fn visible_messages_require_non_whitespace_content() {
+    let visible = BridgeMessage {
+        id: "msg-visible".into(),
+        from: "coder".into(),
+        to: "user".into(),
+        content: "hello".into(),
+        timestamp: 1,
+        reply_to: None,
+        priority: None,
+    };
+    let empty = BridgeMessage {
+        id: "msg-empty".into(),
+        from: "coder".into(),
+        to: "user".into(),
+        content: "   \n\t".into(),
+        timestamp: 1,
+        reply_to: None,
+        priority: None,
+    };
+    assert!(is_renderable_message(&visible));
+    assert!(!is_renderable_message(&empty));
+}
+
+#[test]
+fn claude_thinking_starts_only_for_delivered_non_claude_messages() {
+    let msg = BridgeMessage {
+        id: "msg-claude".into(),
+        from: "user".into(),
+        to: "lead".into(),
+        content: "please help".into(),
+        timestamp: 1,
+        reply_to: None,
+        priority: None,
+    };
+    assert!(should_emit_claude_thinking(
+        &msg,
+        &RouteResult::Delivered,
+        "lead",
+    ));
+    assert!(!should_emit_claude_thinking(
+        &msg,
+        &RouteResult::Buffered,
+        "lead",
+    ));
+    assert!(!should_emit_claude_thinking(
+        &BridgeMessage {
+            from: "lead".into(),
+            ..msg.clone()
+        },
+        &RouteResult::Delivered,
+        "lead",
+    ));
 }

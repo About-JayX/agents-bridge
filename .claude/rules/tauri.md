@@ -65,6 +65,7 @@ paths:
 - `claude_terminal_reset`
 - `claude_terminal_status`
 - `claude_terminal_attention`
+- `claude_stream`
 - `codex_stream`
 
 新增事件时：

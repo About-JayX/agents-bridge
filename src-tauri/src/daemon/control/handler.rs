@@ -1,5 +1,5 @@
 use crate::daemon::{
-    gui, routing,
+    gui::{self, ClaudeStreamPayload}, routing,
     types::{FromAgent, ToAgent},
     SharedState,
 };
@@ -82,6 +82,9 @@ pub async fn handle_connection(socket: WebSocket, state: SharedState, app: AppHa
                         }
                     };
                     message.from = role;
+                    if id == "claude" && !message.content.trim().is_empty() {
+                        gui::emit_claude_stream(&app, ClaudeStreamPayload::Done);
+                    }
                 }
                 routing::route_message(&state, &app, message).await;
             }
@@ -117,6 +120,9 @@ pub async fn handle_connection(socket: WebSocket, state: SharedState, app: AppHa
         if is_ours {
             daemon.attached_agents.remove(id);
             drop(daemon);
+            if id == "claude" {
+                gui::emit_claude_stream(&app, ClaudeStreamPayload::Reset);
+            }
             gui::emit_agent_status(&app, id, false, None);
             gui::emit_system_log(&app, "info", &format!("[Control] {id} disconnected"));
         } else {
