@@ -435,7 +435,7 @@ pub fn build_stream_args(
         "--verbose".into(),
         "--dangerously-skip-permissions".into(),
         "--dangerously-load-development-channels".into(),
-        "server:agentbridge".into(),
+        "server:agentnexus".into(),
         "--mcp-config".into(), mcp_config.into(),
     ];
     if let Some(m) = model {
@@ -557,7 +557,7 @@ pub async fn send_message(&mut self, content: &str) -> Result<(), String> {
 **Files:**
 - Test: `src-tauri/src/claude_session/stream_json.rs`
 - Modify: `CLAUDE.md`
-- Modify: `docs/agentbridge-audit-summary.md`
+- Modify: `docs/agentnexus-audit-summary.md`
 
 - [ ] **Step 1: 补充 stream_json 边界测试**
 

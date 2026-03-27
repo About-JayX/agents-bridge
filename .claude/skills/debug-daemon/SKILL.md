@@ -4,11 +4,11 @@ description: 排查当前 Rust 内嵌 daemon、bridge sidecar、Codex app-server
 disable-model-invocation: true
 ---
 
-排查 AgentBridge 当前运行链路时，按下面顺序检查：
+排查 AgentNexus 当前运行链路时，按下面顺序检查：
 
 1. **检查 Tauri / bridge / Codex 进程**
    ```bash
-   ps aux | grep -E "(agent-bridge|agent-bridge-bridge|codex.*app-server|claude)" | grep -v grep
+   ps aux | grep -E "(agent-nexus|agent-nexus-bridge|codex.*app-server|claude)" | grep -v grep
    ```
 
 2. **检查关键端口**
@@ -28,7 +28,7 @@ disable-model-invocation: true
 
 5. **检查 bridge sidecar 是否可构建**
    ```bash
-   cargo build -p agent-bridge-bridge
+   cargo build -p agent-nexus-bridge
    ```
 
 6. **检查前端与 Rust 是否能通过基础校验**
@@ -39,7 +39,7 @@ disable-model-invocation: true
 
 7. **检查临时 CODEX_HOME 残留**
    ```bash
-   ls -la /tmp | grep agentbridge-
+   ls -la /tmp | grep agentnexus-
    ```
 
 根据以上信息判断故障位于：
@@ -49,4 +49,4 @@ disable-model-invocation: true
 - Codex app-server 启动与 session
 - 前端 invoke / listen 链路
 
-不要再按旧 Bun daemon 方式去找 `/tmp/agentbridge.log`、`:4503`、PID 文件或 `daemon/**/*.ts`。$ARGUMENTS
+不要再按旧 Bun daemon 方式去找 `/tmp/agentnexus.log`、`:4503`、PID 文件或 `daemon/**/*.ts`。$ARGUMENTS

@@ -17,7 +17,7 @@ Tauri main.rs
 
 Claude Code
   ↕ MCP stdio
-bridge/agent-bridge-bridge
+bridge/agent-nexus-bridge
   ↕ WS :4502
 Rust daemon
 
@@ -44,8 +44,8 @@ Rust daemon
 - Tauri 在项目根写 `.mcp.json`，command 固定写 app-bundled bridge 绝对路径
 - 前端调用 `launch_claude_terminal`
 - Tauri 先检查 `claude -v` 是否 `>= 2.1.80`
-- 外部终端以 preview 模式运行 `claude --dangerously-load-development-channels server:agentbridge`
-- Claude 通过 MCP 启动 `agent-bridge-bridge`
+- 外部终端以 preview 模式运行 `claude --dangerously-load-development-channels server:agentnexus`
+- Claude 通过 MCP 启动 `agent-nexus-bridge`
 - bridge 用 WS 连内嵌 daemon
 - permission request 走 daemon → GUI → daemon → bridge 闭环返回 Claude
 

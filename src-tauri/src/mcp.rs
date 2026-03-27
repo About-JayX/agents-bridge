@@ -10,7 +10,7 @@ fn resolve_release_bridge_cmd() -> Result<String, String> {
         .unwrap_or(std::path::Path::new("."))
         .join("../Resources");
 
-    let direct = resources_dir.join("agent-bridge-bridge");
+    let direct = resources_dir.join("agent-nexus-bridge");
     if direct.exists() {
         return Ok(direct.to_string_lossy().to_string());
     }
@@ -27,13 +27,13 @@ fn resolve_release_bridge_cmd() -> Result<String, String> {
         let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
             continue;
         };
-        if name.starts_with("agent-bridge-bridge") {
+        if name.starts_with("agent-nexus-bridge") {
             return Ok(path.to_string_lossy().to_string());
         }
     }
 
     Err(format!(
-        "agent-bridge-bridge not found in {}",
+        "agent-nexus-bridge not found in {}",
         resources_dir.display()
     ))
 }
@@ -48,14 +48,14 @@ pub fn register_mcp(cwd: Option<String>) -> Result<bool, String> {
         let bridge_bin = project_root
             .join("target")
             .join("debug")
-            .join("agent-bridge-bridge");
+            .join("agent-nexus-bridge");
         bridge_bin.to_string_lossy().to_string()
     } else {
         resolve_release_bridge_cmd()?
     };
     let project_dir = cwd.unwrap_or_else(|| ".".to_string());
     eprintln!(
-        "[MCP] register agentbridge in {project_dir} using absolute command {}",
+        "[MCP] register agentnexus in {project_dir} using absolute command {}",
         bridge_cmd
     );
     write_mcp_config(&project_dir, &bridge_cmd, &[], "lead")
@@ -112,7 +112,7 @@ fn upsert_mcp_server(
     servers
         .as_object_mut()
         .ok_or("invalid mcpServers")?
-        .insert("agentbridge".to_string(), entry);
+        .insert("agentnexus".to_string(), entry);
 
     Ok((config.clone(), config != before))
 }
@@ -129,12 +129,12 @@ pub fn check_mcp_registered(cwd: Option<String>) -> bool {
         Ok(c) => c,
         Err(_) => return false,
     };
-    config.pointer("/mcpServers/agentbridge").is_some()
+    config.pointer("/mcpServers/agentnexus").is_some()
 }
 
 /// Launch Claude Code channel preview.
 /// Runs Claude in a managed hidden PTY so the local development prompt can be
-/// auto-confirmed for `server:agentbridge`.
+/// auto-confirmed for `server:agentnexus`.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn launch_claude_terminal(
@@ -165,7 +165,7 @@ mod tests {
     fn upsert_mcp_server_marks_unchanged_when_entry_matches() {
         let config = serde_json::json!({
             "mcpServers": {
-                "agentbridge": {
+                "agentnexus": {
                     "command": "/tmp/bridge",
                     "args": ["--foo"],
                     "env": { "AGENTBRIDGE_ROLE": "lead" }
@@ -183,7 +183,7 @@ mod tests {
     fn upsert_mcp_server_marks_changed_when_command_differs() {
         let config = serde_json::json!({
             "mcpServers": {
-                "agentbridge": {
+                "agentnexus": {
                     "command": "/tmp/old"
                 }
             }
@@ -191,6 +191,6 @@ mod tests {
 
         let (next, changed) = upsert_mcp_server(config, "/tmp/new", &[], "lead").unwrap();
         assert!(changed);
-        assert_eq!(next["mcpServers"]["agentbridge"]["command"], "/tmp/new");
+        assert_eq!(next["mcpServers"]["agentnexus"]["command"], "/tmp/new");
     }
 }

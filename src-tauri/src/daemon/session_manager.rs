@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fs, path::PathBuf};
 
 /// Manages temporary CODEX_HOME directories for Codex sessions.
-/// Each session gets `/tmp/agentbridge-<pid>-<id>/` with auth.json symlinked.
+/// Each session gets `/tmp/agentnexus-<pid>-<id>/` with auth.json symlinked.
 ///
 /// This struct is a singleton held in `DaemonState`.  Creating per-launch
 /// instances would call `cleanup_stale()` on each launch, destroying live sessions.
@@ -34,7 +34,7 @@ impl SessionManager {
         approval_policy: &str,
     ) -> anyhow::Result<PathBuf> {
         let pid = std::process::id();
-        let tmp = PathBuf::from(format!("/tmp/agentbridge-{pid}-{session_id}"));
+        let tmp = PathBuf::from(format!("/tmp/agentnexus-{pid}-{session_id}"));
         fs::create_dir_all(&tmp)?;
 
         // Transparent auth pass-through via symlink (no credential copy)
@@ -73,7 +73,7 @@ impl SessionManager {
 
     /// On startup, remove any leftover directories for the current PID.
     fn cleanup_stale() {
-        let prefix = format!("agentbridge-{}-", std::process::id());
+        let prefix = format!("agentnexus-{}-", std::process::id());
         if let Ok(entries) = fs::read_dir("/tmp") {
             for entry in entries.flatten() {
                 let name = entry.file_name();

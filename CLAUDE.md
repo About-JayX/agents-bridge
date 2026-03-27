@@ -1,4 +1,4 @@
-# AgentBridge
+# AgentNexus
 
 通用 AI Agent 桥接桌面应用。当前实现把 **Tauri/Rust 主进程** 作为唯一常驻后端，把 **Claude Code** 和 **Codex app-server** 接到同一个消息路由层里，让用户在一个桌面界面里协调两个 agent。
 
@@ -10,7 +10,7 @@
 | 主后端 | Rust 内嵌 async daemon（`src-tauri/src/daemon/`） |
 | Claude 接入 | 外部终端启动 `claude` + 项目 `.mcp.json` 注册 Rust bridge sidecar |
 | Codex 接入 | Rust daemon 启动 `codex app-server` 并通过 WS 建立 session |
-| 桥接 sidecar | Rust 二进制 `agent-bridge-bridge`（`bridge/` crate） |
+| 桥接 sidecar | Rust 二进制 `agent-nexus-bridge`（`bridge/` crate） |
 | 前端 | React 19 + Vite + TypeScript + Tailwind CSS v4 |
 
 ### 硬性约束
@@ -37,11 +37,11 @@
 ```text
 ┌─ Claude Code（外部终端） ───────────────────────────────────────┐
 │  读取项目 .mcp.json                                            │
-│  spawn: agent-bridge-bridge                                    │
+│  spawn: agent-nexus-bridge                                    │
 └───────────────┬─────────────────────────────────────────────────┘
                 │ MCP stdio
                 ▼
-┌─ bridge/agent-bridge-bridge ────────────────────────────────────┐
+┌─ bridge/agent-nexus-bridge ────────────────────────────────────┐
 │ tools.rs         → reply tool                                   │
 │ mcp.rs           → Claude Channel notification / tools/list     │
 │ channel_state.rs → reply target tracking / permission cache     │
@@ -77,7 +77,7 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 ### Claude 链路
 
 1. 前端选择项目目录后调用 `register_mcp`。
-2. Tauri 在项目根写入 **`.mcp.json`**，注册 `agent-bridge-bridge`。
+2. Tauri 在项目根写入 **`.mcp.json`**，注册 `agent-nexus-bridge`。
 3. 前端再调用 `launch_claude_terminal`，打开外部终端并在该目录运行 `claude`。
 4. Claude Code 读取项目 `.mcp.json`，以 MCP stdio 方式启动 bridge sidecar。
 5. bridge 通过 `ws://127.0.0.1:4502/ws` 连入内嵌 daemon。
@@ -86,7 +86,7 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 ### Codex 链路
 
 1. 前端调用 `daemon_launch_codex`。
-2. `session_manager.rs` 创建 `/tmp/agentbridge-<pid>-<sessionId>/` 临时 `CODEX_HOME`。
+2. `session_manager.rs` 创建 `/tmp/agentnexus-<pid>-<sessionId>/` 临时 `CODEX_HOME`。
 3. 当前实现会写入：
    - `auth.json` symlink → `$HOME/.codex/auth.json`
    - `config.toml` → `sandbox_mode` / `approval_policy` / `apply_patch_freeform=false`
@@ -140,7 +140,7 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 
 ```text
 创建会话
-  → /tmp/agentbridge-<pid>-<sessionId>/
+  → /tmp/agentnexus-<pid>-<sessionId>/
   → auth.json symlink（如存在）
   → config.toml
   → 启动 codex app-server
@@ -163,9 +163,9 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 
 - Tauri command: `src-tauri/src/mcp.rs`
 - 配置文件位置: 项目根 **`.mcp.json`**
-- sidecar 命令: `agent-bridge-bridge`
+- sidecar 命令: `agent-nexus-bridge`
 
-当前仓库没有单独的 `agentbridge mcp register` CLI。
+当前仓库没有单独的 `agentnexus mcp register` CLI。
 
 ## 常用命令
 

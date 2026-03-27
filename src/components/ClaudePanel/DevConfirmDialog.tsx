@@ -26,8 +26,8 @@ export function DevConfirmDialog({
             Start Local Claude Channel
           </h3>
           <p className="text-sm leading-6 text-muted-foreground">
-            AgentBridge will start Claude with local development channel mode
-            for <span className="font-mono text-foreground">server:agentbridge</span>.
+            AgentNexus will start Claude with local development channel mode
+            for <span className="font-mono text-foreground">server:agentnexus</span>.
             This is only intended for your current machine and project.
           </p>
           <div className="rounded-lg border border-border/60 bg-black/20 px-3 py-2 font-mono text-[11px] text-secondary-foreground">

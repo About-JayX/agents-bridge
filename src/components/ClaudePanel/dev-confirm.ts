@@ -1,4 +1,4 @@
-const STORAGE_PREFIX = "agentbridge:claude-dev-confirm:";
+const STORAGE_PREFIX = "agentnexus:claude-dev-confirm:";
 
 function storageKey(cwd: string) {
   return `${STORAGE_PREFIX}${encodeURIComponent(cwd)}`;

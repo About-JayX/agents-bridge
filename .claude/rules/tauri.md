@@ -89,7 +89,7 @@ paths:
   - `src-tauri/tauri.conf.json`
   - `src-tauri/src/mcp.rs`
 - `.mcp.json` 中的 bridge command 当前有意写绝对路径，这是 Tauri 打包形态要求，不要擅自改回文档示例里的相对脚本路径
-- `beforeDevCommand` / `beforeBuildCommand` 必须保证 `agent-bridge-bridge` 先被构建，否则 `.mcp.json` 注册出来的命令会指向不存在的二进制
+- `beforeDevCommand` / `beforeBuildCommand` 必须保证 `agent-nexus-bridge` 先被构建，否则 `.mcp.json` 注册出来的命令会指向不存在的二进制
 - 当前运行时不依赖 Bun daemon，但前端构建仍由 `bun run dev/build` 驱动
 
 ## 校验要求
@@ -97,4 +97,4 @@ paths:
 - Rust 改动后至少执行 `cargo test`
 - 结构性改动后建议执行 `cargo check`
 - 删除旧架构残留时，要同步删掉陈旧测试、陈旧依赖和陈旧注释
-- 每次做完 Tauri / daemon / Rust 链路审查后，必须同步更新 `docs/agentbridge-audit-summary.md`；如果涉及 Claude / Codex / bridge 专项协议，还要同步更新对应 `docs/agents/*.md`
+- 每次做完 Tauri / daemon / Rust 链路审查后，必须同步更新 `docs/agentnexus-audit-summary.md`；如果涉及 Claude / Codex / bridge 专项协议，还要同步更新对应 `docs/agents/*.md`

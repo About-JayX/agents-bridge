@@ -35,7 +35,7 @@
 - Modify: `src/components/MessagePanel/MessageBubble.tsx`
 - Test: `src-tauri/src/daemon/routing.rs`
 - Test: `src-tauri/src/daemon/state_tests.rs` or a new daemon test module if helper extraction makes这里更合适
-- Optional doc touch: `docs/agentbridge-audit-summary.md`
+- Optional doc touch: `docs/agentnexus-audit-summary.md`
 
 ### Task 1: 把“用户输入”从 transport message 中拆出来
 
@@ -212,7 +212,7 @@ invoke("daemon_send_user_input", {
 **Files:**
 - Test: `src-tauri/src/daemon/routing.rs`
 - Test: 新增与 `SendUserInput` 相关的 daemon tests
-- Optional doc touch: `docs/agentbridge-audit-summary.md`
+- Optional doc touch: `docs/agentnexus-audit-summary.md`
 
 - [ ] **Step 1: 添加 daemon 层回归测试**
 
@@ -241,7 +241,7 @@ npm run build
 
 - [ ] **Step 3: 更新审计文档**
 
-在 `docs/agentbridge-audit-summary.md` 补一条：
+在 `docs/agentnexus-audit-summary.md` 补一条：
 
 - 根因：display 模型错误复用 transport 副本
 - 处理：用户输入改单次 echo + daemon 内部 fan-out

@@ -37,7 +37,7 @@ export function AgentStatusPanel({ agents, connected }: AgentStatusProps) {
       {/* Daemon connection status */}
       <div className="flex items-center gap-2 pb-3 border-b border-border/50 relative">
         <h3 className="flex-1 m-0 text-sm font-semibold text-foreground">
-          AgentBridge
+          AgentNexus
         </h3>
         <StatusDot status={connected ? "connected" : "error"} variant="codex" />
         <span className="text-xs text-secondary-foreground">

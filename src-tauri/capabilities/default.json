@@ -1,6 +1,6 @@
 {
   "identifier": "default",
-  "description": "Default capabilities for AgentBridge",
+  "description": "Default capabilities for AgentNexus",
   "windows": ["main"],
   "permissions": [
     "core:default",

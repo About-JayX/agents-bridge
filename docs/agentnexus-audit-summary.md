@@ -1,4 +1,4 @@
-# AgentBridge 全链路审计总结
+# AgentNexus 全链路审计总结
 
 > 目的：把本轮及相关连续审计过程收敛成一份总文档，覆盖前端、Tauri daemon、Codex app-server、Claude bridge、MCP 通道与消息路由。
 > 说明：本文件是“总摘要”。协议细节和专项修复仍分别保留在 `docs/agents/claude-chain.md`、`docs/agents/codex-chain.md` 等文档中。

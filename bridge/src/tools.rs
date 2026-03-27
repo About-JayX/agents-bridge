@@ -8,7 +8,7 @@ const VALID_REPLY_TARGETS: &[&str] = &["user", "lead", "coder", "reviewer", "tes
 pub fn reply_tool_schema() -> serde_json::Value {
     serde_json::json!({
         "name": "reply",
-        "description": "Send a message to another agent role in AgentBridge. The system routes it automatically.",
+        "description": "Send a message to another agent role in AgentNexus. The system routes it automatically.",
         "inputSchema": {
             "type": "object",
             "properties": {

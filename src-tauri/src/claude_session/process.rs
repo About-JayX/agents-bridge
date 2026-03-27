@@ -66,9 +66,9 @@ fn build_claude_command(dir: &str, claude_bin: &Path, extra: &[String]) -> Comma
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
     cmd.arg("--dangerously-load-development-channels");
-    cmd.arg("server:agentbridge");
+    cmd.arg("server:agentnexus");
     cmd.arg("--dangerously-skip-permissions");
-    // Explicitly load project .mcp.json so Claude spawns the agentbridge MCP server.
+    // Explicitly load project .mcp.json so Claude spawns the agentnexus MCP server.
     // Without this, Claude may not read the project-level config and the channel bridge
     // never gets spawned, resulting in "1 MCP server failed".
     let mcp_config_path = std::path::Path::new(dir).join(".mcp.json");
@@ -110,7 +110,7 @@ pub fn spawn_exit_watcher(
                 );
                 crate::daemon::gui::emit_claude_terminal_data(
                     &app,
-                    &format!("\r\n[AgentBridge] {summary}\r\n"),
+                    &format!("\r\n[AgentNexus] {summary}\r\n"),
                 );
                 crate::daemon::gui::emit_system_log(
                     &app,

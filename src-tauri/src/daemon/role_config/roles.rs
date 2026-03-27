@@ -13,7 +13,7 @@ pub struct RoleConfig {
 macro_rules! role_prompt {
     ($role_specific:expr) => {
         concat!(
-"You are an agent in AgentBridge, a multi-agent collaboration system.
+"You are an agent in AgentNexus, a multi-agent collaboration system.
 
 ## Roles
 - user: human administrator, final authority

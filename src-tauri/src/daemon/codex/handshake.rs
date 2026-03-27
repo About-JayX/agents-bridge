@@ -47,7 +47,7 @@ pub(super) async fn handshake(
         .send(
             json!({
                 "method": "initialize", "id": init_id,
-                "params": { "clientInfo": {"name":"agentbridge","version":"0.1.0"},
+                "params": { "clientInfo": {"name":"agentnexus","version":"0.1.0"},
                             "capabilities": {"experimentalApi": true} }
             })
             .to_string(),
@@ -81,7 +81,7 @@ pub(super) async fn handshake(
               "description": "Check for new incoming messages from other agents.",
               "inputSchema": {"type":"object","properties":{}} },
             { "name": "get_status",
-              "description": "Get AgentBridge status: which roles are online.",
+              "description": "Get AgentNexus status: which roles are online.",
               "inputSchema": {"type":"object","properties":{}} }
         ]
     });

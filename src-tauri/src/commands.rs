@@ -139,7 +139,7 @@ pub async fn stop_claude(
     );
     crate::daemon::gui::emit_claude_terminal_data(
         &app,
-        "\r\n[AgentBridge] Claude terminal stopped by user\r\n",
+        "\r\n[AgentNexus] Claude terminal stopped by user\r\n",
     );
     crate::daemon::gui::emit_system_log(&app, "info", "[Claude PTY] stopped by user");
     // Defensive: emit claude offline immediately (WS disconnect will also emit later)

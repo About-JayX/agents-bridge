@@ -34,7 +34,7 @@ pub fn initialize_result(role: &str) -> serde_json::Value {
             }
         },
         "instructions": format!("{}\n\nYour role: {role}", CHANNEL_INSTRUCTIONS),
-        "serverInfo": { "name": "agentbridge", "version": "0.1.0" }
+        "serverInfo": { "name": "agentnexus", "version": "0.1.0" }
     })
 }
 
@@ -62,9 +62,9 @@ pub fn parse_permission_request(params: &serde_json::Value) -> Option<Permission
 }
 
 const CHANNEL_INSTRUCTIONS: &str =
-    "You are an agent in AgentBridge, a multi-agent collaboration system.\n\n\
+    "You are an agent in AgentNexus, a multi-agent collaboration system.\n\n\
 ## Message Format\n\
-Incoming messages arrive as <channel source=\"agentbridge\" from=\"ROLE\">CONTENT</channel>.\n\
+Incoming messages arrive as <channel source=\"agentnexus\" from=\"ROLE\">CONTENT</channel>.\n\
 Use reply(to, text) to send messages to any role. You decide who to send to.\n\n\
 ## Roles\n\
 - user: the human administrator, final authority\n\
@@ -119,7 +119,7 @@ mod tests {
         assert!(result["instructions"]
             .as_str()
             .unwrap_or_default()
-            .contains("<channel source=\"agentbridge\""));
+            .contains("<channel source=\"agentnexus\""));
     }
 
     #[test]

@@ -1,18 +1,18 @@
 {
   "$schema": "https://raw.githubusercontent.com/nickelpack/tauri-v2-nightly/main/tauri-config-schema.json",
-  "productName": "AgentBridge",
+  "productName": "AgentNexus",
   "version": "0.1.0",
-  "identifier": "com.agentbridge.app",
+  "identifier": "com.agentnexus.app",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "cargo build -p agent-bridge-bridge && bun run dev",
-    "beforeBuildCommand": "cargo build -p agent-bridge-bridge --release && bun run build"
+    "beforeDevCommand": "cargo build -p agent-nexus-bridge && bun run dev",
+    "beforeBuildCommand": "cargo build -p agent-nexus-bridge --release && bun run build"
   },
   "app": {
     "windows": [
       {
-        "title": "AgentBridge",
+        "title": "AgentNexus",
         "width": 1000,
         "height": 700,
         "resizable": true,
@@ -25,7 +25,8 @@
   },
   "bundle": {
     "externalBin": [
-      "binaries/agent-bridge-bridge"
+      "binaries/agent-nexus-bridge",
+      "binaries/codex"
     ]
   },
   "plugins": {

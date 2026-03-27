@@ -22,7 +22,7 @@ export default function App() {
       <div className="w-70 shrink-0 border-r border-border/50 flex flex-col relative noise-bg bg-linear-to-b from-[#0e0e14] to-[#0a0a0a]">
         <div className="flex items-baseline gap-2 p-4 border-b border-border/50 relative">
           <h2 className="m-0 text-base font-bold text-gradient-cyber relative z-10">
-            AgentBridge
+            AgentNexus
           </h2>
           <span className="text-xs text-muted-foreground/70 relative z-10">
             v0.1.0

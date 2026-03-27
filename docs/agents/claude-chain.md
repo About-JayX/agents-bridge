@@ -17,10 +17,10 @@
 claude --dangerously-load-development-channels server:<mcp_server_name> --dangerously-skip-permissions
 ```
 
-- `server:agentbridge` — 加载 `.mcp.json` 中名为 `agentbridge` 的 MCP server 作为 channel
+- `server:agentnexus` — 加载 `.mcp.json` 中名为 `agentnexus` 的 MCP server 作为 channel
 - `plugin:<name>@<marketplace>` — 加载插件形式的 channel
 - 此 flag 绕过 allowlist，仅限开发测试使用
-- `--dangerously-skip-permissions` — 默认跳过 Claude CLI 的本地 permission 确认，当前 AgentBridge 以 bypass permission 作为默认启动方式
+- `--dangerously-skip-permissions` — 默认跳过 Claude CLI 的本地 permission 确认，当前 AgentNexus 以 bypass permission 作为默认启动方式
 - 需要 Claude Code >= 2.1.80
 - 需要 claude.ai 登录（不支持 Console/API key）
 
@@ -49,7 +49,7 @@ MCP `Server` 构造函数接受 `(serverInfo, options)`：
 
 发送到 Claude 后的格式:
 ```xml
-<channel source="agentbridge" chat_id="123" from="user">
+<channel source="agentnexus" chat_id="123" from="user">
 消息内容
 </channel>
 ```
@@ -96,8 +96,8 @@ tool 调用通过 `CallToolRequestSchema` handler 处理，返回格式:
 ```json
 {
   "mcpServers": {
-    "agentbridge": {
-      "command": "/absolute/path/to/agent-bridge-bridge",
+    "agentnexus": {
+      "command": "/absolute/path/to/agent-nexus-bridge",
       "args": []
     }
   }
@@ -148,9 +148,9 @@ tool 调用通过 `CallToolRequestSchema` handler 处理，返回格式:
 ### 2026-03-25: Claude hidden PTY 与开发确认自动选择
 
 - [已修复] Claude 启动不再依赖 macOS Terminal 可见窗口；当前统一由 Tauri 进程托管 hidden PTY，会话不再要求用户盯着终端确认
-- [已修复] research preview 下 `--dangerously-load-development-channels server:agentbridge` 的本地开发确认提示，现在由 PTY watcher 自动输入 `1`
+- [已修复] research preview 下 `--dangerously-load-development-channels server:agentnexus` 的本地开发确认提示，现在由 PTY watcher 自动输入 `1`
 - [已修复] Claude 默认启动参数现在显式附带 `--dangerously-skip-permissions`，不再只依赖运行时交互去放行本地 permission；当前默认行为就是 bypass permission
-- [约束] 自动确认只对 `Channels: server:agentbridge` 生效，不会对其他 development channel 做泛化放行
+- [约束] 自动确认只对 `Channels: server:agentnexus` 生效，不会对其他 development channel 做泛化放行
 - [已修复] app 退出时会顺带停止当前 Claude PTY 会话，避免隐藏 Claude 进程在 GUI 关闭后残留
 - [已修复] dev 模式下 Claude PTY 输出会实时转发到 GUI 的 `Logs` 标签，便于观察启动、确认提示和异常输出；release 仍保持隐藏
 - [已修复] dev 模式下 `Connect Claude` 会先弹应用内确认框，而不是把 Claude CLI 的开发确认直接暴露给用户；支持按项目记住选择，用户确认后后台 PTY 再自动续跑
@@ -161,7 +161,7 @@ tool 调用通过 `CallToolRequestSchema` handler 处理，返回格式:
 - [已修复] `Claude Terminal` 切换到其他 tab 再切回时之前会空白；根因是组件卸载后重建时终端初始化与重放时序错开，当前改为在挂载时先完成 xterm 初始化，再重放已有 PTY 数据
 - [已修复] Claude 终端渲染之前使用了非等宽字体优先级，字符宽度容易偏；当前改为等宽字体优先，并补上 xterm 的 Unicode 11 和 WebGL 渲染增强，向 VS Code 终端方案靠拢
 - [已修复] 引入 `Unicode11Addon` 后终端黑屏并报 `You must set the allowProposedApi option to true to use proposed API`；根因是 xterm 需要在 terminal options 中显式开启 `allowProposedApi`，当前已抽成独立配置并加回归测试锁住
-- [已修复] `claude_terminal_attention` 事件之前无法稳定把 GUI 切到终端 tab；根因是 prompt 检测把最近 500 字符里只要还含有 `server:agentbridge` 和 `local development` 就整段排除，导致开发确认 prompt 后紧接着出现的真实交互 prompt 也被一起误判为“无需 attention”；当前改为只分析最后一个非空 prompt block，并补了回归测试
+- [已修复] `claude_terminal_attention` 事件之前无法稳定把 GUI 切到终端 tab；根因是 prompt 检测把最近 500 字符里只要还含有 `server:agentnexus` 和 `local development` 就整段排除，导致开发确认 prompt 后紧接着出现的真实交互 prompt 也被一起误判为“无需 attention”；当前改为只分析最后一个非空 prompt block，并补了回归测试
 - [已修复] Claude PTY watcher 曾在含 box-drawing 字符的终端输出上 panic，原因是 attention 检测直接按字节截取 `最近 500`，会切进多字节 Unicode 字符中间；当前改为按字符边界安全截断，并补了 Unicode 回归测试
 - [已修复] 在 Claude development prompt 里手动选择 `Exit` 之前会让嵌入式终端停在最后一帧，看起来像“卡死”；根因是 PTY reader 读到 EOF 后只会结束线程，没有任何“会话退出”事件回传给 GUI。当前新增了 Claude PTY exit watcher：会在进程结束时清理 tracked session、发出 `claude_terminal_status(false)`、向终端追加退出说明，并把 Claude 面板重新切回可重连状态
 - [已修复] Claude 面板之前只根据 channel bridge 的 `connected` 状态判断 UI，导致“PTY 还在启动但 bridge 尚未连上”与“PTY 已退出”都会落在同一个 `disconnected` 外观；当前前端单独维护 `claudeTerminalRunning` 状态，启动中会禁用重复 `Connect`，退出后会显示终端结束说明
@@ -226,11 +226,11 @@ tool 调用通过 `CallToolRequestSchema` handler 处理，返回格式:
 
 #### 问题描述
 
-Claude PTY 启动后出现 `"Listening for channel messages from: server:agentbridge"` 紧接 `"1 MCP server failed · /mcp"`，bridge 进程从未被 spawn。
+Claude PTY 启动后出现 `"Listening for channel messages from: server:agentnexus"` 紧接 `"1 MCP server failed · /mcp"`，bridge 进程从未被 spawn。
 
 #### 根因
 
-`--dangerously-load-development-channels server:agentbridge` 只告知 Claude 要加载名为 `server:agentbridge` 的 channel，但 Claude Code 不知道如何 spawn 对应的 MCP server。没有 `--mcp-config`，Claude 不读取项目 `.mcp.json`，因此无法找到 `agent-bridge-bridge` 的命令路径。
+`--dangerously-load-development-channels server:agentnexus` 只告知 Claude 要加载名为 `server:agentnexus` 的 channel，但 Claude Code 不知道如何 spawn 对应的 MCP server。没有 `--mcp-config`，Claude 不读取项目 `.mcp.json`，因此无法找到 `agent-nexus-bridge` 的命令路径。
 
 #### 失败尝试
 
@@ -251,8 +251,8 @@ cmd.arg(mcp_config_path.to_string_lossy().to_string());
 
 #### 诊断陷阱
 
-- `pgrep -la agent-bridge-bridge` 会匹配 `cargo build -p agent-bridge-bridge`（构建脚本），误报 bridge 存在
-- 正确方法: `pgrep -fl "target/debug/agent-bridge-bridge"` 匹配完整二进制路径
+- `pgrep -la agent-nexus-bridge` 会匹配 `cargo build -p agent-nexus-bridge`（构建脚本），误报 bridge 存在
+- 正确方法: `pgrep -fl "target/debug/agent-nexus-bridge"` 匹配完整二进制路径
 - 二进制替换为 shell wrapper 无效：`register_mcp` 每次都重写 `.mcp.json` 为 Tauri 注册的绝对路径，wrapper 不会被调用；且 wrapper 重定向 stdout 到日志会破坏 MCP stdio 协议
 
 ### 2026-03-26: Bridge → Claude Channel 通知端到端验证

@@ -1,10 +1,10 @@
 [package]
-name = "agent-bridge-bridge"
+name = "agent-nexus-bridge"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "agent-bridge-bridge"
+name = "agent-nexus-bridge"
 path = "src/main.rs"
 
 [dependencies]

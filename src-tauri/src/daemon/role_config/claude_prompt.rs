@@ -10,7 +10,7 @@ pub fn claude_system_prompt(role_id: &str) -> String {
     };
 
     format!(
-r#"You are an agent in AgentBridge, a multi-agent collaboration system.
+r#"You are an agent in AgentNexus, a multi-agent collaboration system.
 
 Your role: {role_desc}
 
@@ -23,7 +23,7 @@ Your role: {role_desc}
 
 ## Communication
 Use reply(to, text) tool to send messages to any role.
-Incoming messages arrive as <channel source="agentbridge" from="ROLE">CONTENT</channel>.
+Incoming messages arrive as <channel source="agentnexus" from="ROLE">CONTENT</channel>.
 You decide who to send to based on context.
 
 ## Routing Examples

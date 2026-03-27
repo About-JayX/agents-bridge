@@ -5,10 +5,10 @@ use std::{
 use tauri::AppHandle;
 use crate::daemon::gui::ClaudeStreamPayload;
 
-const CHANNEL_MARKER: &str = "channels: server:agentbridge";
+const CHANNEL_MARKER: &str = "channels: server:agentnexus";
 const LOCAL_DEV_OPTION: &str = "1. i am using this for local development";
 const CHANNELS_HINT: &str = "please use --channels to run a list of approved channels.";
-const CHANNEL_MARKER_COMPACT: &str = "channels:server:agentbridge";
+const CHANNEL_MARKER_COMPACT: &str = "channels:server:agentnexus";
 const LOCAL_DEV_OPTION_COMPACT: &str = "iamusingthisforlocaldevelopment";
 const CHANNELS_HINT_COMPACT: &str = "pleaseuse--channelstorunalistofapprovedchannels.";
 
@@ -68,13 +68,13 @@ pub fn spawn_auto_confirm_thread(
                             if tty.write_all(b"1\n").and_then(|_| tty.flush()).is_ok() {
                                 confirmed = true;
                                 eprintln!(
-                                    "[Claude] auto-confirmed local server:agentbridge prompt"
+                                    "[Claude] auto-confirmed local server:agentnexus prompt"
                                 );
                                 if emit_debug_logs {
                                     crate::daemon::gui::emit_system_log(
                                         &app,
                                         "info",
-                                        "[Claude PTY] auto-confirmed local server:agentbridge prompt",
+                                        "[Claude PTY] auto-confirmed local server:agentnexus prompt",
                                     );
                                 }
                             }
@@ -148,8 +148,8 @@ fn needs_user_attention(transcript: &str) -> bool {
     let recent_text = recent_window.join("\n");
     let lower = recent_text.to_ascii_lowercase();
 
-    // Skip only when the most recent prompt window is the agentbridge dev confirmation itself.
-    if lower.contains("server:agentbridge") && lower.contains("local development") {
+    // Skip only when the most recent prompt window is the agentnexus dev confirmation itself.
+    if lower.contains("server:agentnexus") && lower.contains("local development") {
         return false;
     }
 

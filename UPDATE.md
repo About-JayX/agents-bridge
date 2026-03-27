@@ -1,17 +1,17 @@
-# AgentBridge Rust 架构整理记录
+# AgentNexus Rust 架构整理记录
 
 > 更新日期: 2026-03-25
 > 目的: 把仓库中的“当前实现”与“迁移期历史文档”彻底分开，清除 Bun daemon / PTY / GUI WS 时代的残留描述。
 
 ## 当前 Source of Truth
 
-- [`CLAUDE.md`](/Users/jason/floder/agent-bridge/CLAUDE.md)
-- [`.claude/rules/architecture.md`](/Users/jason/floder/agent-bridge/.claude/rules/architecture.md)
-- [`.claude/rules/frontend.md`](/Users/jason/floder/agent-bridge/.claude/rules/frontend.md)
-- [`.claude/rules/tauri.md`](/Users/jason/floder/agent-bridge/.claude/rules/tauri.md)
-- [`.claude/rules/daemon.md`](/Users/jason/floder/agent-bridge/.claude/rules/daemon.md)
-- [`src-tauri/src/daemon/`](/Users/jason/floder/agent-bridge/src-tauri/src/daemon)
-- [`bridge/`](/Users/jason/floder/agent-bridge/bridge)
+- [`CLAUDE.md`](/Users/jason/floder/agent-nexus/CLAUDE.md)
+- [`.claude/rules/architecture.md`](/Users/jason/floder/agent-nexus/.claude/rules/architecture.md)
+- [`.claude/rules/frontend.md`](/Users/jason/floder/agent-nexus/.claude/rules/frontend.md)
+- [`.claude/rules/tauri.md`](/Users/jason/floder/agent-nexus/.claude/rules/tauri.md)
+- [`.claude/rules/daemon.md`](/Users/jason/floder/agent-nexus/.claude/rules/daemon.md)
+- [`src-tauri/src/daemon/`](/Users/jason/floder/agent-nexus/src-tauri/src/daemon)
+- [`bridge/`](/Users/jason/floder/agent-nexus/bridge)
 
 ## 这次统一后的真实架构
 
@@ -19,7 +19,7 @@
 |------|----------|
 | 常驻后端 | Tauri 主进程内嵌 Rust daemon |
 | Claude 接入 | 项目 `.mcp.json` + 外部终端运行 `claude` |
-| bridge | Rust sidecar 二进制 `agent-bridge-bridge` |
+| bridge | Rust sidecar 二进制 `agent-nexus-bridge` |
 | Codex 接入 | Rust daemon 启动 `codex app-server` |
 | GUI 通信 | Tauri `invoke` / `listen` |
 | daemon 控制通道 | WS `127.0.0.1:4502/ws` |
@@ -50,7 +50,7 @@
 
 1. `register_mcp` 写项目 `.mcp.json`
 2. `launch_claude_terminal` 打开外部终端运行 `claude`
-3. Claude 启动 `agent-bridge-bridge`
+3. Claude 启动 `agent-nexus-bridge`
 4. bridge 连 `ws://127.0.0.1:4502/ws`
 5. daemon 通过 `agent_message` / `agent_status` / `system_log` 同步到前端
 

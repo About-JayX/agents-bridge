@@ -1,12 +1,20 @@
 use std::path::{Path, PathBuf};
 use tokio::process::{Child, Command};
 
-/// Resolve `codex` binary — try PATH first, then common install locations.
-/// macOS .app bundles have a minimal PATH that excludes nvm/bun/npm dirs.
+/// Resolve `codex` binary.
+/// Priority: bundled sidecar > PATH > common install paths.
 fn resolve_codex_bin() -> PathBuf {
+    // 1. Bundled sidecar (inside .app/Contents/MacOS/)
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let sidecar = dir.join("codex");
+            if sidecar.exists() { return sidecar; }
+        }
+    }
+    // 2. System PATH
     if let Ok(p) = which::which("codex") { return p; }
+    // 3. Common install paths (macOS .app has minimal PATH)
     let home = std::env::var("HOME").unwrap_or_default();
-    // nvm: scan version dirs for the newest one with codex
     let nvm_dir = PathBuf::from(&home).join(".nvm/versions/node");
     if let Ok(entries) = std::fs::read_dir(&nvm_dir) {
         let mut versions: Vec<PathBuf> = entries
@@ -16,7 +24,6 @@ fn resolve_codex_bin() -> PathBuf {
         versions.sort();
         if let Some(p) = versions.pop() { return p; }
     }
-    // Fixed paths
     for dir in &[".bun/bin", ".local/bin"] {
         let p = PathBuf::from(&home).join(dir).join("codex");
         if p.exists() { return p; }

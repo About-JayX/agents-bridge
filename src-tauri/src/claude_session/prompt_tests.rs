@@ -4,11 +4,11 @@ use super::{
 };
 
 #[test]
-fn matches_local_agentbridge_development_prompt() {
+fn matches_local_agentnexus_development_prompt() {
     let prompt = r#"
       --dangerously-load-development-channels is for local channel development only.
       Please use --channels to run a list of approved channels.
-      Channels: server:agentbridge
+      Channels: server:agentnexus
       ❯ 1. I am using this for local development
         2. Exit
     "#;
@@ -16,7 +16,7 @@ fn matches_local_agentbridge_development_prompt() {
 }
 
 #[test]
-fn ignores_non_agentbridge_prompts() {
+fn ignores_non_agentnexus_prompts() {
     let prompt = r#"
       Please use --channels to run a list of approved channels.
       Channels: server:someone-else
@@ -27,7 +27,7 @@ fn ignores_non_agentbridge_prompts() {
 
 #[test]
 fn matches_prompt_with_ansi_sequences() {
-    let prompt = "\u{1b}[1mPlease use --channels to run a list of approved channels.\u{1b}[0m\nChannels: server:agentbridge\n\u{1b}[32m1. I am using this for local development\u{1b}[0m";
+    let prompt = "\u{1b}[1mPlease use --channels to run a list of approved channels.\u{1b}[0m\nChannels: server:agentnexus\n\u{1b}[32m1. I am using this for local development\u{1b}[0m";
     assert!(should_auto_confirm_development_prompt(prompt));
 }
 
@@ -36,7 +36,7 @@ fn matches_prompt_when_terminal_output_collapses_spaces() {
     let prompt = r#"
       WARNING:Loadingdevelopmentchannels
       Pleaseuse--channelstorunalistofapprovedchannels.
-      Channels:server:agentbridge
+      Channels:server:agentnexus
       ❯1.Iamusingthisforlocaldevelopment
       2.Exit
     "#;
@@ -57,7 +57,7 @@ fn drains_complete_sanitized_log_lines() {
 #[test]
 fn detects_interactive_prompt_after_dev_prompt_in_same_tail() {
     let transcript = r#"
-      Channels: server:agentbridge
+      Channels: server:agentnexus
       1. I am using this for local development
       2. Exit
 
@@ -80,7 +80,7 @@ fn ignores_unicode_tail_without_panicking() {
 fn emits_attention_for_dev_prompt_before_auto_confirm() {
     let transcript = r#"
       Please use --channels to run a list of approved channels.
-      Channels: server:agentbridge
+      Channels: server:agentnexus
       1. I am using this for local development
     "#;
 
@@ -95,7 +95,7 @@ fn emits_attention_for_dev_prompt_before_auto_confirm() {
 fn stops_attention_for_dev_prompt_after_auto_confirm() {
     let transcript = r#"
       Please use --channels to run a list of approved channels.
-      Channels: server:agentbridge
+      Channels: server:agentnexus
       1. I am using this for local development
     "#;
 
