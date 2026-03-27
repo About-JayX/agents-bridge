@@ -1,4 +1,4 @@
-use crate::claude_cli::ensure_claude_channel_ready;
+use crate::claude_cli::{ensure_claude_channel_ready, resolve_claude_bin};
 use crate::claude_session::{self, ClaudeSessionManager};
 use crate::daemon::role_config;
 use std::sync::Arc;
@@ -18,8 +18,7 @@ pub async fn launch(
     app: AppHandle,
 ) -> Result<(), String> {
     let version = ensure_claude_channel_ready()?;
-    let claude_bin =
-        which::which("claude").map_err(|_| "Claude CLI not found in PATH".to_string())?;
+    let claude_bin = resolve_claude_bin()?;
 
     let mut extra_args: Vec<String> = Vec::new();
     if let Some(m) = &model {

@@ -36,9 +36,19 @@ pub fn parse_claude_version(output: &str) -> Option<ClaudeVersion> {
     })
 }
 
+/// Resolve `claude` binary — bundled sidecar first, then PATH.
+pub fn resolve_claude_bin() -> Result<std::path::PathBuf, String> {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let sidecar = dir.join("claude");
+            if sidecar.exists() { return Ok(sidecar); }
+        }
+    }
+    which::which("claude").map_err(|_| "Claude Code CLI not found".to_string())
+}
+
 pub fn ensure_claude_channel_ready() -> Result<ClaudeVersion, String> {
-    let claude =
-        which::which("claude").map_err(|_| "Claude Code CLI not found in PATH".to_string())?;
+    let claude = resolve_claude_bin()?;
     let output = Command::new(&claude)
         .arg("-v")
         .output()
