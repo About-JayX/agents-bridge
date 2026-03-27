@@ -1,9 +1,34 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio::process::{Child, Command};
 
+/// Resolve `codex` binary — try PATH first, then common install locations.
+/// macOS .app bundles have a minimal PATH that excludes nvm/bun/npm dirs.
+fn resolve_codex_bin() -> PathBuf {
+    if let Ok(p) = which::which("codex") { return p; }
+    let home = std::env::var("HOME").unwrap_or_default();
+    // nvm: scan version dirs for the newest one with codex
+    let nvm_dir = PathBuf::from(&home).join(".nvm/versions/node");
+    if let Ok(entries) = std::fs::read_dir(&nvm_dir) {
+        let mut versions: Vec<PathBuf> = entries
+            .filter_map(|e| e.ok().map(|e| e.path().join("bin/codex")))
+            .filter(|p| p.exists())
+            .collect();
+        versions.sort();
+        if let Some(p) = versions.pop() { return p; }
+    }
+    // Fixed paths
+    for dir in &[".bun/bin", ".local/bin"] {
+        let p = PathBuf::from(&home).join(dir).join("codex");
+        if p.exists() { return p; }
+    }
+    for p in &["/usr/local/bin/codex", "/opt/homebrew/bin/codex"] {
+        let p = PathBuf::from(p);
+        if p.exists() { return p; }
+    }
+    "codex".into()
+}
+
 /// Spawn a `codex app-server --listen ws://127.0.0.1:{port}` process.
-/// `codex_home` is set as `CODEX_HOME`.  `--config` flags enforce sandbox and
-/// approval policy at the CLI layer (on top of the config.toml in CODEX_HOME).
 pub async fn start(
     port: u16,
     codex_home: &Path,
@@ -11,7 +36,7 @@ pub async fn start(
     sandbox_mode: &str,
     approval_policy: &str,
 ) -> anyhow::Result<Child> {
-    let codex_bin = which::which("codex").unwrap_or_else(|_| "codex".into());
+    let codex_bin = resolve_codex_bin();
 
     let child = Command::new(&codex_bin)
         .arg("app-server")
