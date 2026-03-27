@@ -3,6 +3,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 static MSG_SEQ: AtomicU64 = AtomicU64::new(0);
 
+const VALID_REPLY_TARGETS: &[&str] = &["user", "lead", "coder", "reviewer", "tester"];
+
 pub fn reply_tool_schema() -> serde_json::Value {
     serde_json::json!({
         "name": "reply",
@@ -12,6 +14,7 @@ pub fn reply_tool_schema() -> serde_json::Value {
             "properties": {
                 "to": {
                     "type": "string",
+                    "enum": VALID_REPLY_TARGETS,
                     "description": "Target role: user, lead, coder, reviewer, or tester"
                 },
                 "text": {
@@ -31,6 +34,7 @@ pub fn handle_tool_call(params: &serde_json::Value, from: &str) -> Option<Bridge
     }
     let args = params.get("arguments")?;
     let to = args.get("to")?.as_str()?;
+    if !VALID_REPLY_TARGETS.contains(&to) { return None; }
     let text = args.get("text")?.as_str()?;
     let seq = MSG_SEQ.fetch_add(1, Ordering::Relaxed);
     Some(BridgeMessage {
@@ -76,5 +80,26 @@ mod tests {
     fn unknown_tool_returns_none() {
         let params = serde_json::json!({ "name": "unknown", "arguments": {} });
         assert!(handle_tool_call(&params, "claude").is_none());
+    }
+
+    #[test]
+    fn invalid_target_rejected() {
+        let params = serde_json::json!({
+            "name": "reply",
+            "arguments": { "to": "admin", "text": "hello" }
+        });
+        assert!(handle_tool_call(&params, "coder").is_none());
+    }
+
+    #[test]
+    fn reply_schema_has_enum_constraint() {
+        let schema = reply_tool_schema();
+        let to_enum = &schema["inputSchema"]["properties"]["to"]["enum"];
+        assert!(to_enum.is_array());
+        let targets: Vec<&str> = to_enum.as_array().unwrap()
+            .iter().map(|v| v.as_str().unwrap()).collect();
+        assert!(targets.contains(&"user"));
+        assert!(targets.contains(&"lead"));
+        assert!(!targets.contains(&"admin"));
     }
 }

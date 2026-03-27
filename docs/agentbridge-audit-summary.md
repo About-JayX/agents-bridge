@@ -209,6 +209,12 @@
 - [已修复] `daemon_send_message` 已从 `invoke_handler` 移除，Tauri command handler 和 `DaemonCmd::SendMessage` 变体均已删除。前端不再能绕过 role 白名单和 `route_user_input` 语义。
 - 内部 daemon 代码（bridge `AgentReply`、Codex structured output routing）直接调用 `routing::route_message`，不经过 Tauri command 层，不受此变更影响。
 
+### 8. [已修复] 内部 agent 路由对非法 target 的校验
+
+- [已修复] Claude bridge `reply` tool schema 的 `to` 字段已加 `enum` 约束（`[“user”,”lead”,”coder”,”reviewer”,”tester”]`），`handle_tool_call()` 拒绝非法 target 返回 `None`。
+- [已修复] `routing.rs` 的 `route_message_inner` 对不匹配当前 Claude/Codex role 且不在 `AGENT_ROLES` 白名单中的 target，改为 `RouteResult::Dropped` 而不是 `NeedBuffer`，不再污染 `buffered_messages`。
+- [已修复] 新增测试：`invalid_target_rejected`（bridge）、`reply_schema_has_enum_constraint`（bridge）、`invalid_target_is_dropped_not_buffered`（daemon）、`valid_role_offline_is_buffered`（daemon）。
+
 ## 当前仍需保留的已知限制
 
 - [已知限制] `threadId` 尚未从 daemon 暴露到前端，Codex 头部无法显示真实 thread。
@@ -254,6 +260,13 @@ cargo clippy --workspace --all-targets -- -D warnings
 - `cargo clippy --workspace --all-targets -- -D warnings`：通过
 - `bun run build`：通过
 - 结论：本轮修复已补上 daemon role 白名单、zero-target guard 和行为级测试。后续 `daemon_send_message` 旁路已在下一提交中移除。
+
+在 2026-03-27 对 `c9c6bb83` 的项目级深度审查时再次复核：
+
+- `cargo test`：通过（54 tests）
+- `cargo clippy --workspace --all-targets -- -D warnings`：通过
+- `bun run build`：通过
+- 结论：公开 Tauri 旁路 `daemon_send_message` 已移除；当前新增发现是内部 agent 路由对非法 target 仍会走离线缓冲，其中 Claude `reply` tool 缺少目标枚举校验是最直接的入口。
 
 ## 相关文档
 

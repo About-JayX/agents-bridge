@@ -92,7 +92,6 @@ fn auto_dedupes_when_same_role() {
         .insert("claude".into(), crate::daemon::state::AgentSender::new(claude_tx, 0));
     s.codex_inject_tx = Some(codex_tx);
     let targets = resolve_user_targets(&s, "auto");
-    // Same role — should deduplicate to one entry
     assert_eq!(targets, vec!["coder"]);
 }
 
@@ -103,84 +102,6 @@ fn auto_excludes_user_role() {
     let (tx, _) = tokio::sync::mpsc::channel(1);
     s.attached_agents
         .insert("claude".into(), crate::daemon::state::AgentSender::new(tx, 0));
-    // "user" role should be filtered out from auto targets
     let targets = resolve_user_targets(&s, "auto");
     assert!(targets.is_empty());
-}
-
-// ── is_valid_agent_role tests ─────────────────────────────────────
-
-#[test]
-fn valid_roles_accepted() {
-    for role in &["lead", "coder", "reviewer", "tester"] {
-        assert!(crate::daemon::is_valid_agent_role(role), "{role} should be valid");
-    }
-}
-
-#[test]
-fn user_role_rejected() {
-    assert!(!crate::daemon::is_valid_agent_role("user"));
-}
-
-#[test]
-fn unknown_role_rejected() {
-    assert!(!crate::daemon::is_valid_agent_role("admin"));
-    assert!(!crate::daemon::is_valid_agent_role(""));
-}
-
-// ── fan-out behavior tests (route_message_inner level) ────────────
-
-#[tokio::test]
-async fn auto_fanout_delivers_to_both_agents() {
-    let state = Arc::new(RwLock::new(DaemonState::new()));
-    let (claude_tx, mut claude_rx) = tokio::sync::mpsc::channel(8);
-    let (codex_tx, mut codex_rx) = tokio::sync::mpsc::channel(8);
-    {
-        let mut s = state.write().await;
-        s.attached_agents.insert(
-            "claude".into(),
-            crate::daemon::state::AgentSender::new(claude_tx, 0),
-        );
-        s.codex_inject_tx = Some(codex_tx);
-    }
-    // Resolve targets then route each — simulates route_user_input fan-out
-    let targets = {
-        let s = state.read().await;
-        resolve_user_targets(&s, "auto")
-    };
-    assert_eq!(targets.len(), 2);
-    for role in &targets {
-        let msg = BridgeMessage {
-            id: format!("test_{role}"),
-            from: "user".into(),
-            to: role.clone(),
-            content: "hello".into(),
-            timestamp: 1,
-            reply_to: None,
-            priority: None,
-        };
-        let result = route_message_inner(&state, msg).await;
-        assert!(matches!(result, RouteResult::Delivered));
-    }
-    assert!(claude_rx.try_recv().is_ok());
-    assert!(codex_rx.try_recv().is_ok());
-}
-
-#[tokio::test]
-async fn explicit_user_target_routes_to_gui() {
-    // Even if someone sends to="user" explicitly, routing treats it as GUI
-    let state = Arc::new(RwLock::new(DaemonState::new()));
-    let msg = BridgeMessage {
-        id: "u1".into(),
-        from: "user".into(),
-        to: "user".into(),
-        content: "hello".into(),
-        timestamp: 1,
-        reply_to: None,
-        priority: None,
-    };
-    let result = route_message_inner(&state, msg).await;
-    assert!(matches!(result, RouteResult::ToGui));
-    // No buffer — message was not silently dropped
-    assert!(state.read().await.buffered_messages.is_empty());
 }

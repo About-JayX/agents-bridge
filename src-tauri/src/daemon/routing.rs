@@ -43,8 +43,10 @@ pub async fn route_message_inner(state: &SharedState, msg: BridgeMessage) -> Rou
             } else {
                 Target::NeedBuffer
             }
-        } else {
+        } else if crate::daemon::is_valid_agent_role(&msg.to) {
             Target::NeedBuffer
+        } else {
+            return RouteResult::Dropped;
         }
     };
 
@@ -118,11 +120,12 @@ async fn route_message_with_display(
             );
         }
         RouteResult::Dropped => {
-            gui::emit_system_log(
-                app,
-                "warn",
-                &format!("[Route] dropped unauthorized Claude sender {}", msg.from),
-            );
+            let reason = if !crate::daemon::is_valid_agent_role(&msg.to) && msg.to != "user" {
+                format!("[Route] dropped invalid target '{}'", msg.to)
+            } else {
+                format!("[Route] dropped unauthorized sender '{}' → '{}'", msg.from, msg.to)
+            };
+            gui::emit_system_log(app, "warn", &reason);
         }
         RouteResult::ToGui => {}
     }
@@ -193,5 +196,5 @@ pub fn format_codex_input(msg: &BridgeMessage) -> String {
     }
 }
 
-#[cfg(test)] #[path = "routing_tests.rs"]
-mod tests;
+#[cfg(test)] #[path = "routing_tests.rs"] mod tests;
+#[cfg(test)] #[path = "routing_behavior_tests.rs"] mod behavior_tests;
