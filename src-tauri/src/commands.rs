@@ -1,24 +1,12 @@
 use crate::claude_session::ClaudeSessionManager;
 use crate::codex::oauth::{OAuthHandle, OAuthLaunchInfo};
 use crate::daemon::{
-    types::{BridgeMessage, DaemonStatusSnapshot, PermissionBehavior},
+    types::{DaemonStatusSnapshot, PermissionBehavior},
     DaemonCmd,
 };
 use crate::DaemonSender;
 use std::sync::Arc;
 use tauri::{Manager, State};
-
-#[tauri::command]
-pub async fn daemon_send_message(
-    msg: BridgeMessage,
-    sender: State<'_, DaemonSender>,
-) -> Result<(), String> {
-    sender
-        .0
-        .send(DaemonCmd::SendMessage(msg))
-        .await
-        .map_err(|e| e.to_string())
-}
 
 /// User typed a message — daemon handles GUI echo + fan-out internally.
 #[tauri::command]

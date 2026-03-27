@@ -18,8 +18,6 @@ pub type SharedState = Arc<RwLock<DaemonState>>;
 
 /// Commands sent from Tauri commands/frontend to the daemon task.
 pub enum DaemonCmd {
-    /// Route a message (e.g. user input) to its target agent.
-    SendMessage(types::BridgeMessage),
     /// User typed a message — daemon emits ONE GUI echo and fans out internally.
     SendUserInput { content: String, target: String },
     /// Launch a Codex session for the given role.
@@ -104,7 +102,6 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
     let mut codex_handle: Option<codex::CodexHandle> = None;
     while let Some(cmd) = cmd_rx.recv().await {
         match cmd {
-            DaemonCmd::SendMessage(msg) => routing::route_message(&state, &app, msg).await,
             DaemonCmd::SendUserInput { content, target } => {
                 routing::route_user_input(&state, &app, content, target).await;
             }

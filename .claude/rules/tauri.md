@@ -45,7 +45,6 @@ paths:
 - `codex_login`
 - `codex_cancel_login`
 - `codex_logout`
-- `daemon_send_message`
 - `daemon_send_user_input`
 - `daemon_launch_codex`
 - `daemon_stop_codex`

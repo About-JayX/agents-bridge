@@ -118,7 +118,6 @@ fn main() {
             commands::codex_login,
             commands::codex_cancel_login,
             commands::codex_logout,
-            commands::daemon_send_message,
             commands::daemon_send_user_input,
             commands::daemon_launch_codex,
             commands::daemon_stop_codex,

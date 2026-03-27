@@ -27,7 +27,6 @@ paths:
   - `claude_terminal_attention`
   - `codex_stream`
 - 用户操作通过 Tauri command：
-  - `daemon_send_message`
   - `daemon_send_user_input`
   - `daemon_launch_codex`
   - `daemon_stop_codex`

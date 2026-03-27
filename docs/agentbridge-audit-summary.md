@@ -204,6 +204,11 @@
 - [已修复] zero-target 语义：`route_user_input` 现在在 `targets.is_empty()` 时 **不再** emit GUI echo，只写 warn 日志并直接 return，避免”看似已发送”的假气泡。
 - [已修复] 行为级回归测试：新增 `auto_fanout_delivers_to_both_agents`、`explicit_user_target_routes_to_gui`、`valid_roles_accepted`、`user_role_rejected`、`unknown_role_rejected`（共 5 项），覆盖 fan-out 投递、user target 路由、role 白名单。
 
+### 7. [已修复] `daemon_send_message` 旁路 API 移除
+
+- [已修复] `daemon_send_message` 已从 `invoke_handler` 移除，Tauri command handler 和 `DaemonCmd::SendMessage` 变体均已删除。前端不再能绕过 role 白名单和 `route_user_input` 语义。
+- 内部 daemon 代码（bridge `AgentReply`、Codex structured output routing）直接调用 `routing::route_message`，不经过 Tauri command 层，不受此变更影响。
+
 ## 当前仍需保留的已知限制
 
 - [已知限制] `threadId` 尚未从 daemon 暴露到前端，Codex 头部无法显示真实 thread。
@@ -241,7 +246,14 @@ cargo clippy --workspace --all-targets -- -D warnings
 - `cargo test`：通过
 - `cargo clippy --workspace --all-targets -- -D warnings`：通过
 - `bun run build`：通过
-- 结论：单气泡修复、依赖补齐、clippy 清理都已落地；但 role 白名单仍未在 daemon API 边界强制，zero-target 路径仍会留下“看似已发送”的 user 气泡，`route_user_input` 也还缺少真正的行为级回归测试。
+- 结论：当时确认的 role 白名单、zero-target 假气泡、行为级测试缺口，已在后续 `bb3d1044` 中修复；当前剩余问题以下方最新复核结论为准。
+
+在 2026-03-27 对 `bb3d1044` 的深度审查时再次复核：
+
+- `cargo test`：通过（54 tests）
+- `cargo clippy --workspace --all-targets -- -D warnings`：通过
+- `bun run build`：通过
+- 结论：本轮修复已补上 daemon role 白名单、zero-target guard 和行为级测试。后续 `daemon_send_message` 旁路已在下一提交中移除。
 
 ## 相关文档
 
