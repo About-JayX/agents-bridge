@@ -48,10 +48,12 @@
 - [已修复] `target` 选择器一度只是死 UI，修复后前端目标选择才真正进到路由链路。
 - [已修复] `auto` 模式一度会对同角色双发，之后通过去重和角色唯一性约束关闭了这条路径。
 - [已修复] 角色唯一性最终在 `b659fea` 收口，否则同一 role 被 Claude/Codex 同时占用时，daemon 路由会优先命中 Claude，造成 Codex 不可达。
+- [已修复] `route_message_inner_with_meta` 的顺序 if-else 结构在 Claude 离线但 `claude_role` 缓存命中时，会直接走 `NeedBuffer` 而跳过在线的 Codex。修复方式：改为先收集所有 role 匹配的在线 candidate，只在无在线 candidate 时才 buffer。新增 `routing_shared_role_tests.rs` 覆盖三种共享 role 场景。
 
 结论：
 
-- 这组问题已经从“重复消息 / 串台 / 不可达”演进到“单通道、单角色、单次路由”的更稳定模型。
+- 这组问题已经从”重复消息 / 串台 / 不可达”演进到”单通道、单角色、单次路由”的更稳定模型。
+- 共享 role 场景下的 live routing 已通过 candidate 收集方式修复，不再依赖 if-else 分支顺序。
 
 ### 2. 【重复问题】缓冲与回放的无损性
 

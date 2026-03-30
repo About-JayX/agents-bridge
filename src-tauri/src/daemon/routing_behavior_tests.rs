@@ -181,3 +181,4 @@ fn claude_thinking_starts_only_for_delivered_non_claude_messages() {
         "lead",
     ));
 }
+

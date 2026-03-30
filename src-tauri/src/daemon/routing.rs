@@ -34,41 +34,56 @@ async fn route_message_inner_with_meta(state: &SharedState, msg: BridgeMessage) 
         NeedBuffer,
     }
 
-    // First try with read lock — avoids write contention on the hot path
+    // Collect online candidates for the target role, then pick the first.
+    // This avoids the sequential if-else bug where an offline Claude with a
+    // cached role would shadow an online Codex holding the same role.
     let (target, emit_claude_thinking) = {
         let s = state.read().await;
         let emit_claude_thinking = routing_display::should_emit_claude_thinking_pre(
             &msg, &s.claude_role,
         );
-        if s.claude_role == msg.to {
-            if msg.from != "user" && msg.from != "system" && msg.from != s.codex_role {
+        let claude_matches = s.claude_role == msg.to;
+        let codex_matches = s.codex_role == msg.to;
+
+        if !claude_matches && !codex_matches {
+            if crate::daemon::is_valid_agent_role(&msg.to) {
+                (Target::NeedBuffer, false)
+            } else {
                 return RouteOutcome {
                     result: RouteResult::Dropped,
                     emit_claude_thinking: false,
                 };
             }
-            if let Some(agent) = s.attached_agents.get("claude") {
-                (Target::Claude(agent.tx.clone()), emit_claude_thinking)
-            } else {
-                (Target::NeedBuffer, false)
-            }
-        } else if s.codex_role == msg.to {
-            if let Some(tx) = s.codex_inject_tx.clone() {
-                let from_user = msg.from == "user";
-                (
-                    Target::Codex(tx, format_codex_input(&msg), from_user),
-                    false,
-                )
-            } else {
-                (Target::NeedBuffer, false)
-            }
-        } else if crate::daemon::is_valid_agent_role(&msg.to) {
-            (Target::NeedBuffer, false)
         } else {
-            return RouteOutcome {
-                result: RouteResult::Dropped,
-                emit_claude_thinking: false,
+            // Sender gating: Claude only accepts user/system/current codex_role
+            if claude_matches {
+                if msg.from != "user" && msg.from != "system" && msg.from != s.codex_role {
+                    return RouteOutcome {
+                        result: RouteResult::Dropped,
+                        emit_claude_thinking: false,
+                    };
+                }
+            }
+            // Collect online candidates for the target role
+            let claude_tx = if claude_matches {
+                s.attached_agents.get("claude").map(|a| a.tx.clone())
+            } else {
+                None
             };
+            let codex_tx = if codex_matches {
+                s.codex_inject_tx.clone()
+            } else {
+                None
+            };
+
+            if let Some(tx) = claude_tx {
+                (Target::Claude(tx), emit_claude_thinking)
+            } else if let Some(tx) = codex_tx {
+                let from_user = msg.from == "user";
+                (Target::Codex(tx, format_codex_input(&msg), from_user), false)
+            } else {
+                (Target::NeedBuffer, false)
+            }
         }
     };
 
@@ -164,3 +179,4 @@ pub fn format_codex_input(msg: &BridgeMessage) -> String {
 
 #[cfg(test)] #[path = "routing_tests.rs"] mod tests;
 #[cfg(test)] #[path = "routing_behavior_tests.rs"] mod behavior_tests;
+#[cfg(test)] #[path = "routing_shared_role_tests.rs"] mod shared_role_tests;
