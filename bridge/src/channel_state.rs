@@ -63,6 +63,9 @@ fn build_meta(msg: &BridgeMessage) -> serde_json::Value {
     if let Some(status) = msg.status {
         meta.insert("status".into(), serde_json::json!(status.as_str()));
     }
+    if let Some(ref agent_id) = msg.sender_agent_id {
+        meta.insert("sender_agent_id".into(), serde_json::json!(agent_id));
+    }
     serde_json::Value::Object(meta)
 }
 
@@ -82,6 +85,7 @@ mod tests {
             reply_to: None,
             priority: None,
             status: None,
+            sender_agent_id: None,
         }
     }
 
@@ -100,6 +104,22 @@ mod tests {
         message.status = Some(crate::types::MessageStatus::InProgress);
         let notif = state.prepare_channel_message(&message).unwrap();
         assert_eq!(notif["params"]["meta"]["status"], "in_progress");
+    }
+
+    #[test]
+    fn sender_agent_id_is_forwarded_in_channel_meta() {
+        let state = ChannelState::new();
+        let mut message = msg("coder");
+        message.sender_agent_id = Some("codex".into());
+        let notif = state.prepare_channel_message(&message).unwrap();
+        assert_eq!(notif["params"]["meta"]["sender_agent_id"], "codex");
+    }
+
+    #[test]
+    fn sender_agent_id_absent_when_none() {
+        let state = ChannelState::new();
+        let notif = state.prepare_channel_message(&msg("coder")).unwrap();
+        assert!(notif["params"]["meta"]["sender_agent_id"].is_null());
     }
 
     #[test]

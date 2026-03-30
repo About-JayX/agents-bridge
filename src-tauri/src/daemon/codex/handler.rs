@@ -55,6 +55,7 @@ async fn handle_reply(args: &Value, from: &str, state: &SharedState, app: &AppHa
         reply_to: None,
         priority: None,
         status: Some(MessageStatus::Done),
+        sender_agent_id: Some("codex".into()),
     };
 
     crate::daemon::routing::route_message(state, app, msg).await;

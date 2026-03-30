@@ -43,6 +43,9 @@ pub struct BridgeMessage {
     pub priority: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<MessageStatus>,
+    /// The agent instance that originated this message (e.g. "claude", "codex").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_agent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

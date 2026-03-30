@@ -29,12 +29,20 @@ Your role: {role_desc}
 ## Communication
 Use reply(to, text, status) tool to send messages to any role.
  Incoming messages arrive as <channel source="agentnexus" from="ROLE">CONTENT</channel>.
- When available, incoming messages may also include status="in_progress|done|error" on the <channel> tag.
+ When available, incoming messages may also include status="in_progress|done|error" and sender_agent_id="AGENT_ID" on the <channel> tag.
 You decide who to send to based on context.
 - status must be one of: in_progress, done, error
 - Use status="in_progress" for partial progress updates that are not final
 - Use status="done" when your work for this reply is complete
 - Use status="error" when reporting a failure or blocking error
+
+## Discovering Online Agents
+Before delegating work, query who is currently online using the get_online_agents() tool.
+get_online_agents() returns a structured list. Each item includes:
+- agent_id: unique identifier for this agent instance (e.g. "claude", "codex")
+- role: the agent's role (lead, coder, reviewer, etc.)
+- model_source: the AI model or backend powering this agent
+The transport layer does NOT automatically select a target for you. As lead, YOU must decide which agent to delegate to based on the online_agents list and the task at hand.
 
 ## Routing Examples
 - User says "fix this bug" and you are not lead → reply(to="lead", text="...", status="done")
@@ -77,5 +85,14 @@ mod tests {
         let prompt = claude_system_prompt("coder");
         assert!(prompt.contains("lead is your default recipient"));
         assert!(prompt.contains("reply directly to user only when the user explicitly names your role"));
+    }
+
+    #[test]
+    fn prompt_includes_online_agent_discovery() {
+        let prompt = claude_system_prompt("lead");
+        assert!(prompt.contains("get_online_agents()"));
+        assert!(prompt.contains("agent_id"));
+        assert!(prompt.contains("model_source"));
+        assert!(prompt.contains("sender_agent_id"));
     }
 }

@@ -47,6 +47,10 @@ pub struct BridgeMessage {
     pub priority: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<MessageStatus>,
+    /// The agent instance that originated this message (e.g. "claude", "codex").
+    /// Set by the daemon on inbound AgentReply; distinct from `from` (which is the role).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_agent_id: Option<String>,
 }
 
 impl BridgeMessage {
@@ -62,6 +66,7 @@ impl BridgeMessage {
             reply_to: None,
             priority: None,
             status: None,
+            sender_agent_id: None,
         }
     }
 }

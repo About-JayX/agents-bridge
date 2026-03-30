@@ -133,5 +133,6 @@ fn build_msg_with_status(
         reply_to: None,
         priority: None,
         status: Some(status),
+        sender_agent_id: Some("codex".into()),
     }
 }

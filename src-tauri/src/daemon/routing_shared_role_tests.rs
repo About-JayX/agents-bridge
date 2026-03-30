@@ -34,6 +34,7 @@ async fn route_to_live_codex_when_offline_claude_shares_role() {
         reply_to: None,
         priority: None,
         status: None,
+        sender_agent_id: None,
     };
     let result = route_message_inner(&state, msg).await;
     assert!(
@@ -70,6 +71,7 @@ async fn shared_role_both_offline_still_buffers() {
         reply_to: None,
         priority: None,
         status: None,
+        sender_agent_id: None,
     };
     let result = route_message_inner(&state, msg).await;
     assert!(
@@ -104,6 +106,7 @@ async fn route_to_live_claude_when_offline_codex_shares_role() {
         reply_to: None,
         priority: None,
         status: None,
+        sender_agent_id: None,
     };
     let result = route_message_inner(&state, msg).await;
     assert!(

@@ -519,6 +519,46 @@ cargo clippy --workspace --all-targets -- -D warnings
 - [已修复] `DaemonInbound::OnlineAgentsResponse` 死代码 — bridge 中 `OnlineAgentsResponse` 直接在 daemon_client.rs 通过 oneshot 处理，不走 push channel，已移除 `DaemonInbound` 中的死变体
 - [已修复] clippy `collapsible_if` — routing.rs 中嵌套 if 已合并
 
+### 30. [审查发现] 2026-03-30 统一在线 Agent 查询链路深度复核
+
+- [重要] **在线列表已经暴露 `agent_id`，但实际投递消息仍只暴露 role，不暴露发送方实例身份。**
+  - `src-tauri/src/daemon/control/handler.rs` 在 `AgentReply` 时会把 `message.from` 重写成当前 role，并仅把真实运行通道写入 `display_source`
+  - `bridge/src/channel_state.rs` 在 Claude channel meta 中只转发 `from` 和 `status`，没有转发 `agent_id`
+  - `src-tauri/src/daemon/routing.rs` 给 Codex 的 `format_codex_input()` 也只包含 `msg.from`
+  - 结果：虽然 agent 现在能查到在线 `agent_id` 列表，但收到一条消息时仍无法知道“是哪一个实例发来的”，因此“谁给 lead 提了问题，lead 后续优先回给谁”这条协作语义目前还没有可用基础
+
+- [重要] **Claude 侧“系统级规则”仍不对称：在线查询 hook 只写进 MCP instructions，没有写进 `claude_system_prompt()`。**
+  - `bridge/src/mcp_protocol.rs` 已明确要求 Claude 使用 `get_online_agents()`
+  - 但 `src-tauri/src/daemon/role_config/claude_prompt.rs` 仍未提到该 hook、`agent_id` 或 `model_source`
+  - 结果：当前行为仍部分依赖 bridge MCP 初始化注入，而不是完全由 Claude system prompt 自身约束。按当前设计边界，这属于 system 构造层没有完全收口
+
+- [重要] **传输层仍然是“单实例/单 inbox per role”模型，在线列表的实例信息还没有真正进入路由语义。**
+  - `src-tauri/src/daemon/state.rs` 中 `online_role_conflict()` 仍阻止 Claude/Codex 在线共享同一 role
+  - `src-tauri/src/daemon/codex/handler.rs` 的 `check_messages()` 仍按 `role_id` 调用 `take_buffered_for(role)` 取消息
+  - 结果：当前 `online_agents` hook 更像是“角色快照的结构化升级版”，还不是实例级协作路由基础设施。对于后续“多个 lead 同时在线”“lead 自己决定回给哪个具体 worker”这类设计，当前基础还不够
+
+- [验证] 本轮复核执行了最相关的定向验证：
+  - `cargo test --manifest-path bridge/Cargo.toml get_online_agents`：通过（5 tests）
+  - `cargo test --manifest-path src-tauri/Cargo.toml state_snapshot_tests`：通过（5 tests）
+  - `cargo test --manifest-path src-tauri/Cargo.toml route_to_live_codex_when_offline_claude_shares_role -- --nocapture`：通过（1 test）
+  - 结论基于当前代码静态复核 + 上述定向测试，不包含新的实现改动
+
+### 31. [审查发现] 2026-03-30 晚间 senderAgentId / prompt 一致性复核
+
+- [中] **`sender_agent_id` 透传链已经基本接通，但 Claude 的两套 system 说明仍未完全一致。**
+  - `src-tauri/src/daemon/role_config/claude_prompt.rs` 已加入：
+    - `get_online_agents()`
+    - `sender_agent_id` channel meta
+    - `agent_id / role / model_source` 说明
+  - 但 `bridge/src/mcp_protocol.rs` 的 `CHANNEL_INSTRUCTIONS` 仍只提到 `status`，没有同步 `sender_agent_id`
+  - 结果：Claude 在不同入口拿到的系统级协作约束仍存在轻微漂移。这不是 GUI 阻断项，但在实现层面还不算完全收口
+
+- [已验证] 本轮针对晚间改动追加执行了定向测试：
+  - `cargo test --manifest-path bridge/Cargo.toml sender_agent_id`：通过（2 tests）
+  - `cargo test --manifest-path bridge/Cargo.toml get_online_agents`：通过（5 tests）
+  - `cargo test --manifest-path src-tauri/Cargo.toml prompt_includes_online_agent_discovery`：通过（1 test）
+  - `cargo test --manifest-path src-tauri/Cargo.toml route_to_live_codex_when_offline_claude_shares_role`：通过（1 test）
+
 ## 验证记录（本轮 #30 — 统一在线 Agent 查询全量验证）
 
 - `cargo test --manifest-path src-tauri/Cargo.toml`：通过（112 tests）

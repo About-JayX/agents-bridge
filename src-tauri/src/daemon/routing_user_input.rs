@@ -64,5 +64,6 @@ fn build_user_message(now: u64, to: &str, content: &str) -> BridgeMessage {
         reply_to: None,
         priority: None,
         status: None,
+        sender_agent_id: None,
     }
 }

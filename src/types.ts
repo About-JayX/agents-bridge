@@ -11,6 +11,7 @@ export interface BridgeMessage {
   replyTo?: string;
   priority?: "normal" | "urgent";
   status?: MessageStatus;
+  senderAgentId?: string;
 }
 
 export type PermissionBehavior = "allow" | "deny";

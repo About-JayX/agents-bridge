@@ -95,6 +95,7 @@ pub async fn handle_connection(socket: WebSocket, state: SharedState, app: AppHa
                     };
                     message.from = role;
                     message.display_source = Some(id.to_string());
+                    message.sender_agent_id = Some(id.to_string());
                     let status = message.status.unwrap_or(MessageStatus::Done);
                     message.status = Some(status);
                     if id == "claude" && status.is_terminal() {
