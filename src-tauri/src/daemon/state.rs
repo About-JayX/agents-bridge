@@ -1,8 +1,8 @@
 use crate::daemon::{
     session_manager::SessionManager,
     types::{
-        AgentRuntimeStatus, BridgeMessage, DaemonStatusSnapshot, PermissionBehavior,
-        PermissionRequest, PermissionVerdict, ToAgent,
+        AgentRuntimeStatus, BridgeMessage, DaemonStatusSnapshot, OnlineAgentInfo,
+        PermissionBehavior, PermissionRequest, PermissionVerdict, ToAgent,
     },
 };
 use std::{collections::HashMap, sync::Arc};
@@ -112,37 +112,6 @@ impl DaemonState {
         }
     }
 
-    pub fn status_snapshot(&self) -> DaemonStatusSnapshot {
-        let mut agents = vec![
-            AgentRuntimeStatus {
-                agent: "claude".into(),
-                online: self.is_agent_online("claude"),
-            },
-            AgentRuntimeStatus {
-                agent: "codex".into(),
-                online: self.is_agent_online("codex"),
-            },
-        ];
-
-        let mut other_agents: Vec<_> = self
-            .attached_agents
-            .keys()
-            .filter(|agent| agent.as_str() != "claude" && agent.as_str() != "codex")
-            .cloned()
-            .collect();
-        other_agents.sort();
-        agents.extend(other_agents.into_iter().map(|agent| AgentRuntimeStatus {
-            agent,
-            online: true,
-        }));
-
-        DaemonStatusSnapshot {
-            agents,
-            claude_role: self.claude_role.clone(),
-            codex_role: self.codex_role.clone(),
-        }
-    }
-
     #[cfg(test)]
     pub fn flush_buffered(&mut self) -> Vec<BridgeMessage> {
         std::mem::take(&mut self.buffered_messages)
@@ -182,6 +151,11 @@ impl DaemonState {
 
 #[path = "state_permission.rs"]
 mod state_permission;
+#[path = "state_snapshot.rs"]
+mod state_snapshot;
 #[cfg(test)]
 #[path = "state_tests.rs"]
 mod state_tests;
+#[cfg(test)]
+#[path = "state_snapshot_tests.rs"]
+mod state_snapshot_tests;
