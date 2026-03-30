@@ -88,7 +88,7 @@
 ### 4. UI 表示与真实状态不一致
 
 - [已修复] `Connect Codex` 一度因为 `codexReady` 绑定方式错误而永久禁用。
-- [已修复] `Reasoning` 控件曾经未接线却暴露给用户，现已隐藏。
+- [已修复] `Reasoning` 控件最初未接线，后续被直接隐藏；当前已重新接线并恢复为真实可用配置。
 - [已修复] Codex 头部一度用假的 `ready/connecting` 状态掩盖真实连接状态，`5ce19b2` 已移除这套占位状态。
 - [已知限制] `threadId` 仍未从 daemon 透传到前端，所以头部虽然支持显示 thread，但实际仍传 `null`。
 
@@ -452,6 +452,24 @@ cargo clippy --workspace --all-targets -- -D warnings
 - [已修复] 统一消息结构新增可选 `displaySource` / `display_source`。daemon 现在会保留 `from=lead|coder|reviewer` 作为真实路由角色，同时写入 `displaySource=claude|codex|user|system` 作为 UI 展示身份。
 - [已修复] Messages 面板现在只用 `displaySource ?? from` 决定 badge 和颜色；若展示身份与路由角色不同，则额外显示一个次级 role label，例如 `Claude + coder`、`Codex + lead`。
 - [结果] 颜色稳定绑定模型身份，角色只作为辅助语义显示，不再把“Claude 的 coder 回复”渲染成 Codex 风格气泡。
+
+### 26. [已修复] 2026-03-27 Codex 恢复启动前模型/智力选择，并强制先选目录
+
+- [已修复] `5f218d2` 曾把 Codex 的 `Reasoning` selector 隐掉，原因是前端当时没有把 effort 真正传到 daemon / app-server。当前这条参数链已重新接通：`CodexPanel -> applyConfig -> daemon_launch_codex -> codex::start -> thread/start(params.effort)`。
+- [已修复] `Connect Codex` 之前仍会用 `cwd="."` 自动兜底，因此用户不选目录也能启动。当前前端按钮已改为“未选项目目录时禁用”，store 和 Tauri command 也会在命令边界拒绝空 `cwd`，避免旁路调用继续偷跑。
+- [已修复] 模型切换时，Reasoning 会重新回落到该模型的默认 effort；若模型未声明默认值，则退回到首个 supported effort。
+- [结果] Codex 现在和 Claude 一样，启动前就能明确选择 `model + reasoning + project`，并且没有选目录就不会发起连接。
+
+### 27. [已修复] 2026-03-30 review 结构清理收口
+
+- [已修复] `src-tauri/src/commands.rs` 与 `src-tauri/src/daemon/codex/handshake.rs` 的内联测试模块已拆到独立文件，分别落在 `src-tauri/src/commands_tests.rs` 与 `src-tauri/src/daemon/codex/handshake_tests.rs`。
+- [已修复] 拆分后文件行数重新回到约束内：
+  - `commands.rs`: 196 行
+  - `handshake.rs`: 183 行
+- [已修复] 前端 store 中已经失效的 `launchCodexTui` 接口已彻底移除，包含：
+  - `src/stores/bridge-store/index.ts` 中的死实现
+  - `src/stores/bridge-store/types.ts` 中的类型声明
+- [结果] review 指出的“超出 200 行限制”和“Codex 启动死代码残留”两条问题都已收口。
 
 ## 验证记录（本轮 #17）
 

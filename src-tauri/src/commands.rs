@@ -1,12 +1,23 @@
 use crate::claude_session::ClaudeSessionManager;
-use crate::codex::oauth::{OAuthHandle, OAuthLaunchInfo};
 use crate::daemon::{
     types::{DaemonStatusSnapshot, PermissionBehavior},
     DaemonCmd,
 };
 use crate::DaemonSender;
 use std::sync::Arc;
-use tauri::{Manager, State};
+use tauri::State;
+
+pub(crate) mod oauth;
+
+fn validate_codex_launch_args(role_id: &str, cwd: &str) -> Result<(), String> {
+    if !crate::daemon::is_valid_agent_role(role_id) {
+        return Err(format!("invalid role: {role_id}"));
+    }
+    if cwd.trim().is_empty() {
+        return Err("cwd is required".to_string());
+    }
+    Ok(())
+}
 
 /// User typed a message — daemon handles GUI echo + fan-out internally.
 #[tauri::command]
@@ -30,11 +41,10 @@ pub async fn daemon_launch_codex(
     role_id: String,
     cwd: String,
     model: Option<String>,
+    reasoning_effort: Option<String>,
     sender: State<'_, DaemonSender>,
 ) -> Result<(), String> {
-    if !crate::daemon::is_valid_agent_role(&role_id) {
-        return Err(format!("invalid role: {role_id}"));
-    }
+    validate_codex_launch_args(&role_id, &cwd)?;
     let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
     sender
         .0
@@ -42,6 +52,7 @@ pub async fn daemon_launch_codex(
             role_id,
             cwd,
             model,
+            reasoning_effort,
             reply: reply_tx,
         })
         .await
@@ -180,18 +191,6 @@ pub async fn claude_terminal_resize(
     crate::claude_session::resize(session.inner().as_ref(), cols, rows).await
 }
 
-#[tauri::command]
-pub async fn codex_login(app: tauri::AppHandle) -> Result<OAuthLaunchInfo, String> {
-    let handle = app.state::<Arc<OAuthHandle>>();
-    crate::codex::oauth::start_login(handle.inner().clone()).await
-}
-
-#[tauri::command]
-pub fn codex_cancel_login(app: tauri::AppHandle) -> bool {
-    app.state::<Arc<OAuthHandle>>().cancel()
-}
-
-#[tauri::command]
-pub async fn codex_logout() -> Result<(), String> {
-    crate::codex::oauth::do_logout().await
-}
+#[cfg(test)]
+#[path = "commands_tests.rs"]
+mod tests;

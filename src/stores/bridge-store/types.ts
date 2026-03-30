@@ -54,13 +54,16 @@ export interface BridgeState {
   clearClaudeAttention: () => void;
   sendToCodex: (content: string, target?: string) => void;
   clearMessages: () => void;
-  launchCodexTui: () => Promise<void>;
   stopCodexTui: () => void;
   respondToPermission: (
     requestId: string,
     behavior: PermissionBehavior,
   ) => Promise<void>;
-  applyConfig: (config: { model?: string; cwd?: string }) => Promise<void>;
+  applyConfig: (config: {
+    model?: string;
+    reasoningEffort?: string;
+    cwd?: string;
+  }) => Promise<void>;
   setRole: (agent: "claude" | "codex", role: string) => void;
   cleanup: () => void;
 }

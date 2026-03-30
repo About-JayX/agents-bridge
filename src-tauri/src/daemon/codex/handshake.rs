@@ -14,6 +14,43 @@ pub(super) type WsStream = futures_util::stream::SplitStream<
 >;
 pub(super) type WsTx = mpsc::Sender<String>;
 
+fn build_thread_start_params(opts: &SessionOpts) -> Value {
+    let mut params = json!({
+        "dynamicTools": [
+            { "name": "check_messages",
+              "description": "Check for new incoming messages from other agents.",
+              "inputSchema": {"type":"object","properties":{}} },
+            { "name": "get_status",
+              "description": "Get AgentNexus status: which roles are online.",
+              "inputSchema": {"type":"object","properties":{}} }
+        ]
+    });
+    if let Some(cwd) = (!opts.cwd.is_empty()).then_some(opts.cwd.as_str()) {
+        params["cwd"] = json!(cwd);
+    }
+    if let Some(m) = &opts.model {
+        if !m.is_empty() {
+            params["model"] = json!(m);
+        }
+    }
+    if let Some(effort) = &opts.effort {
+        if !effort.is_empty() {
+            params["effort"] = json!(effort);
+        }
+    }
+    if let Some(sb) = &opts.sandbox_mode {
+        params["sandbox"] = json!(sb);
+    }
+    if let Some(bi) = opts
+        .base_instructions
+        .as_deref()
+        .filter(|s| !s.is_empty())
+    {
+        params["baseInstructions"] = json!(bi);
+    }
+    params
+}
+
 pub(super) async fn handshake(
     port: u16,
     opts: &SessionOpts,
@@ -75,34 +112,7 @@ pub(super) async fn handshake(
     let thread_id_rpc = next_id;
     // NOTE: Codex CLI uses `inputSchema` (not `parameters`) and kebab-case sandbox.
     // Verified by runtime testing 2026-03-25.
-    let mut params = json!({
-        "dynamicTools": [
-            { "name": "check_messages",
-              "description": "Check for new incoming messages from other agents.",
-              "inputSchema": {"type":"object","properties":{}} },
-            { "name": "get_status",
-              "description": "Get AgentNexus status: which roles are online.",
-              "inputSchema": {"type":"object","properties":{}} }
-        ]
-    });
-    if let Some(cwd) = (!opts.cwd.is_empty()).then_some(opts.cwd.as_str()) {
-        params["cwd"] = json!(cwd);
-    }
-    if let Some(m) = &opts.model {
-        if !m.is_empty() {
-            params["model"] = json!(m);
-        }
-    }
-    if let Some(sb) = &opts.sandbox_mode {
-        params["sandbox"] = json!(sb);
-    }
-    if let Some(bi) = opts
-        .base_instructions
-        .as_deref()
-        .filter(|s| !s.is_empty())
-    {
-        params["baseInstructions"] = json!(bi);
-    }
+    let params = build_thread_start_params(opts);
     if ws_tx
         .send(json!({"method":"thread/start","id":thread_id_rpc,"params":params}).to_string())
         .await
@@ -167,3 +177,7 @@ async fn wait_for_id(stream: &mut WsStream, expected_id: u64, secs: u64) -> bool
     .await
     .unwrap_or(false)
 }
+
+#[cfg(test)]
+#[path = "handshake_tests.rs"]
+mod tests;

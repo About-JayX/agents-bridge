@@ -485,6 +485,27 @@ AGENTS.md、Skills、MCP 工具、developer_sections 全部通过 `input[]` 或 
 - [已修复] 前端消息气泡改为优先使用 `displaySource` 决定 badge 和颜色，因此 Codex 即使临时扮演 `lead`，气泡也仍然保持 Codex 绿色。
 - [已修复] 若 `displaySource` 与 `from` 不一致，UI 会把路由角色作为次级标签显示，避免丢掉“谁在以什么身份说话”的信息。
 
+### 2026-03-27: Codex 恢复 pre-launch model / reasoning / project 配置
+
+- [已修复] Codex 面板重新恢复 `Reasoning` selector；这次不是单纯把 UI 放回来，而是把参数链真正接通到 daemon。
+- [已修复] `reasoningEffort` 现在会从 `CodexPanel` 透传到 `daemon_launch_codex`，并最终写入 Codex app-server `thread/start` 的 `effort` 字段。
+- [已修复] 模型切换时会自动重置 reasoning 到模型默认 effort；如果没有默认值，则退回到第一个 supported effort。
+- [已修复] 启动 Codex 现在必须先选项目目录：
+  - 前端 `Connect Codex` 按钮在 `cwd` 为空时 disabled
+  - store `applyConfig()` 会拒绝空目录
+  - Tauri command `daemon_launch_codex` 也会拒绝空 `cwd`
+- [结果] Codex 启动前配置重新和 Claude 对齐：`model + reasoning + project` 三项都明确，且目录不再偷偷回退到 `"."`。
+
+### 2026-03-30: review 收口（文件行数与 coverage）
+
+- [已修复] `src-tauri/src/daemon/codex/handshake.rs` 新增了 `effort=None` 的反向测试，锁住“未选择 reasoning 时不发送 `params.effort`”的路径。
+- [已修复] `src-tauri/src/daemon/codex/mod.rs` 已拆出 `runtime.rs`，把端口清理和健康监控移出主文件。
+- [已修复] `src-tauri/src/daemon/codex/session.rs` 已拆出 `session_event.rs`，把事件分发与最终消息构造移出主循环文件。
+- [已修复] 相关文件行数已重新压回限制内：
+  - `daemon/codex/mod.rs`: 167 行
+  - `daemon/codex/session.rs`: 111 行
+  - `daemon/codex/handshake.rs`: 183 行
+
 ## 当前已知限制
 
 - 端口 4500 固定，不可配置

@@ -7,6 +7,11 @@ import { AuthActions } from "./AuthActions";
 import { CodexHeader } from "./CodexHeader";
 import { CodexUsageSection, type CodexUsageData } from "./CodexUsageSection";
 import { CodexConfigRows } from "./CodexConfigRows";
+import {
+  buildCodexLaunchConfig,
+  canConnectCodex,
+  getDefaultReasoningEffort,
+} from "./codex-launch-config";
 
 interface CodexPanelProps {
   codexTuiRunning: boolean;
@@ -60,9 +65,7 @@ export function CodexPanel({
     if (models.length > 0 && !selectedModel) {
       const first = models[0];
       setSelectedModel(first.slug);
-      setSelectedReasoning(
-        first.defaultReasoningLevel || first.reasoningLevels[0]?.effort || "",
-      );
+      setSelectedReasoning(getDefaultReasoningEffort(first));
     }
   }, [models, selectedModel]);
 
@@ -88,9 +91,7 @@ export function CodexPanel({
       setSelectedModel(slug);
       const m = models.find((x) => x.slug === slug);
       if (m) {
-        setSelectedReasoning(
-          m.defaultReasoningLevel || m.reasoningLevels[0]?.effort || "",
-        );
+        setSelectedReasoning(getDefaultReasoningEffort(m));
       }
     },
     [models],
@@ -104,10 +105,13 @@ export function CodexPanel({
   const handleConnect = useCallback(async () => {
     setConnecting(true);
     try {
-      await applyConfig({
-        model: selectedModel || undefined,
-        cwd: cwd || undefined,
-      });
+      await applyConfig(
+        buildCodexLaunchConfig({
+          model: selectedModel,
+          reasoningEffort: selectedReasoning,
+          cwd,
+        }),
+      );
     } catch {
       setConnecting(false);
     }
@@ -163,7 +167,13 @@ export function CodexPanel({
         <Button
           className="w-full mt-2 bg-codex text-white hover:bg-codex/90 hover:shadow-[0_0_16px_#22c55e40] active:scale-[0.98] transition-all duration-200 btn-ripple"
           size="sm"
-          disabled={!!codexTuiRunning || connecting}
+          disabled={
+            !canConnectCodex({
+              cwd,
+              connecting,
+              running: !!codexTuiRunning,
+            })
+          }
           onClick={handleConnect}
         >
           {connecting ? (

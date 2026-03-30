@@ -1,12 +1,13 @@
 mod handshake;
 pub mod handler;
 pub mod lifecycle;
+mod runtime;
 pub mod session;
 mod structured_output;
 
 use crate::daemon::{gui, role_config, SharedState};
+use runtime::{ensure_port_available, spawn_health_monitor};
 use session::SessionOpts;
-use std::future::Future;
 use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::{mpsc, Mutex};
@@ -33,45 +34,12 @@ impl CodexHandle {
     }
 }
 
-async fn ensure_port_available<F, Fut>(
-    codex_port: u16,
-    timeout: std::time::Duration,
-    mut cleanup: F,
-) -> anyhow::Result<()>
-where
-    F: FnMut(u16) -> Fut,
-    Fut: Future<Output = ()>,
-{
-    let deadline = tokio::time::Instant::now() + timeout;
-    let mut cleanup_attempted = false;
-
-    while tokio::net::TcpStream::connect(format!("127.0.0.1:{codex_port}"))
-        .await
-        .is_ok()
-    {
-        if !cleanup_attempted {
-            cleanup(codex_port).await;
-            cleanup_attempted = true;
-        }
-        if tokio::time::Instant::now() >= deadline {
-            let suffix = if timeout.as_secs() > 0 {
-                format!(" after {}s", timeout.as_secs())
-            } else {
-                format!(" after {}ms", timeout.as_millis())
-            };
-            anyhow::bail!("Port {codex_port} still in use{suffix}");
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-    }
-
-    Ok(())
-}
-
 /// Start a Codex app-server for the given role and wire it up to the daemon state.
 pub async fn start(
     role_id: String,
     cwd: String,
     model: Option<String>,
+    effort: Option<String>,
     state: SharedState,
     app: AppHandle,
     codex_port: u16,
@@ -129,6 +97,7 @@ pub async fn start(
         role_id: role_id.clone(),
         cwd: cwd.clone(),
         model,
+        effort,
         sandbox_mode: Some(sandbox_mode),
         base_instructions,
     };
@@ -191,39 +160,6 @@ pub async fn start(
         cancel,
         port: codex_port,
     })
-}
-
-/// Background task that detects unexpected Codex process death and updates state.
-fn spawn_health_monitor(
-    child: Arc<Mutex<Option<tokio::process::Child>>>,
-    state: SharedState,
-    app: AppHandle,
-    cancel: CancellationToken,
-) {
-    tokio::spawn(async move {
-        loop {
-            tokio::select! {
-                _ = cancel.cancelled() => return,
-                _ = tokio::time::sleep(std::time::Duration::from_secs(2)) => {}
-            }
-            let mut guard = child.lock().await;
-            if let Some(ref mut proc) = *guard {
-                match proc.try_wait() {
-                    Ok(Some(status)) => {
-                        cancel.cancel();
-                        state.write().await.codex_inject_tx = None;
-                        gui::emit_agent_status(&app, "codex", false, None);
-                        gui::emit_system_log(&app, "warn", &format!("[Codex] exited: {status}"));
-                        return;
-                    }
-                    Ok(None) => {}
-                    Err(_) => return,
-                }
-            } else {
-                return;
-            }
-        }
-    });
 }
 
 #[cfg(test)]

@@ -62,20 +62,6 @@ export const useBridgeStore = create<BridgeState>((set, get) => {
 
     clearMessages: () => set({ messages: [] }),
 
-    launchCodexTui: async () => {
-      const { codexRole } = get();
-      try {
-        await invoke("daemon_launch_codex", {
-          roleId: codexRole,
-          cwd: ".",
-          model: null,
-        });
-      } catch (error) {
-        logError(set)(error);
-        throw error;
-      }
-    },
-
     stopCodexTui: () => invoke("daemon_stop_codex").catch(logError(set)),
 
     respondToPermission: async (requestId, behavior) => {
@@ -105,11 +91,17 @@ export const useBridgeStore = create<BridgeState>((set, get) => {
 
     applyConfig: async (config) => {
       const { codexRole } = get();
+      if (!config.cwd?.trim()) {
+        const error = new Error("Select a project before connecting Codex");
+        logError(set)(error);
+        throw error;
+      }
       try {
         await invoke("daemon_launch_codex", {
           roleId: codexRole,
-          cwd: config.cwd ?? ".",
+          cwd: config.cwd,
           model: config.model ?? null,
+          reasoningEffort: config.reasoningEffort ?? null,
         });
       } catch (error) {
         logError(set)(error);

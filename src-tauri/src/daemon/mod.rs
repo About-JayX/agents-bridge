@@ -1,6 +1,7 @@
 pub mod codex;
 pub mod control;
 pub mod gui;
+mod permission;
 pub mod role_config;
 pub mod routing;
 pub mod routing_display;
@@ -23,6 +24,7 @@ pub enum DaemonCmd {
     SendUserInput { content: String, target: String },
     LaunchCodex {
         role_id: String, cwd: String, model: Option<String>,
+        reasoning_effort: Option<String>,
         reply: oneshot::Sender<Result<(), String>>,
     },
     StopCodex,
@@ -108,6 +110,7 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
                 role_id,
                 cwd,
                 model,
+                reasoning_effort,
                 reply,
             } => {
                 stop_codex_session(&mut codex_handle, &state, &app).await;
@@ -126,7 +129,16 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
                     continue;
                 }
                 let launch_result =
-                    match codex::start(role_id, cwd, model, state.clone(), app.clone(), 4500).await
+                    match codex::start(
+                        role_id,
+                        cwd,
+                        model,
+                        reasoning_effort,
+                        state.clone(),
+                        app.clone(),
+                        4500,
+                    )
+                    .await
                     {
                         Ok(h) => {
                             codex_handle = Some(h);
@@ -163,7 +175,7 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
                 let _ = reply.send(snapshot);
             }
             DaemonCmd::RespondPermission { request_id, behavior } => {
-                handle_permission_verdict(&state, &app, request_id, behavior).await;
+                permission::handle_permission_verdict(&state, &app, request_id, behavior).await;
             }
             DaemonCmd::ForceDisconnectAgent { agent_id } => {
                 let removed = {
@@ -178,39 +190,6 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
                     gui::emit_system_log(&app, "info", &format!("[Daemon] force-disconnected {agent_id}"));
                 }
             }
-        }
-    }
-}
-
-async fn handle_permission_verdict(
-    state: &SharedState,
-    app: &AppHandle,
-    request_id: String,
-    behavior: types::PermissionBehavior,
-) {
-    let resolved = {
-        let mut daemon = state.write().await;
-        daemon.resolve_permission(&request_id, behavior, chrono::Utc::now().timestamp_millis() as u64)
-    };
-    let Some((agent_id, outbound)) = resolved else {
-        gui::emit_system_log(app, "warn", &format!("[Daemon] permission {request_id} unknown/expired"));
-        return;
-    };
-    let sender_tx = state.read().await.attached_agents.get(&agent_id).map(|s| s.tx.clone());
-    let verdict = match &outbound {
-        types::ToAgent::PermissionVerdict { verdict } => Some(verdict.clone()),
-        _ => None,
-    };
-    match sender_tx {
-        Some(tx) if tx.send(outbound).await.is_ok() => {
-            gui::emit_system_log(app, "info", &format!("[Daemon] verdict delivered to {agent_id}"));
-        }
-        _ => {
-            if let Some(v) = verdict {
-                state.write().await.buffer_permission_verdict(&agent_id, v);
-            }
-            gui::emit_system_log(app, "warn",
-                &format!("[Daemon] {agent_id} offline, buffered verdict {request_id}"));
         }
     }
 }

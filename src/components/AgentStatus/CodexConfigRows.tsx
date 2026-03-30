@@ -62,7 +62,18 @@ export function CodexConfigRows({
         </div>
       )}
 
-      {/* Reasoning — hidden until turn/start effort param is wired */}
+      {/* Reasoning */}
+      {reasoningOptions.length > 0 && (
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] text-muted-foreground">Reasoning</span>
+          <CyberSelect
+            value={selectedReasoning}
+            options={reasoningSelectOptions}
+            onChange={setSelectedReasoning}
+            disabled={locked}
+          />
+        </div>
+      )}
 
       {/* Project / CWD */}
       <div className="flex items-center justify-between">
