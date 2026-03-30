@@ -18,14 +18,16 @@ paths:
   - `agent_connect`
   - `agent_reply`
   - `permission_request`
+  - `get_online_agents`
   - `agent_disconnect`
 - daemon 发给 bridge 的消息统一走：
   - `routed_message`
   - `permission_verdict`
+  - `online_agents_response`
 
 ## 工具边界
 
-- bridge 当前只暴露 `reply` MCP tool
+- bridge 当前暴露 2 个 MCP tool：`reply` 和 `get_online_agents`
 - `reply` tool 契约为 `to + text`，Claude 自行决定路由目标，bridge 纯转发
 - Claude channel initialize 结果必须带 `instructions`，并显式声明 `experimental['claude/channel']` 与 `experimental['claude/channel/permission']`
 - 如果要给 Claude 增加新 tool，必须同时更新：

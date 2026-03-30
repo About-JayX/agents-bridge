@@ -465,11 +465,24 @@ Claude Code CLI 支持多种注入机制，按强制性排序：
 
 **验证:** ✅ `cargo test --manifest-path bridge/Cargo.toml mcp_protocol` — 7 tests passed.
 
+### 2026-03-27: 统一在线 Agent 查询 — 全量验证通过
+
+**摘要:** Claude 和 Codex 的在线 agent 查询能力已统一。两侧使用同一个 `DaemonState::online_agents_snapshot()` 数据源，返回结构相同（`agent_id`, `role`, `model_source`）。
+
+**当前状态:**
+- Claude 通过 `get_online_agents()` MCP tool 查询
+- Codex 通过 `get_status()` 动态工具查询
+- 两者返回格式一致
+- 不支持 `send_to_agent_id`（实例级精确路由）
+- 路由目标仍按角色名匹配
+
+**验证:** 全量通过 — 112 Tauri tests, 26 bridge tests, 26 frontend tests, clippy clean, build success.
+
 ## 当前已知限制
 
 - Channel preview 是实验性功能，需要 `--dangerously-load-development-channels`
 - 依赖 Claude Code >= 2.1.80 / permission relay >= 2.1.81
-- 当前只有 `reply` 一个 tool
+- 当前暴露 2 个 MCP tool：`reply` 和 `get_online_agents`
 - `--agent --agents` 角色注入方案已研究（可行），尚未实现
 - 切角色后仍需要重新 register + 重启 Claude，bridge 才会读取新的 `.mcp.json` env
 - meta key 不能包含连字符（会被 Claude Code 静默丢弃）

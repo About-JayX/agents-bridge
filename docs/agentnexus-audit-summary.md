@@ -507,6 +507,27 @@ cargo clippy --workspace --all-targets -- -D warnings
 - [已确认] **重连后 `codex_inject_tx` 指向当前活跃 session** — `codex::start()` 在 `session::run()` 完成 WS 握手后调用 `attach_codex_session_if_current(launch_epoch, tx)`，如果 epoch 已被新的 launch 推进则挂载失败并清理自身。
 - [回归测试] `stale_codex_session_cleanup_cannot_clear_new_session` 锁住了 epoch 竞态保护行为。
 
+## 统一在线 Agent 查询（2026-03-27）
+
+- Codex 和 Claude 现在使用同一个 `online_agents` 数据源（`DaemonState::online_agents_snapshot()`）
+- Codex 侧通过 `get_status()` 动态工具查询，返回 `{ online_agents: [...] }`
+- Claude 侧通过 `get_online_agents()` MCP tool 查询，返回相同结构
+- 每个 agent 条目包含 `agent_id`、`role`、`model_source` 三个字段（camelCase）
+- 当前阶段仍不支持 `send_to_agent_id`（按实例 ID 精确路由）
+- 当前阶段仍不做实例级 agent-to-agent 路由，路由目标仍按角色名匹配
+- [已修复] `lead offline, buffered` 路由 bug — 当 Claude 和 Codex 共享同一角色（如 lead）时，离线的 Claude 不再遮挡在线的 Codex（反之亦然）。修复位于 `routing.rs` 的 `route_one()` fallback 逻辑
+- [已修复] `DaemonInbound::OnlineAgentsResponse` 死代码 — bridge 中 `OnlineAgentsResponse` 直接在 daemon_client.rs 通过 oneshot 处理，不走 push channel，已移除 `DaemonInbound` 中的死变体
+- [已修复] clippy `collapsible_if` — routing.rs 中嵌套 if 已合并
+
+## 验证记录（本轮 #30 — 统一在线 Agent 查询全量验证）
+
+- `cargo test --manifest-path src-tauri/Cargo.toml`：通过（112 tests）
+- `cargo test --manifest-path bridge/Cargo.toml`：通过（26 tests）
+- `cargo clippy --workspace --all-targets -- -D warnings`：通过
+- `bun test tests/`：通过（26 tests across 5 files）
+- `bun run build`：通过
+- 所有源码文件不超过 200 行
+
 ## 验证记录（本轮 #29）
 
 - `cargo test --manifest-path src-tauri/Cargo.toml`：通过（97 tests）

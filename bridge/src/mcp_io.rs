@@ -94,7 +94,6 @@ pub(crate) async fn handle_daemon_inbound_checked(
             }
             notif
         }
-        DaemonInbound::OnlineAgentsResponse(_) => None,
     };
 
     if let Some(notif) = payload {

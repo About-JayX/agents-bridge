@@ -92,7 +92,6 @@ pub enum DaemonMsg {
 pub enum DaemonInbound {
     RoutedMessage(BridgeMessage),
     PermissionVerdict(PermissionVerdict),
-    OnlineAgentsResponse(serde_json::Value),
 }
 
 #[derive(Debug)]

@@ -56,13 +56,15 @@ async fn route_message_inner_with_meta(state: &SharedState, msg: BridgeMessage) 
             }
         } else {
             // Sender gating: Claude only accepts user/system/current codex_role
-            if claude_matches {
-                if msg.from != "user" && msg.from != "system" && msg.from != s.codex_role {
-                    return RouteOutcome {
-                        result: RouteResult::Dropped,
-                        emit_claude_thinking: false,
-                    };
-                }
+            if claude_matches
+                && msg.from != "user"
+                && msg.from != "system"
+                && msg.from != s.codex_role
+            {
+                return RouteOutcome {
+                    result: RouteResult::Dropped,
+                    emit_claude_thinking: false,
+                };
             }
             // Collect online candidates for the target role
             let claude_tx = if claude_matches {

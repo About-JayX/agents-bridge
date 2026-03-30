@@ -601,6 +601,20 @@ Claude role: lead, Codex role: coder, Online agents: [codex]
 
 **验证:** ✅ `cargo test --manifest-path src-tauri/Cargo.toml daemon::role_config` — 5 tests passed.
 
+### 2026-03-27: 统一在线 Agent 查询 — 全量验证通过
+
+**摘要:** Codex 和 Claude 的在线 agent 查询能力已统一。两侧使用同一个 `DaemonState::online_agents_snapshot()` 数据源，返回结构相同（`agent_id`, `role`, `model_source`）。
+
+**当前状态:**
+- Codex 通过 `get_status()` 动态工具查询
+- Claude 通过 `get_online_agents()` MCP tool 查询
+- 两者返回格式一致
+- 不支持 `send_to_agent_id`（实例级精确路由）
+- 路由目标仍按角色名匹配
+- [已修复] shared-role live routing bug: 离线 Claude 不再遮挡在线 Codex（反之亦然）
+
+**验证:** 全量通过 — 112 Tauri tests, 26 bridge tests, 26 frontend tests, clippy clean, build success.
+
 ## 当前已知限制
 
 - 端口 4500 固定，不可配置

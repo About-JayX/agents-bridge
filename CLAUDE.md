@@ -42,7 +42,7 @@
                 │ MCP stdio
                 ▼
 ┌─ bridge/agent-nexus-bridge ────────────────────────────────────┐
-│ tools.rs         → reply tool                                   │
+│ tools.rs         → reply + get_online_agents tools               │
 │ mcp.rs           → Claude Channel notification / tools/list     │
 │ channel_state.rs → reply target tracking / permission cache     │
 │ mcp_protocol.rs  → RPC parsing / initialize result              │
@@ -255,7 +255,7 @@ bridge/src/
 ├── mcp_io.rs              # write_line, tool response, inbound dispatch
 ├── mcp_protocol.rs        # RPC parsing + initialize result
 ├── channel_state.rs       # reply target tracking / permission cache
-├── tools.rs               # reply tool schema + parsing
+├── tools.rs               # reply + get_online_agents tool schema + parsing
 └── types.rs               # bridge ↔ daemon protocol mirror
 ```
 
@@ -294,7 +294,9 @@ src-tauri/src/
     │   ├── handshake.rs    # initialize + thread/start WS handshake
     │   ├── lifecycle.rs
     │   ├── mod.rs
-    │   └── session.rs
+    │   ├── session.rs
+    │   ├── session_event.rs # Codex WS event processing
+    │   └── ws_client.rs     # Codex WS pump loop
     └── role_config/
         ├── mod.rs
         └── roles.rs
@@ -369,7 +371,7 @@ src/
 - Rust bridge sidecar（Cargo workspace 成员）
 - Claude 项目级 `.mcp.json` 注册
 - Claude channel preview 启动链路与版本 preflight
-- Claude channel `instructions` / `reply(to, text)` / permission relay
+- Claude channel `instructions` / `reply(to, text, status)` / `get_online_agents()` / permission relay
 - 外部终端启动 Claude CLI
 - Codex account / OAuth / models / usage
 - 临时 `CODEX_HOME` + `auth.json` symlink + `config.toml`
