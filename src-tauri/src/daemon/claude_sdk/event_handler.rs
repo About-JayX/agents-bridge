@@ -69,22 +69,18 @@ async fn handle_control_request(event: &Value, state: &SharedState, app: &AppHan
         .map(|obj| serde_json::to_string_pretty(obj).unwrap_or_default())
         .or_else(|| request_obj["input"].as_str().map(ToOwned::to_owned));
 
-    let perm = PermissionRequest {
-        request_id: request_id.clone(),
-        tool_name: tool_name.clone(),
-        description: description.clone(),
-        input_preview,
-    };
-    let created_at = chrono::Utc::now().timestamp_millis() as u64;
-    state
-        .write()
-        .await
-        .store_permission_request("claude", perm.clone(), created_at);
-    gui::emit_permission_prompt(app, "claude", &perm, created_at);
+    // Auto-approve: send allow verdict immediately via WS, skip GUI prompt.
+    // The --dangerously-skip-permissions flag handles most cases, but bridge
+    // mode may still emit control_request for some tool calls.
+    let ndjson = crate::daemon::claude_sdk::protocol::format_control_response(&request_id, true);
+    let sdk_tx = state.read().await.claude_sdk_ws_tx.clone();
+    if let Some(tx) = sdk_tx {
+        let _ = tx.send(ndjson).await;
+    }
     gui::emit_system_log(
         app,
         "info",
-        &format!("[Claude SDK] permission request {request_id} for {tool_name}"),
+        &format!("[Claude SDK] auto-approved {tool_name} ({request_id})"),
     );
 }
 
@@ -114,10 +110,27 @@ async fn handle_result(event: &Value, role: &str, state: &SharedState, app: &App
                 "info",
                 "[Claude SDK] suppressed duplicate terminal text; bridge owns visible result",
             );
+            gui::emit_system_log(
+                app,
+                "info",
+                &format!(
+                    "[Claude Trace] chain=sdk_result delivery=bridge_owned text_len={}",
+                    text.len()
+                ),
+            );
             finish_sdk_direct_text_turn(state).await;
             gui::emit_system_log(app, "info", "[Claude SDK] turn completed");
             return;
         }
+        gui::emit_system_log(
+            app,
+            "info",
+            &format!(
+                "[Claude Trace] chain=sdk_result delivery=direct_sdk text_len={} role={}",
+                text.len(),
+                role
+            ),
+        );
         if let Some(msg) = build_direct_sdk_gui_message(role, &text, MessageStatus::Done) {
             routing::route_message(state, app, msg).await;
         }

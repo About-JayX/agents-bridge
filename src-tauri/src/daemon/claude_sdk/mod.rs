@@ -6,6 +6,7 @@
 
 pub mod event_handler;
 pub mod process;
+pub mod protocol;
 pub mod stdio;
 
 use crate::daemon::{gui, SharedState};
@@ -70,6 +71,11 @@ pub async fn launch(
         "info",
         &format!("[Claude SDK] spawned session={session_id} role={role_id} resume={is_resume}"),
     );
+    gui::emit_system_log(
+        &app,
+        "info",
+        &format!("[Claude Trace] {}", process::format_launch_trace(&opts)),
+    );
 
     let cancel = CancellationToken::new();
 
@@ -125,11 +131,22 @@ pub async fn launch(
         s.set_provider_connection("claude", provider_session.clone());
         s.claude_role = role_id.clone();
     }
-    gui::emit_agent_status(&app, "claude", true, None, Some(provider_session));
+    gui::emit_agent_status(&app, "claude", true, None, Some(provider_session.clone()));
     gui::emit_system_log(
         &app,
         "info",
         &format!("[Claude SDK] ready session={session_id}"),
+    );
+    gui::emit_system_log(
+        &app,
+        "info",
+        &format!(
+            "[Claude Trace] chain=ready session={} provider_session={{provider=claude,external_session_id={},cwd={},connection_mode={}}}",
+            session_id,
+            provider_session.external_session_id,
+            provider_session.cwd,
+            provider_session.connection_mode.as_str(),
+        ),
     );
 
     Ok(ClaudeSdkHandle {
