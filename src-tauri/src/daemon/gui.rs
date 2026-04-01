@@ -115,6 +115,12 @@ pub enum CodexStreamPayload {
     Delta { text: String },
     Message { text: String },
     TurnDone { status: String },
+    /// Codex started a discrete work item (command, file edit, etc.)
+    Activity { label: String },
+    /// Streaming reasoning summary text (accumulated)
+    Reasoning { text: String },
+    /// Streaming command stdout/stderr
+    CommandOutput { text: String },
 }
 
 pub fn emit_codex_stream(app: &AppHandle, payload: CodexStreamPayload) {

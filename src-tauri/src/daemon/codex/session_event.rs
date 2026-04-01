@@ -28,6 +28,30 @@ pub(super) async fn handle_codex_event(
             stream_preview.reset();
             gui::emit_codex_stream(app, CodexStreamPayload::Thinking);
         }
+        "item/started" => emit_activity_from_item(v, app),
+        "item/reasoning/summaryTextDelta" => {
+            if let Some(delta) = v["params"]["delta"].as_str().filter(|s| !s.is_empty()) {
+                stream_preview.append_reasoning(delta);
+                gui::emit_codex_stream(app, CodexStreamPayload::Reasoning {
+                    text: stream_preview.reasoning_text().to_string(),
+                });
+            }
+        }
+        "item/reasoning/summaryPartAdded" => {
+            stream_preview.append_reasoning_boundary();
+            if !stream_preview.reasoning_text().is_empty() {
+                gui::emit_codex_stream(app, CodexStreamPayload::Reasoning {
+                    text: stream_preview.reasoning_text().to_string(),
+                });
+            }
+        }
+        "item/commandExecution/outputDelta" => {
+            if let Some(delta) = v["params"]["delta"].as_str().filter(|s| !s.is_empty()) {
+                gui::emit_codex_stream(app, CodexStreamPayload::CommandOutput {
+                    text: delta.to_string(),
+                });
+            }
+        }
         "item/agentMessage/delta" => {
             if let Some(text) = v["params"]["delta"].as_str().filter(|text| !text.is_empty()) {
                 if let Some(preview) = stream_preview.ingest_delta(text) {
@@ -116,6 +140,65 @@ async fn handle_completed_agent_message(
     }
 }
 
+fn emit_activity_from_item(v: &Value, app: &AppHandle) {
+    let item = &v["params"]["item"];
+    if let Some(label) = activity_label_from_item(item) {
+        gui::emit_codex_stream(app, CodexStreamPayload::Activity { label });
+    }
+}
+
+fn truncate_label(s: &str, max: usize) -> String {
+    if s.chars().count() <= max { s.to_string() } else {
+        s.chars().take(max - 1).collect::<String>() + "…"
+    }
+}
+
+fn activity_label_from_item(item: &Value) -> Option<String> {
+    match item["type"].as_str() {
+        Some("commandExecution") => {
+            let cmd = item["command"].as_str().unwrap_or("…");
+            Some(format!("Running: {}", truncate_label(cmd, 80)))
+        }
+        Some("fileChange") => {
+            let change = item["changes"].as_array().and_then(|changes| changes.first());
+            let path = change.and_then(|entry| entry["path"].as_str()).unwrap_or("…");
+            let kind = change.and_then(|entry| entry["kind"].as_str()).unwrap_or("edit");
+            Some(format!("File {kind}: {}", truncate_label(path, 80)))
+        }
+        Some("mcpToolCall") => {
+            let tool = item["tool"].as_str().unwrap_or("…");
+            Some(format!("MCP tool: {tool}"))
+        }
+        Some("reasoning") => Some("Reasoning…".into()),
+        Some("webSearch") => {
+            match item["action"]["type"].as_str() {
+                Some("openPage") => {
+                    let url = item["action"]["url"].as_str().unwrap_or("…");
+                    Some(format!("Opening: {}", truncate_label(url, 60)))
+                }
+                Some("findInPage") => {
+                    let pattern = item["action"]["pattern"].as_str().unwrap_or("…");
+                    Some(format!("Finding: {}", truncate_label(pattern, 60)))
+                }
+                _ => {
+                    let query = item["query"]
+                        .as_str()
+                        .or_else(|| item["action"]["query"].as_str())
+                        .or_else(|| {
+                            item["action"]["queries"]
+                                .as_array()
+                                .and_then(|queries| queries.first())
+                                .and_then(|query| query.as_str())
+                        })
+                        .unwrap_or("…");
+                    Some(format!("Searching: {}", truncate_label(query, 60)))
+                }
+            }
+        }
+        _ => None,
+    }
+}
+
 static MSG_SEQ: AtomicU64 = AtomicU64::new(0);
 
 fn build_msg_with_status(
@@ -138,5 +221,62 @@ fn build_msg_with_status(
         task_id: None,
         session_id: None,
         sender_agent_id: Some("codex".into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn activity_label_formats_command_execution() {
+        let item = json!({
+            "type": "commandExecution",
+            "command": "ls -la src-tauri/src/daemon"
+        });
+
+        assert_eq!(
+            activity_label_from_item(&item).as_deref(),
+            Some("Running: ls -la src-tauri/src/daemon")
+        );
+    }
+
+    #[test]
+    fn activity_label_formats_reasoning_state() {
+        let item = json!({ "type": "reasoning" });
+
+        assert_eq!(activity_label_from_item(&item).as_deref(), Some("Reasoning…"));
+    }
+
+    #[test]
+    fn activity_label_truncates_long_file_change_paths() {
+        let item = json!({
+            "type": "fileChange",
+            "changes": [{
+                "kind": "edit",
+                "path": format!("src/{}", "very-long-path/".repeat(12))
+            }]
+        });
+
+        let label = activity_label_from_item(&item).expect("label");
+        assert!(label.starts_with("File edit: src/"));
+        assert!(label.ends_with('…'));
+    }
+
+    #[test]
+    fn activity_label_formats_web_open_page_action() {
+        let item = json!({
+            "type": "webSearch",
+            "action": {
+                "type": "openPage",
+                "url": "https://example.com/docs"
+            }
+        });
+
+        assert_eq!(
+            activity_label_from_item(&item).as_deref(),
+            Some("Opening: https://example.com/docs")
+        );
     }
 }

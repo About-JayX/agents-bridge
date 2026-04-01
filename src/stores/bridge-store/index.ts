@@ -47,6 +47,9 @@ export const useBridgeStore = create<BridgeState>((set, get) => {
       currentDelta: "",
       lastMessage: "",
       turnStatus: "",
+      activity: "",
+      reasoning: "",
+      commandOutput: "",
     },
     draft: "",
 

@@ -74,3 +74,30 @@ fn truncated_flag_resets_on_new_turn() {
     assert!(!s.truncated);
     assert!(s.raw_delta.is_empty());
 }
+
+#[test]
+fn reasoning_accumulates_and_resets_per_turn() {
+    let mut s = StreamPreviewState::default();
+    s.append_reasoning("first ");
+    s.append_reasoning("second");
+    assert_eq!(s.reasoning_text(), "first second");
+    s.reset();
+    assert_eq!(s.reasoning_text(), "");
+}
+
+#[test]
+fn reasoning_cap_keeps_latest_text() {
+    let mut s = StreamPreviewState::default();
+    s.append_reasoning(&"a".repeat(8_100));
+    assert!(s.reasoning_text().len() <= 8_000);
+    assert!(s.reasoning_text().chars().all(|ch| ch == 'a'));
+}
+
+#[test]
+fn reasoning_boundary_separates_sections() {
+    let mut s = StreamPreviewState::default();
+    s.append_reasoning("First section");
+    s.append_reasoning_boundary();
+    s.append_reasoning("Second section");
+    assert_eq!(s.reasoning_text(), "First section\n\nSecond section");
+}

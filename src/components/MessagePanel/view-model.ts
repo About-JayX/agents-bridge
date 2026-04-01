@@ -7,6 +7,14 @@ import type {
 export type StreamIndicatorId = "claude" | "codex";
 export type MessagePanelTab = "messages" | "claude" | "logs" | "approvals";
 
+export interface CodexStreamIndicatorViewModel {
+  visible: boolean;
+  hasVisibleContent: boolean;
+  animatePulse: boolean;
+  showStatusLabel: boolean;
+  statusLabel: string;
+}
+
 export function getMessageIdentityPresentation(
   message: BridgeMessage,
 ): {
@@ -35,12 +43,37 @@ export function getTransientIndicators(
   claudeStream: ClaudeStreamState,
   codexStream: CodexStreamState,
 ): StreamIndicatorId[] {
+  const codexIndicator = getCodexStreamIndicatorViewModel(codexStream);
   return [
     ...(claudeStream.thinking ? (["claude"] as const) : []),
-    ...(codexStream.thinking || !!codexStream.currentDelta
+    ...(codexIndicator.visible
       ? (["codex"] as const)
       : []),
   ];
+}
+
+export function getCodexStreamIndicatorViewModel(
+  codexStream: CodexStreamState,
+): CodexStreamIndicatorViewModel {
+  const hasVisibleContent = Boolean(
+    codexStream.currentDelta ||
+      codexStream.activity ||
+      codexStream.reasoning ||
+      codexStream.commandOutput,
+  );
+  const statusLabel = codexStream.currentDelta
+    ? "streaming…"
+    : codexStream.activity
+      ? codexStream.activity
+      : "thinking…";
+
+  return {
+    visible: codexStream.thinking || hasVisibleContent,
+    hasVisibleContent,
+    animatePulse: !hasVisibleContent,
+    showStatusLabel: codexStream.thinking || Boolean(codexStream.activity),
+    statusLabel,
+  };
 }
 
 export function getClaudeAttentionResolution(

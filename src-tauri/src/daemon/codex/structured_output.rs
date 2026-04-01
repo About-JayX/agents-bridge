@@ -35,14 +35,41 @@ pub(super) struct StreamPreviewState {
     last_preview: String,
     /// Once truncation destroys the JSON prefix, stop re-parsing.
     truncated: bool,
+    reasoning: String,
 }
+
+const REASONING_CAP: usize = 8_000;
 
 impl StreamPreviewState {
     pub(super) fn reset(&mut self) {
         self.raw_delta.clear();
         self.last_preview.clear();
         self.truncated = false;
+        self.reasoning.clear();
     }
+
+    pub(super) fn append_reasoning(&mut self, delta: &str) {
+        self.reasoning.push_str(delta);
+        if self.reasoning.len() > REASONING_CAP {
+            let drop = self.reasoning.len() - REASONING_CAP;
+            let mut b = drop;
+            while b < self.reasoning.len() && !self.reasoning.is_char_boundary(b) { b += 1; }
+            self.reasoning.drain(..b);
+        }
+    }
+
+    pub(super) fn append_reasoning_boundary(&mut self) {
+        if self.reasoning.is_empty() || self.reasoning.ends_with("\n\n") {
+            return;
+        }
+        if self.reasoning.ends_with('\n') {
+            self.reasoning.push('\n');
+        } else {
+            self.reasoning.push_str("\n\n");
+        }
+    }
+
+    pub(super) fn reasoning_text(&self) -> &str { &self.reasoning }
 
     pub(super) fn ingest_delta(&mut self, text: &str) -> Option<String> {
         self.raw_delta.push_str(text);

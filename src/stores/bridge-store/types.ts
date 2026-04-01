@@ -24,6 +24,9 @@ export interface CodexStreamState {
   currentDelta: string;
   lastMessage: string;
   turnStatus: string;
+  activity: string;
+  reasoning: string;
+  commandOutput: string;
 }
 
 export interface ClaudeStreamState {

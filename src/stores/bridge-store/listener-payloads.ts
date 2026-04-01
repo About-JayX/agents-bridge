@@ -29,9 +29,17 @@ export interface AgentStatusPayload {
 export interface PermissionPromptPayload extends PermissionPrompt {}
 
 export interface CodexStreamPayload {
-  kind: "thinking" | "delta" | "message" | "turnDone";
+  kind:
+    | "thinking"
+    | "delta"
+    | "message"
+    | "turnDone"
+    | "activity"
+    | "reasoning"
+    | "commandOutput";
   text?: string;
   status?: string;
+  label?: string;
 }
 
 export interface ClaudeStreamPayload {

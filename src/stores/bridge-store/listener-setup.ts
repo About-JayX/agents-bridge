@@ -139,7 +139,7 @@ export function handleClaudeStreamEvent(
   }
 }
 
-function handleCodexStreamEvent(
+export function handleCodexStreamEvent(
   state: BridgeState,
   payload: CodexStreamPayload,
 ): Partial<BridgeState> {
@@ -151,6 +151,31 @@ function handleCodexStreamEvent(
           thinking: true,
           currentDelta: "",
           turnStatus: "",
+          activity: "",
+          reasoning: "",
+          commandOutput: "",
+        },
+      };
+    case "activity":
+      return {
+        codexStream: {
+          ...state.codexStream,
+          activity: payload.label ?? "",
+          commandOutput: "",
+        },
+      };
+    case "reasoning":
+      return {
+        codexStream: {
+          ...state.codexStream,
+          reasoning: (payload.text ?? "").slice(-MAX_CODEX_PREVIEW_CHARS),
+        },
+      };
+    case "commandOutput":
+      return {
+        codexStream: {
+          ...state.codexStream,
+          commandOutput: state.codexStream.commandOutput + (payload.text ?? ""),
         },
       };
     case "delta":
@@ -176,6 +201,9 @@ function handleCodexStreamEvent(
           currentDelta: "",
           lastMessage: "",
           turnStatus: payload.status ?? "",
+          activity: "",
+          reasoning: "",
+          commandOutput: "",
         },
       };
     default:
