@@ -1,4 +1,4 @@
-use std::{fmt, path::PathBuf, process::Command};
+use std::{fmt, path::PathBuf};
 
 /// Build a PATH that includes dirs where node/codex/claude are likely installed.
 /// macOS .app bundles inherit a minimal PATH from launchd.
@@ -89,29 +89,6 @@ pub fn resolve_claude_bin() -> Result<PathBuf, String> {
     which::which_in("claude", Some(&path), ".")
         .or_else(|_| which::which("claude"))
         .map_err(|_| "Claude Code CLI not found".to_string())
-}
-
-pub fn ensure_claude_channel_ready() -> Result<ClaudeVersion, String> {
-    let claude = resolve_claude_bin()?;
-    let output = Command::new(&claude)
-        .env("PATH", enriched_path())
-        .arg("-v")
-        .output()
-        .map_err(|e| format!("failed to run `claude -v`: {e}"))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let details = if stderr.is_empty() { stdout } else { stderr };
-        return Err(format!("`claude -v` failed: {details}"));
-    }
-    let raw = format!(
-        "{} {}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let version = parse_claude_version(&raw)
-        .ok_or_else(|| format!("failed to parse Claude Code version from `{}`", raw.trim()))?;
-    validate_claude_channel_ready(version)
 }
 
 fn validate_claude_channel_ready(version: ClaudeVersion) -> Result<ClaudeVersion, String> {

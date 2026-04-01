@@ -9,13 +9,8 @@ function baseState(): BridgeState {
     messages: [],
     agents: {},
     terminalLines: [],
-    claudeTerminalChunks: [],
-    claudeTerminalRunning: false,
-    claudeTerminalExitCode: undefined,
-    claudeTerminalDetail: undefined,
     permissionPrompts: [],
     claudeNeedsAttention: false,
-    claudeFocusNonce: 0,
     claudeRole: "lead",
     codexRole: "coder",
     claudeStream: {

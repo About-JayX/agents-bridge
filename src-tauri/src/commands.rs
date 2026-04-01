@@ -1,15 +1,23 @@
-use crate::claude_session::ClaudeSessionManager;
 use crate::daemon::{
     types::{DaemonStatusSnapshot, PermissionBehavior},
     DaemonCmd,
 };
 use crate::DaemonSender;
-use std::sync::Arc;
 use tauri::State;
 
 pub(crate) mod oauth;
 
 fn validate_codex_launch_args(role_id: &str, cwd: &str) -> Result<(), String> {
+    if !crate::daemon::is_valid_agent_role(role_id) {
+        return Err(format!("invalid role: {role_id}"));
+    }
+    if cwd.trim().is_empty() {
+        return Err("cwd is required".to_string());
+    }
+    Ok(())
+}
+
+fn validate_claude_launch_args(role_id: &str, cwd: &str) -> Result<(), String> {
     if !crate::daemon::is_valid_agent_role(role_id) {
         return Err(format!("invalid role: {role_id}"));
     }
@@ -154,15 +162,11 @@ pub async fn daemon_launch_claude_sdk(
     role_id: String,
     cwd: String,
     model: Option<String>,
+    effort: Option<String>,
     resume_session_id: Option<String>,
     sender: State<'_, DaemonSender>,
 ) -> Result<(), String> {
-    if !crate::daemon::is_valid_agent_role(&role_id) {
-        return Err(format!("invalid role: {role_id}"));
-    }
-    if cwd.trim().is_empty() {
-        return Err("cwd is required".to_string());
-    }
+    validate_claude_launch_args(&role_id, &cwd)?;
     let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
     sender
         .0
@@ -170,6 +174,7 @@ pub async fn daemon_launch_claude_sdk(
             role_id,
             cwd,
             model,
+            effort,
             resume_session_id,
             reply: reply_tx,
         })
@@ -194,54 +199,18 @@ pub async fn daemon_stop_claude_sdk(sender: State<'_, DaemonSender>) -> Result<(
 /// Handles managed PTY, SDK, and externally-connected Claude instances.
 #[tauri::command]
 pub async fn stop_claude(
-    session: State<'_, Arc<ClaudeSessionManager>>,
     sender: State<'_, DaemonSender>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
-    // 1. Try to stop SDK session
     let _ = sender.0.send(DaemonCmd::StopClaudeSdk).await;
-    // 2. Try to stop managed PTY session (legacy path)
-    let had_pty = crate::claude_session::stop(session.inner().as_ref())
-        .await
-        .is_ok();
-    if had_pty {
-        crate::daemon::gui::emit_claude_terminal_status(
-            &app,
-            false,
-            None,
-            Some("Claude terminal stopped by user".into()),
-        );
-        crate::daemon::gui::emit_claude_terminal_data(
-            &app,
-            "\r\n[AgentNexus] Claude terminal stopped by user\r\n",
-        );
-    }
-    // 3. Force-disconnect bridge agent (handles externally-connected Claude)
     let _ = sender
         .0
         .send(DaemonCmd::ForceDisconnectAgent {
             agent_id: "claude".into(),
         })
         .await;
-    crate::daemon::gui::emit_system_log(&app, "info", "[Claude] disconnected by user");
+    crate::daemon::gui::emit_system_log(&app, "info", "[Claude SDK] disconnected by user");
     Ok(())
-}
-
-#[tauri::command]
-pub async fn claude_terminal_input(
-    data: String,
-    session: State<'_, Arc<ClaudeSessionManager>>,
-) -> Result<(), String> {
-    crate::claude_session::write_input(session.inner().as_ref(), &data).await
-}
-
-#[tauri::command]
-pub async fn claude_terminal_resize(
-    cols: u16,
-    rows: u16,
-    session: State<'_, Arc<ClaudeSessionManager>>,
-) -> Result<(), String> {
-    crate::claude_session::resize(session.inner().as_ref(), cols, rows).await
 }
 
 #[cfg(test)]

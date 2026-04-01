@@ -5,7 +5,7 @@ import type {
 } from "@/stores/bridge-store/types";
 
 export type StreamIndicatorId = "claude" | "codex";
-export type MessagePanelTab = "messages" | "claude" | "logs" | "approvals";
+export type MessagePanelTab = "messages" | "logs" | "approvals";
 
 export interface CodexStreamIndicatorViewModel {
   visible: boolean;
@@ -90,7 +90,7 @@ export function getClaudeAttentionResolution(
     };
   }
 
-  if (tab === "claude") {
+  if (tab === "messages") {
     return {
       nextTab: null,
       clearStoreAttention: true,
@@ -98,24 +98,7 @@ export function getClaudeAttentionResolution(
   }
 
   return {
-    nextTab: "claude",
+    nextTab: "messages",
     clearStoreAttention: true,
   };
-}
-
-export function getClaudeTerminalPlaceholder(
-  connected: boolean,
-  running: boolean,
-  chunkCount: number,
-): string | null {
-  if (chunkCount > 0) {
-    return null;
-  }
-  if (running) {
-    return "Claude terminal is starting. Waiting for output…";
-  }
-  if (connected) {
-    return "Claude is connected. Waiting for terminal output…";
-  }
-  return "Claude terminal is idle. Connect Claude to start an embedded session.";
 }

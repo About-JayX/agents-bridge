@@ -180,6 +180,74 @@ fn online_role_conflict_only_blocks_live_other_agent() {
 }
 
 #[test]
+fn claude_sdk_direct_text_handoff_stays_enabled_until_turn_finishes() {
+    let mut s = DaemonState::new();
+
+    assert!(s.begin_claude_sdk_direct_text_turn());
+
+    let (claude_tx, _claude_rx) = tokio::sync::mpsc::channel::<ToAgent>(1);
+    s.attached_agents.insert(
+        "claude".into(),
+        crate::daemon::state::AgentSender::new(claude_tx, 0),
+    );
+
+    assert!(s.should_route_claude_sdk_text_directly());
+
+    s.finish_claude_sdk_direct_text_turn();
+
+    assert!(!s.should_route_claude_sdk_text_directly());
+}
+
+#[test]
+fn invalidating_claude_sdk_session_clears_direct_text_handoff_state() {
+    let mut s = DaemonState::new();
+    assert!(s.begin_claude_sdk_direct_text_turn());
+    let (claude_tx, _claude_rx) = tokio::sync::mpsc::channel::<ToAgent>(1);
+    s.attached_agents.insert(
+        "claude".into(),
+        crate::daemon::state::AgentSender::new(claude_tx, 0),
+    );
+
+    s.invalidate_claude_sdk_session();
+
+    assert!(!s.should_route_claude_sdk_text_directly());
+}
+
+#[test]
+fn sdk_terminal_delivery_claim_blocks_later_bridge_terminal_delivery() {
+    let mut s = DaemonState::new();
+
+    assert!(s.begin_claude_sdk_direct_text_turn());
+    assert!(s.claim_claude_sdk_terminal_delivery());
+    assert!(!s.claim_claude_bridge_terminal_delivery());
+}
+
+#[test]
+fn bridge_terminal_delivery_claim_blocks_later_sdk_terminal_delivery() {
+    let mut s = DaemonState::new();
+
+    assert!(s.begin_claude_sdk_direct_text_turn());
+    assert!(s.claim_claude_bridge_terminal_delivery());
+    assert!(!s.claim_claude_sdk_terminal_delivery());
+}
+
+#[test]
+fn completed_direct_turn_does_not_leak_into_next_bridge_owned_turn() {
+    let mut s = DaemonState::new();
+
+    assert!(s.begin_claude_sdk_direct_text_turn());
+    assert!(s.claim_claude_sdk_terminal_delivery());
+
+    let (claude_tx, _claude_rx) = tokio::sync::mpsc::channel::<ToAgent>(1);
+    s.attached_agents.insert(
+        "claude".into(),
+        crate::daemon::state::AgentSender::new(claude_tx, 0),
+    );
+
+    assert!(!s.begin_claude_sdk_direct_text_turn());
+}
+
+#[test]
 fn migrate_buffered_role_retargets_messages() {
     let mut s = DaemonState::new();
     s.buffer_message(BridgeMessage::system("hello", "lead"));

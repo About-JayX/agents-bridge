@@ -1,6 +1,8 @@
 # Claude Code 集成方案深度分析（2026-04-01）
 
 > 目标：系统性对比 Claude Code 所有可用集成方式，为 AgentNexus 找到比当前 `channel` 方案更优的接入路径。
+>
+> 2026-04-02 更新：AgentNexus 当前执行路线已经明确选择 `--sdk-url` 作为 Claude 主链路。本文仍保留全量对比，用于解释为什么做这个选择，以及哪些风险仍需要宿主自己承担。
 
 ## 结论先行
 
@@ -13,7 +15,8 @@
 | Channel (当前方案) | ★★★ | ★★★ | ★★★ | claude.ai | 当前可用 |
 | 直接 Anthropic API | ★★★★★ | ★★★★★ | ★★★★★ | API key | 最终形态 |
 
-**核心判断：Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`) 是当前最佳替代方案。** 它提供了 Channel 的所有能力（session 管理、tool 控制、MCP 支持），还额外提供了 Channel 不具备的能力（programmatic hook callbacks、structured output、multi-turn streaming input、subagent 定义），而且它是官方正式发布的 API，不需要 `--dangerously-*` flag。
+**策略判断（文档级）:** 如果只看长期稳定性，Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`) 仍然是最强的官方公共接口。  
+**产品判断（AgentNexus 当前）:** 为了保留 Rust 宿主、claude.ai 认证模型和更强的本地会话控制，当前实现路线选用 `--sdk-url`，不走 Agent SDK。
 
 ---
 

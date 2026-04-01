@@ -28,13 +28,8 @@ export const useBridgeStore = create<BridgeState>((set, get) => {
       codex: { name: "codex", displayName: "Codex", status: "disconnected" },
     },
     terminalLines: [],
-    claudeTerminalChunks: [],
-    claudeTerminalRunning: false,
-    claudeTerminalExitCode: undefined,
-    claudeTerminalDetail: undefined,
     permissionPrompts: [],
     claudeNeedsAttention: false,
-    claudeFocusNonce: 0,
     claudeRole: "lead",
     codexRole: "coder",
     claudeStream: {

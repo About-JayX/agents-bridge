@@ -10,16 +10,6 @@ export interface SystemLogPayload {
   message: string;
 }
 
-export interface ClaudeTerminalDataPayload {
-  data: string;
-}
-
-export interface ClaudeTerminalStatusPayload {
-  running: boolean;
-  exitCode?: number;
-  detail?: string;
-}
-
 export interface AgentStatusPayload {
   agent: string;
   online: boolean;

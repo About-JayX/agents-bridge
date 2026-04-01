@@ -6,11 +6,10 @@
 
 pub mod event_handler;
 pub mod process;
-pub mod protocol;
+pub mod stdio;
 
 use crate::daemon::{gui, SharedState};
 use process::ClaudeLaunchOpts;
-use protocol::{format_control_response, format_user_message};
 use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::Mutex;
@@ -20,51 +19,15 @@ use tokio_util::sync::CancellationToken;
 pub struct ClaudeSdkHandle {
     process: Arc<Mutex<Option<tokio::process::Child>>>,
     cancel: CancellationToken,
-    session_id: String,
-    role_id: String,
 }
 
 impl ClaudeSdkHandle {
-    pub fn session_id(&self) -> &str {
-        &self.session_id
-    }
-
-    pub fn role_id(&self) -> &str {
-        &self.role_id
-    }
-
     /// Stop the Claude subprocess and cancel background tasks.
     pub async fn stop(&self) {
         self.cancel.cancel();
         if let Some(mut child) = self.process.lock().await.take() {
             let _ = child.kill().await;
             let _ = child.wait().await;
-        }
-    }
-
-    /// Send a user message to Claude via the WS channel stored in state.
-    pub async fn send_message(state: &SharedState, content: &str) {
-        let tx = state.read().await.claude_sdk_ws_tx.clone();
-        if let Some(tx) = tx {
-            let line = format_user_message(content);
-            if tx.send(line).await.is_err() {
-                eprintln!("[Claude SDK] inject channel closed, message dropped");
-            }
-        } else {
-            eprintln!("[Claude SDK] no WS connection, message dropped");
-        }
-    }
-
-    /// Send a permission verdict (control_response) to Claude via state WS.
-    pub async fn send_permission_verdict(state: &SharedState, request_id: &str, allow: bool) {
-        let tx = state.read().await.claude_sdk_ws_tx.clone();
-        if let Some(tx) = tx {
-            let line = format_control_response(request_id, allow);
-            if tx.send(line).await.is_err() {
-                eprintln!("[Claude SDK] inject channel closed, verdict dropped");
-            }
-        } else {
-            eprintln!("[Claude SDK] no WS connection, verdict dropped");
         }
     }
 }
@@ -84,20 +47,6 @@ pub async fn launch(
     let role_id = opts.role.clone().unwrap_or_else(|| "lead".into());
     let is_resume = opts.resume.is_some();
 
-    let child = process::spawn_claude(&opts)?;
-    let child_arc = Arc::new(Mutex::new(Some(child)));
-    gui::emit_system_log(
-        &app,
-        "info",
-        &format!(
-            "[Claude SDK] spawned session={session_id} role={role_id} resume={is_resume}"
-        ),
-    );
-
-    let cancel = CancellationToken::new();
-
-    // Wait for Claude to connect via WS (the handler fires the ready signal
-    // carrying the inject mpsc::Sender<String>)
     let ready_rx = {
         let (ready_tx, ready_rx) =
             tokio::sync::oneshot::channel::<tokio::sync::mpsc::Sender<String>>();
@@ -106,6 +55,23 @@ pub async fn launch(
         s.claude_sdk_ready_tx = Some(ready_tx);
         ready_rx
     };
+
+    let mut child = match process::spawn_claude(&opts) {
+        Ok(child) => child,
+        Err(err) => {
+            state.write().await.invalidate_claude_sdk_session();
+            return Err(err);
+        }
+    };
+    stdio::spawn_stdio_drainers(child.stdout.take(), child.stderr.take());
+    let child_arc = Arc::new(Mutex::new(Some(child)));
+    gui::emit_system_log(
+        &app,
+        "info",
+        &format!("[Claude SDK] spawned session={session_id} role={role_id} resume={is_resume}"),
+    );
+
+    let cancel = CancellationToken::new();
 
     let connected = tokio::select! {
         result = ready_rx => result.is_ok(),
@@ -169,8 +135,6 @@ pub async fn launch(
     Ok(ClaudeSdkHandle {
         process: child_arc,
         cancel,
-        session_id,
-        role_id,
     })
 }
 
@@ -184,7 +148,9 @@ async fn poll_child_exit(child: &Arc<Mutex<Option<tokio::process::Child>>>, take
         if let Some(ref mut c) = *guard {
             match c.try_wait() {
                 Ok(Some(_)) | Err(_) => {
-                    if take { *guard = None; }
+                    if take {
+                        *guard = None;
+                    }
                     return;
                 }
                 Ok(None) => {}

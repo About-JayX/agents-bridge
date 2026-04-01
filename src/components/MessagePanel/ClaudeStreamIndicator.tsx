@@ -16,7 +16,7 @@ export function ClaudeStreamIndicator() {
               thinking…
             </span>
             <span className="text-[11px] text-muted-foreground">
-              Live in Claude Terminal
+              Live via Claude SDK
             </span>
           </div>
         </div>

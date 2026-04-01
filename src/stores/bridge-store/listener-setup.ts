@@ -4,8 +4,6 @@ import {
   type AgentMessagePayload,
   type AgentStatusPayload,
   type ClaudeStreamPayload,
-  type ClaudeTerminalDataPayload,
-  type ClaudeTerminalStatusPayload,
   type CodexStreamPayload,
   type PermissionPromptPayload,
   type SystemLogPayload,
@@ -42,29 +40,6 @@ export function createBridgeListeners(
         ],
       }));
     }),
-    listen<ClaudeTerminalDataPayload>("claude_terminal_data", (e) => {
-      set((s) => ({
-        claudeTerminalChunks: [
-          ...s.claudeTerminalChunks.slice(-999),
-          { id: nextLogId(), data: e.payload.data, timestamp: Date.now() },
-        ],
-      }));
-    }),
-    listen("claude_terminal_reset", () => {
-      set((s) => ({
-        claudeTerminalChunks: [],
-        claudeTerminalExitCode: undefined,
-        claudeTerminalDetail: undefined,
-        claudeStream: resetClaudeStream(s),
-      }));
-    }),
-    listen<ClaudeTerminalStatusPayload>("claude_terminal_status", (e) => {
-      set(() => ({
-        claudeTerminalRunning: e.payload.running,
-        claudeTerminalExitCode: e.payload.exitCode,
-        claudeTerminalDetail: e.payload.detail,
-      }));
-    }),
     listen<AgentStatusPayload>("agent_status", (e) => {
       const { agent, online, providerSession } = e.payload;
       set((s) => ({
@@ -81,12 +56,6 @@ export function createBridgeListeners(
         ...(agent === "claude" && !online
           ? { claudeStream: resetClaudeStream(s) }
           : {}),
-      }));
-    }),
-    listen("claude_terminal_attention", () => {
-      set((s) => ({
-        claudeNeedsAttention: true,
-        claudeFocusNonce: s.claudeFocusNonce + 1,
       }));
     }),
     listen<ClaudeStreamPayload>("claude_stream", (e) => {

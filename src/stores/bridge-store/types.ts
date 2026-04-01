@@ -13,12 +13,6 @@ export interface TerminalLine {
   timestamp: number;
 }
 
-export interface ClaudeTerminalChunk {
-  id: number;
-  data: string;
-  timestamp: number;
-}
-
 export interface CodexStreamState {
   thinking: boolean;
   currentDelta: string;
@@ -40,13 +34,8 @@ export interface BridgeState {
   messages: BridgeMessage[];
   agents: Record<string, AgentInfo>;
   terminalLines: TerminalLine[];
-  claudeTerminalChunks: ClaudeTerminalChunk[];
-  claudeTerminalRunning: boolean;
-  claudeTerminalExitCode?: number;
-  claudeTerminalDetail?: string;
   permissionPrompts: PermissionPrompt[];
   claudeNeedsAttention: boolean;
-  claudeFocusNonce: number;
   claudeRole: string;
   codexRole: string;
   claudeStream: ClaudeStreamState;

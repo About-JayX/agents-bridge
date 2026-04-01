@@ -10,12 +10,7 @@ use serde_json::Value;
 use tauri::AppHandle;
 
 /// Dispatch a batch of events from Claude's HTTP POST.
-pub async fn handle_events(
-    events: Vec<Value>,
-    role: &str,
-    state: SharedState,
-    app: AppHandle,
-) {
+pub async fn handle_events(events: Vec<Value>, role: &str, state: SharedState, app: AppHandle) {
     for event in events {
         let Some(event_type) = event["type"].as_str() else {
             continue;
@@ -39,24 +34,12 @@ pub async fn handle_events(
 
 async fn handle_assistant(event: &Value, role: &str, state: &SharedState, app: &AppHandle) {
     let text = extract_assistant_text(event);
-    if text.is_empty() {
+    if text.is_empty() || !begin_sdk_direct_text_turn_if_allowed(state).await {
         return;
     }
-    let msg = BridgeMessage {
-        id: format!("claude_sdk_{}", chrono::Utc::now().timestamp_millis()),
-        from: role.to_string(),
-        display_source: Some("claude".to_string()),
-        to: "user".to_string(),
-        content: text,
-        timestamp: chrono::Utc::now().timestamp_millis() as u64,
-        reply_to: None,
-        priority: None,
-        status: Some(MessageStatus::InProgress),
-        task_id: None,
-        session_id: None,
-        sender_agent_id: Some("claude".to_string()),
-    };
-    routing::route_message(state, app, msg).await;
+    if let Some(msg) = build_direct_sdk_gui_message(role, &text, MessageStatus::InProgress) {
+        routing::route_message(state, app, msg).await;
+    }
 }
 
 async fn handle_control_request(event: &Value, state: &SharedState, app: &AppHandle) {
@@ -121,26 +104,63 @@ async fn handle_result(event: &Value, role: &str, state: &SharedState, app: &App
         .as_str()
         .map(ToOwned::to_owned)
         .or_else(|| extract_assistant_text(event).into());
-    if let Some(text) = text {
-        if !text.is_empty() {
-            let msg = BridgeMessage {
-                id: format!("claude_sdk_result_{}", chrono::Utc::now().timestamp_millis()),
-                from: role.to_string(),
-                display_source: Some("claude".to_string()),
-                to: "user".to_string(),
-                content: text,
-                timestamp: chrono::Utc::now().timestamp_millis() as u64,
-                reply_to: None,
-                priority: None,
-                status: Some(MessageStatus::Done),
-                task_id: None,
-                session_id: None,
-                sender_agent_id: Some("claude".to_string()),
-            };
+    if let Some(text) = text.filter(|text| !text.is_empty()) {
+        if !claim_sdk_terminal_delivery(state).await {
+            gui::emit_system_log(
+                app,
+                "info",
+                "[Claude SDK] suppressed duplicate terminal text; bridge owns visible result",
+            );
+            finish_sdk_direct_text_turn(state).await;
+            gui::emit_system_log(app, "info", "[Claude SDK] turn completed");
+            return;
+        }
+        if let Some(msg) = build_direct_sdk_gui_message(role, &text, MessageStatus::Done) {
             routing::route_message(state, app, msg).await;
         }
     }
     gui::emit_system_log(app, "info", "[Claude SDK] turn completed");
+}
+
+async fn begin_sdk_direct_text_turn_if_allowed(state: &SharedState) -> bool {
+    state.write().await.begin_claude_sdk_direct_text_turn()
+}
+
+async fn claim_sdk_terminal_delivery(state: &SharedState) -> bool {
+    state.write().await.claim_claude_sdk_terminal_delivery()
+}
+
+async fn finish_sdk_direct_text_turn(state: &SharedState) {
+    state.write().await.finish_claude_sdk_direct_text_turn();
+}
+
+fn build_direct_sdk_gui_message(
+    role: &str,
+    text: &str,
+    status: MessageStatus,
+) -> Option<BridgeMessage> {
+    if !status.is_terminal() || text.is_empty() {
+        return None;
+    }
+    let prefix = match status {
+        MessageStatus::Done => "claude_sdk_result",
+        MessageStatus::Error => "claude_sdk_error",
+        MessageStatus::InProgress => "claude_sdk",
+    };
+    Some(BridgeMessage {
+        id: format!("{prefix}_{}", chrono::Utc::now().timestamp_millis()),
+        from: role.to_string(),
+        display_source: Some("claude".to_string()),
+        to: "user".to_string(),
+        content: text.to_string(),
+        timestamp: chrono::Utc::now().timestamp_millis() as u64,
+        reply_to: None,
+        priority: None,
+        status: Some(status),
+        task_id: None,
+        session_id: None,
+        sender_agent_id: Some("claude".to_string()),
+    })
 }
 
 fn extract_assistant_text(event: &Value) -> String {
@@ -159,5 +179,29 @@ fn extract_assistant_text(event: &Value) -> String {
             .collect::<Vec<_>>()
             .join(""),
         _ => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_direct_sdk_gui_message;
+    use crate::daemon::types::MessageStatus;
+
+    #[test]
+    fn in_progress_sdk_text_does_not_create_visible_gui_message() {
+        let msg = build_direct_sdk_gui_message("lead", "partial reply", MessageStatus::InProgress);
+        assert!(msg.is_none());
+    }
+
+    #[test]
+    fn terminal_sdk_text_creates_visible_gui_message() {
+        let msg = build_direct_sdk_gui_message("lead", "final reply", MessageStatus::Done)
+            .expect("done messages should be visible");
+
+        assert_eq!(msg.from, "lead");
+        assert_eq!(msg.display_source.as_deref(), Some("claude"));
+        assert_eq!(msg.to, "user");
+        assert_eq!(msg.content, "final reply");
+        assert_eq!(msg.status, Some(MessageStatus::Done));
     }
 }

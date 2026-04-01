@@ -16,25 +16,23 @@ paths:
 ## 当前前端边界
 
 - 前端不再维护 GUI WebSocket 客户端
-- Claude PTY 终端由 Rust `claude_session/` 管理，前端通过 xterm.js 渲染
+- Claude 由 Rust daemon 通过 `--sdk-url` 启动，前端消费 SDK 状态和消息事件
 - agent 运行状态来自 Rust 事件：
   - `agent_message`
   - `agent_status`
   - `system_log`
   - `permission_prompt`
-  - `claude_terminal_data`
-  - `claude_terminal_reset`
-  - `claude_terminal_attention`
   - `claude_stream`
   - `codex_stream`
 - 用户操作通过 Tauri command：
   - `daemon_send_user_input`
+  - `daemon_launch_claude_sdk`
+  - `daemon_stop_claude_sdk`
   - `daemon_launch_codex`
   - `daemon_stop_codex`
   - `daemon_set_claude_role`
   - `daemon_respond_permission`
   - `register_mcp`
-  - `launch_claude_terminal`
 
 ## 状态管理
 

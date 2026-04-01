@@ -32,6 +32,14 @@ struct PendingPermission {
     request: PermissionRequest,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ClaudeSdkDirectTextState {
+    Inactive,
+    Active,
+    CompletedBySdk,
+    CompletedByBridge,
+}
+
 pub struct DaemonState {
     pub attached_agents: HashMap<String, AgentSender>,
     pub buffered_messages: Vec<BridgeMessage>,
@@ -44,6 +52,7 @@ pub struct DaemonState {
     /// Oneshot that fires when Claude connects via WS, carrying the inject sender.
     pub claude_sdk_ready_tx: Option<tokio::sync::oneshot::Sender<mpsc::Sender<String>>>,
     claude_sdk_session_epoch: u64,
+    claude_sdk_direct_text_state: ClaudeSdkDirectTextState,
     pub claude_role: String,
     pub codex_role: String,
     pub claude_connection: Option<ProviderConnectionState>,
@@ -69,6 +78,7 @@ impl Default for DaemonState {
             claude_sdk_ws_tx: None,
             claude_sdk_ready_tx: None,
             claude_sdk_session_epoch: 0,
+            claude_sdk_direct_text_state: ClaudeSdkDirectTextState::Inactive,
             claude_role: "lead".into(),
             codex_role: "coder".into(),
             claude_connection: None,
@@ -170,6 +180,7 @@ impl DaemonState {
         self.begin_claude_sdk_launch();
         self.claude_sdk_ws_tx = None;
         self.claude_sdk_ready_tx = None;
+        self.claude_sdk_direct_text_state = ClaudeSdkDirectTextState::Inactive;
         self.claude_connection = None;
     }
 
@@ -177,11 +188,68 @@ impl DaemonState {
         self.claude_sdk_ws_tx.is_some()
     }
 
+    pub fn should_route_claude_sdk_text_directly(&self) -> bool {
+        !self.attached_agents.contains_key("claude")
+            || matches!(self.claude_sdk_direct_text_state, ClaudeSdkDirectTextState::Active)
+    }
+
+    pub fn prepare_claude_response_turn(&mut self) {
+        self.claude_sdk_direct_text_state = ClaudeSdkDirectTextState::Inactive;
+    }
+
+    pub fn begin_claude_sdk_direct_text_turn(&mut self) -> bool {
+        if matches!(
+            self.claude_sdk_direct_text_state,
+            ClaudeSdkDirectTextState::CompletedBySdk
+                | ClaudeSdkDirectTextState::CompletedByBridge
+        ) {
+            self.claude_sdk_direct_text_state = ClaudeSdkDirectTextState::Inactive;
+        }
+        let should_route = self.should_route_claude_sdk_text_directly();
+        if should_route {
+            self.claude_sdk_direct_text_state = ClaudeSdkDirectTextState::Active;
+        }
+        should_route
+    }
+
+    pub fn claim_claude_sdk_terminal_delivery(&mut self) -> bool {
+        match self.claude_sdk_direct_text_state {
+            ClaudeSdkDirectTextState::Active => {
+                self.claude_sdk_direct_text_state = ClaudeSdkDirectTextState::CompletedBySdk;
+                true
+            }
+            ClaudeSdkDirectTextState::Inactive => {
+                if self.attached_agents.contains_key("claude") {
+                    false
+                } else {
+                    self.claude_sdk_direct_text_state = ClaudeSdkDirectTextState::CompletedBySdk;
+                    true
+                }
+            }
+            ClaudeSdkDirectTextState::CompletedBySdk
+            | ClaudeSdkDirectTextState::CompletedByBridge => false,
+        }
+    }
+
+    pub fn claim_claude_bridge_terminal_delivery(&mut self) -> bool {
+        match self.claude_sdk_direct_text_state {
+            ClaudeSdkDirectTextState::Active => {
+                self.claude_sdk_direct_text_state = ClaudeSdkDirectTextState::CompletedByBridge;
+                true
+            }
+            ClaudeSdkDirectTextState::Inactive => true,
+            ClaudeSdkDirectTextState::CompletedBySdk
+            | ClaudeSdkDirectTextState::CompletedByBridge => false,
+        }
+    }
+
+    pub fn finish_claude_sdk_direct_text_turn(&mut self) {
+        self.claude_sdk_direct_text_state = ClaudeSdkDirectTextState::Inactive;
+    }
+
     pub fn is_agent_online(&self, agent: &str) -> bool {
         match agent {
-            "claude" => {
-                self.attached_agents.contains_key("claude") || self.is_claude_sdk_online()
-            }
+            "claude" => self.attached_agents.contains_key("claude") || self.is_claude_sdk_online(),
             "codex" => self.codex_inject_tx.is_some(),
             other => self.attached_agents.contains_key(other),
         }

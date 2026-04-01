@@ -567,6 +567,39 @@ Claude Code CLI 支持多种注入机制，按强制性排序：
 
 **验证:** 全量通过 — 112 Tauri tests, 26 bridge tests, 26 frontend tests, clippy clean, build success.
 
+### 2026-04-01: Claude SDK (`--sdk-url`) 链路补齐多代理协议
+
+- [已修复] SDK 直连模式下，`ReplyInput` 默认 `auto` 目标之前只把 legacy bridge `attached_agents["claude"]` 视为 Claude 在线，导致“只连了 Claude SDK 时，用户输入直接在 daemon 入口被判成没有在线目标”，消息面板连用户自己的发送也不显示。当前 `resolve_user_targets()` 已改为统一走 `DaemonState::is_agent_online()`，Claude SDK `claude_sdk_ws_tx` 也算在线。
+- [已修复] SDK 启动之前把 `mcp_config` 传成 `None`，实际等价于 `--strict-mcp-config '{}'`。这会把 `reply()` / `get_online_agents()` 两个 AgentNexus MCP tool 全部拿掉，而当前 Claude role prompt 又明确要求依赖这两个工具完成交付和委派。现在 SDK launch 会复用宿主生成的 `agentnexus` MCP 配置，直接把 inline `mcpServers.agentnexus` JSON 传给 `--strict-mcp-config`，恢复多代理协议。
+- [已修复] SDK strict MCP config 现在会先读取目标 workspace 现有的 `.mcp.json`，再把 `agentnexus` server upsert 进去，而不是用空对象覆盖整个配置。这样用户项目里原本已有的其他 MCP servers 不会在 SDK 模式下丢失。
+- [已修复] ClaudePanel 的 SDK launch 请求之前把 `roleId` 写死成 `lead`，UI 上选中的 `coder` / `reviewer` 根本不会进入后端。现在前端会显式把当前 `claudeRole` 带进 `daemon_launch_claude_sdk` 请求，并加了回归测试锁住。
+- [已修复] SDK launch 的 ready 握手之前存在本地竞态：先 spawn Claude，再登记 `claude_sdk_ready_tx` 和 epoch。Claude 如果足够快先连回 `/claude`，launch 会错过 ready 信号并在 30 秒后假失败。现在改为先保留 ready slot，再 spawn 子进程。
+- [已修复] Claude SDK 子进程的 `stdout` / `stderr` 之前都被 `piped` 但没人消费。bridge 模式下 stdout 会镜像 NDJSON，长会话可把 pipe buffer 塞满，表现成 Claude 卡死不再继续回消息。现在后台会持续 drain 两路 stdio，避免阻塞。
+- [已修复] 恢复 MCP bridge 后，SDK `assistant/result` 事件如果继续直接路由到 `user`，会和 `reply()` 工具送回的正式消息双轨并存。当前改为“只有在 bridge 尚未接入时，SDK 文本事件才 direct-to-user 作为 fallback”；一旦 bridge 在线，正式可见消息统一走 `reply()`。
+- [已修复] MCP bridge 在 SDK 会话仍在线时断开，daemon 之前会按旧语义直接把 `claude` 置为 offline，并清空 provider connection。现在 bridge 断开只会移除附着的 MCP 控制连接；只要 SDK WS 仍在线，Claude provider 状态保持 connected。
+
+**验证:**
+- `cargo test --manifest-path src-tauri/Cargo.toml` — 230 passed
+- `bun test` — 59 passed
+- `bun x tsc --noEmit` — passed
+- `bun run build` — passed
+
+### 2026-04-02: Claude `--sdk-url` 全量回归收口
+
+- [已修复] Claude 运行时主链路现在完全收口到 `--sdk-url`。前端 `Connect Claude`、daemon `ResumeSession`、`AttachProviderHistory` 三条路径都统一走 SDK launch，不再回落到 PTY/channel runtime。
+- [已修复] 旧的 `launch_claude_terminal` Tauri command 已从运行时移除；`main.rs` 不再编译 `claude_launch` / `claude_session` 模块，避免“UI 已切 SDK、编译入口仍保留 PTY”的混合态。
+- [已修复] ClaudePanel 在 SDK 化过程中曾残留一个 `terminalRunning` 引用，导致前端仍带着 PTY 启动文案。当前按钮和提示文本都已改成 SDK 语义。
+- [已修复] 消息区的 Claude thinking 占位之前还写着 `Live in Claude Terminal`。当前已统一改为 SDK 文案，MessagePanel 也不再保留 `claude` tab 类型和对应测试分支。
+- [已修复] bridge-store 之前仍在监听 `claude_terminal_*` 事件并维护 `claudeTerminalChunks / Running / Detail / FocusNonce` 等状态，但运行时已经没有任何组件消费。当前已把这些事件、store 字段和前端残留组件一起移除。
+- [已修复] SDK 启动路径之前只做了 `which("claude")`，没有复用 GUI 形态下必须的 PATH enrich / sidecar 解析。当前改为复用 `resolve_claude_bin()` 和 `enriched_path()`，并补了 `spawn_claude` 参数测试锁住 `PATH`、`--sdk-url`、`--resume`、`--strict-mcp-config`。
+- [已修复] Claude MCP bridge 在一个 SDK turn 中途 attach 时，后续 `assistant/result` 事件之前会因为 `attached_agents["claude"]` 变为在线而被立即停发，造成最后一段 SDK fallback 文本丢失。当前 daemon state 新增 “本轮是否已经开始 SDK 直出” 状态；只要本轮已经开始 direct routing，就会保留到 `result` 再清掉，避免 hard handoff 吞消息。
+- [已修复] `.claude/rules/tauri.md` 和 `.claude/rules/frontend.md` 之前仍把 `launch_claude_terminal` / `claude_terminal_*` 写成当前协议。当前规则文档已同步成 SDK-only 运行面。
+
+**验证:**
+- `cargo test --manifest-path src-tauri/Cargo.toml`
+- `bun test`
+- `bun x tsc --noEmit`
+
 ## 当前已知限制
 
 - Channel preview 是实验性功能，需要 `--dangerously-load-development-channels`

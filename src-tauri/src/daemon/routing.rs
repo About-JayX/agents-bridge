@@ -121,6 +121,7 @@ async fn route_message_inner_with_meta(state: &SharedState, msg: BridgeMessage) 
                 .await
                 .is_ok()
             {
+                state.write().await.prepare_claude_response_turn();
                 RouteOutcome {
                     result: RouteResult::Delivered,
                     emit_claude_thinking,
@@ -135,6 +136,7 @@ async fn route_message_inner_with_meta(state: &SharedState, msg: BridgeMessage) 
         }
         Target::ClaudeSdk(tx, ndjson) => {
             if tx.send(ndjson).await.is_ok() {
+                state.write().await.prepare_claude_response_turn();
                 RouteOutcome {
                     result: RouteResult::Delivered,
                     emit_claude_thinking,

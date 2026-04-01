@@ -1,32 +1,6 @@
 /// MCP registration helpers and related Tauri commands.
-use crate::claude_session::ClaudeSessionManager;
-use crate::daemon::types::{DaemonStatusSnapshot, ProviderConnectionMode};
 use crate::DaemonSender;
-use std::sync::Arc;
 use tauri::State;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum ClaudeLaunchMode {
-    New { session_id: String },
-    Resume { session_id: String },
-}
-
-fn resolve_claude_launch_mode(
-    resume_session_id: Option<&str>,
-    generated_session_id: &str,
-) -> ClaudeLaunchMode {
-    match resume_session_id
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        Some(session_id) => ClaudeLaunchMode::Resume {
-            session_id: session_id.to_string(),
-        },
-        None => ClaudeLaunchMode::New {
-            session_id: generated_session_id.to_string(),
-        },
-    }
-}
 
 fn resolve_release_bridge_cmd() -> Result<String, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
@@ -59,12 +33,8 @@ fn resolve_release_bridge_cmd() -> Result<String, String> {
     ))
 }
 
-#[tauri::command]
-pub async fn register_mcp(
-    cwd: Option<String>,
-    daemon_tx: State<'_, DaemonSender>,
-) -> Result<bool, String> {
-    let bridge_cmd = if cfg!(debug_assertions) {
+pub(crate) fn resolve_agentnexus_bridge_cmd() -> Result<String, String> {
+    if cfg!(debug_assertions) {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let project_root = std::path::Path::new(manifest_dir)
             .parent()
@@ -73,10 +43,47 @@ pub async fn register_mcp(
             .join("target")
             .join("debug")
             .join("agent-nexus-bridge");
-        bridge_bin.to_string_lossy().to_string()
+        Ok(bridge_bin.to_string_lossy().to_string())
     } else {
-        resolve_release_bridge_cmd()?
-    };
+        resolve_release_bridge_cmd()
+    }
+}
+
+fn read_mcp_config(project_dir: &str) -> Result<serde_json::Value, String> {
+    let mcp_path = std::path::Path::new(project_dir).join(".mcp.json");
+    if !mcp_path.exists() {
+        return Ok(serde_json::json!({}));
+    }
+    let raw = std::fs::read_to_string(&mcp_path).map_err(|e| format!("read error: {e}"))?;
+    Ok(serde_json::from_str(&raw).unwrap_or_else(|_| serde_json::json!({})))
+}
+
+pub(crate) fn build_inline_mcp_config(command: &str, role: &str) -> Result<String, String> {
+    let (config, _) = upsert_mcp_server(serde_json::json!({}), command, &[], role)?;
+    serde_json::to_string(&config).map_err(|e| format!("serialize error: {e}"))
+}
+
+pub(crate) fn build_project_mcp_config(
+    project_dir: &str,
+    command: &str,
+    role: &str,
+) -> Result<String, String> {
+    let base = read_mcp_config(project_dir)?;
+    let (config, _) = upsert_mcp_server(base, command, &[], role)?;
+    serde_json::to_string(&config).map_err(|e| format!("serialize error: {e}"))
+}
+
+pub(crate) fn build_agentnexus_mcp_config(project_dir: &str, role: &str) -> Result<String, String> {
+    let command = resolve_agentnexus_bridge_cmd()?;
+    build_project_mcp_config(project_dir, &command, role)
+}
+
+#[tauri::command]
+pub async fn register_mcp(
+    cwd: Option<String>,
+    daemon_tx: State<'_, DaemonSender>,
+) -> Result<bool, String> {
+    let bridge_cmd = resolve_agentnexus_bridge_cmd()?;
     let project_dir = cwd.unwrap_or_else(|| ".".to_string());
     let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
     daemon_tx
@@ -101,13 +108,7 @@ fn write_mcp_config(
     role: &str,
 ) -> Result<bool, String> {
     let mcp_path = std::path::Path::new(project_dir).join(".mcp.json");
-
-    let config: serde_json::Value = if mcp_path.exists() {
-        let raw = std::fs::read_to_string(&mcp_path).map_err(|e| format!("read error: {e}"))?;
-        serde_json::from_str(&raw).unwrap_or_else(|_| serde_json::json!({}))
-    } else {
-        serde_json::json!({})
-    };
+    let config = read_mcp_config(project_dir)?;
 
     let (config, changed) = upsert_mcp_server(config, command, args, role)?;
     if mcp_path.exists() && !changed {
@@ -165,119 +166,9 @@ pub fn check_mcp_registered(cwd: Option<String>) -> bool {
     config.pointer("/mcpServers/agentnexus").is_some()
 }
 
-/// Launch Claude Code channel preview.
-/// Runs Claude in a managed hidden PTY so the local development prompt can be
-/// auto-confirmed for `server:agentnexus`.
-#[allow(clippy::too_many_arguments)]
-#[tauri::command]
-pub async fn launch_claude_terminal(
-    cwd: Option<String>,
-    model: Option<String>,
-    effort: Option<String>,
-    resume_session_id: Option<String>,
-    cols: Option<u16>,
-    rows: Option<u16>,
-    session: State<'_, Arc<ClaudeSessionManager>>,
-    daemon_tx: State<'_, crate::DaemonSender>,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
-    let dir = cwd.unwrap_or_else(|| ".".to_string());
-    let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
-    daemon_tx
-        .0
-        .send(crate::daemon::DaemonCmd::ReadClaudeRole { reply: reply_tx })
-        .await
-        .map_err(|_| "daemon channel closed".to_string())?;
-    let role = reply_rx
-        .await
-        .map_err(|_| "daemon did not reply".to_string())?;
-    let (snapshot_tx, snapshot_rx) = tokio::sync::oneshot::channel();
-    daemon_tx
-        .0
-        .send(crate::daemon::DaemonCmd::ReadStatusSnapshot { reply: snapshot_tx })
-        .await
-        .map_err(|_| "daemon channel closed".to_string())?;
-    let snapshot: DaemonStatusSnapshot = snapshot_rx
-        .await
-        .map_err(|_| "daemon did not reply".to_string())?;
-    let codex_online = snapshot
-        .agents
-        .iter()
-        .any(|agent| agent.agent == "codex" && agent.online);
-    if codex_online && snapshot.codex_role == role {
-        return Err(format!("role '{role}' already in use by online codex"));
-    }
-
-    let generated_session_id = uuid::Uuid::new_v4().to_string();
-    let launch_mode =
-        resolve_claude_launch_mode(resume_session_id.as_deref(), &generated_session_id);
-    let (claude_session_id, connection_mode) = match &launch_mode {
-        ClaudeLaunchMode::New { session_id } => {
-            crate::claude_launch::launch_new(
-                &dir,
-                model.clone(),
-                effort.clone(),
-                &role,
-                session_id,
-                cols,
-                rows,
-                session.inner().clone(),
-                app.clone(),
-            )
-            .await?;
-            (session_id.clone(), ProviderConnectionMode::New)
-        }
-        ClaudeLaunchMode::Resume { session_id } => {
-            crate::claude_launch::resume(
-                &dir,
-                model.clone(),
-                effort.clone(),
-                &role,
-                session_id,
-                cols,
-                rows,
-                session.inner().clone(),
-                app.clone(),
-            )
-            .await?;
-            (session_id.clone(), ProviderConnectionMode::Resumed)
-        }
-    };
-    let transcript_path =
-        crate::daemon::provider::claude::default_transcript_path(&dir, &claude_session_id)?
-            .to_string_lossy()
-            .to_string();
-
-    let (register_tx, register_rx) = tokio::sync::oneshot::channel();
-    let register_result = daemon_tx
-        .0
-        .send(crate::daemon::DaemonCmd::RegisterClaudeLaunch {
-            role_id: role,
-            cwd: dir,
-            external_id: claude_session_id,
-            transcript_path,
-            connection_mode,
-            reply: register_tx,
-        })
-        .await
-        .map_err(|_| "daemon channel closed".to_string());
-    if let Err(err) = register_result {
-        crate::claude_session::stop_if_running(session.inner().as_ref()).await;
-        return Err(err);
-    }
-    let result = register_rx
-        .await
-        .map_err(|_| "daemon dropped Claude launch registration reply".to_string())?;
-    if let Err(err) = &result {
-        crate::claude_session::stop_if_running(session.inner().as_ref()).await;
-        return Err(err.clone());
-    }
-    result
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{resolve_claude_launch_mode, upsert_mcp_server, ClaudeLaunchMode};
+    use super::{build_inline_mcp_config, build_project_mcp_config, upsert_mcp_server};
 
     #[test]
     fn upsert_mcp_server_marks_unchanged_when_entry_matches() {
@@ -332,22 +223,48 @@ mod tests {
     }
 
     #[test]
-    fn resolve_claude_launch_mode_uses_new_when_no_resume_session_selected() {
+    fn build_inline_mcp_config_serializes_agentnexus_server() {
+        let raw = build_inline_mcp_config("/tmp/agent-nexus-bridge", "reviewer").unwrap();
+        let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(
-            resolve_claude_launch_mode(None, "generated-123"),
-            ClaudeLaunchMode::New {
-                session_id: "generated-123".into(),
-            }
+            value["mcpServers"]["agentnexus"]["command"],
+            "/tmp/agent-nexus-bridge"
+        );
+        assert_eq!(
+            value["mcpServers"]["agentnexus"]["env"]["AGENTBRIDGE_ROLE"],
+            "reviewer"
         );
     }
 
     #[test]
-    fn resolve_claude_launch_mode_uses_resume_when_history_session_selected() {
+    fn build_project_mcp_config_preserves_existing_servers() {
+        let temp =
+            std::env::temp_dir().join(format!("agent-nexus-mcp-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp);
+        std::fs::create_dir_all(&temp).unwrap();
+        let path = temp.join(".mcp.json");
+        std::fs::write(
+            &path,
+            serde_json::json!({
+                "mcpServers": {
+                    "other": {
+                        "command": "/tmp/other-bridge"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let raw =
+            build_project_mcp_config(temp.to_str().unwrap(), "/tmp/agent-nexus-bridge", "lead")
+                .unwrap();
+        let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(value["mcpServers"]["other"]["command"], "/tmp/other-bridge");
         assert_eq!(
-            resolve_claude_launch_mode(Some("resume-456"), "generated-123"),
-            ClaudeLaunchMode::Resume {
-                session_id: "resume-456".into(),
-            }
+            value["mcpServers"]["agentnexus"]["env"]["AGENTBRIDGE_ROLE"],
+            "lead"
         );
+        let _ = std::fs::remove_dir_all(&temp);
     }
 }

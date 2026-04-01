@@ -9,6 +9,18 @@
 
 **两个方案都可用。`--sdk-url` 需要设置 `CLAUDE_CODE_ENVIRONMENT_KIND=bridge` + dummy token + `POST_FOR_SESSION_INGRESS_V2=1`。**
 
+## 2026-04-02 集成落地补充
+
+这份协议验证在 2026-04-02 已经落到 AgentNexus 当前主链路，且运行时语义做了几项关键收口：
+
+- Claude 的 `new / resume / provider history attach` 现在统一走 `--sdk-url`，不再依赖 PTY/channel runtime。
+- SDK 启动会复用 workspace `.mcp.json`，把 `agentnexus` server 以内联 `--strict-mcp-config` 方式 upsert 进去，而不是覆盖用户已有 MCP 配置。
+- SDK 子进程现在复用 `resolve_claude_bin()` 和 `enriched_path()`；对 macOS GUI 场景下的 sidecar / `env node` 包装脚本更稳。
+- 前端不再暴露 Claude Terminal / dev-confirm / channel-preview UX，Claude 用户面已经是 SDK-only。
+- SDK 文本 fallback 不再在 bridge attach 边界直接硬切；当前用“本轮是否已开始直出”的 state 来保证 bridge 中途附着时不会吞掉最后一个 `result`。
+
+当前结论不是“`--sdk-url` 是官方稳定公共 API”，而是“在 AgentNexus 当前规划下，它已经是主运行时方案，并且需要由宿主自己承担协议回归保护”。
+
 ---
 
 ## --sdk-url 深入逆向分析

@@ -1,4 +1,3 @@
-use super::window_focus::focus_main_window;
 use crate::daemon::types::{BridgeMessage, PermissionRequest, ProviderConnectionState};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
@@ -15,22 +14,6 @@ pub struct AgentMessageEvent {
 pub struct SystemLogEvent {
     pub level: String,
     pub message: String,
-}
-
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct ClaudeTerminalDataEvent {
-    pub data: String,
-}
-
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct ClaudeTerminalStatusEvent {
-    pub running: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub exit_code: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub detail: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -74,39 +57,6 @@ pub fn emit_system_log(app: &AppHandle, level: &str, message: &str) {
             message: message.into(),
         },
     );
-}
-
-pub fn emit_claude_terminal_data(app: &AppHandle, data: &str) {
-    let _ = app.emit(
-        "claude_terminal_data",
-        ClaudeTerminalDataEvent { data: data.into() },
-    );
-}
-
-pub fn emit_claude_terminal_reset(app: &AppHandle) {
-    let _ = app.emit("claude_terminal_reset", ());
-}
-
-pub fn emit_claude_terminal_status(
-    app: &AppHandle,
-    running: bool,
-    exit_code: Option<i32>,
-    detail: Option<String>,
-) {
-    let _ = app.emit(
-        "claude_terminal_status",
-        ClaudeTerminalStatusEvent {
-            running,
-            exit_code,
-            detail,
-        },
-    );
-}
-
-/// Emitted when Claude terminal shows an interactive prompt needing user input.
-pub fn emit_claude_terminal_attention(app: &AppHandle) {
-    focus_main_window(app);
-    let _ = app.emit("claude_terminal_attention", ());
 }
 
 /// Codex streaming event — thinking, deltas, and agent messages.

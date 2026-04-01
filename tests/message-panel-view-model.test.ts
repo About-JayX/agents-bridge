@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   filterRenderableChatMessages,
   getMessageIdentityPresentation,
-  getClaudeTerminalPlaceholder,
   getClaudeAttentionResolution,
   getTransientIndicators,
 } from "../src/components/MessagePanel/view-model";
@@ -117,16 +116,16 @@ describe("getTransientIndicators", () => {
 });
 
 describe("getClaudeAttentionResolution", () => {
-  test("clears store attention while already on claude tab", () => {
-    expect(getClaudeAttentionResolution("claude", true)).toEqual({
+  test("clears store attention while already on the messages tab", () => {
+    expect(getClaudeAttentionResolution("messages", true)).toEqual({
       nextTab: null,
       clearStoreAttention: true,
     });
   });
 
-  test("switches to claude tab and clears store attention from other tabs", () => {
-    expect(getClaudeAttentionResolution("messages", true)).toEqual({
-      nextTab: "claude",
+  test("switches back to messages and clears store attention from other tabs", () => {
+    expect(getClaudeAttentionResolution("logs", true)).toEqual({
+      nextTab: "messages",
       clearStoreAttention: true,
     });
   });
@@ -136,29 +135,5 @@ describe("getClaudeAttentionResolution", () => {
       nextTab: null,
       clearStoreAttention: false,
     });
-  });
-});
-
-describe("getClaudeTerminalPlaceholder", () => {
-  test("shows a waiting hint when Claude is connected but no terminal output arrived yet", () => {
-    expect(getClaudeTerminalPlaceholder(true, false, 0)).toBe(
-      "Claude is connected. Waiting for terminal output…",
-    );
-  });
-
-  test("shows startup hint while terminal is launching with no chunks", () => {
-    expect(getClaudeTerminalPlaceholder(false, true, 0)).toBe(
-      "Claude terminal is starting. Waiting for output…",
-    );
-  });
-
-  test("returns idle hint only when Claude is fully inactive", () => {
-    expect(getClaudeTerminalPlaceholder(false, false, 0)).toBe(
-      "Claude terminal is idle. Connect Claude to start an embedded session.",
-    );
-  });
-
-  test("returns null once terminal output exists", () => {
-    expect(getClaudeTerminalPlaceholder(true, true, 2)).toBeNull();
   });
 });

@@ -9,20 +9,19 @@ paths:
   - 内嵌 async daemon
   - Codex 账号 / OAuth / 用量 / 模型
   - 项目 `.mcp.json` 注册
-  - Claude channel preview preflight + 启动外部 Claude 终端
+  - Claude `--sdk-url` 启动 / 恢复 / provider history 附着
 
 ## 当前模块职责
 
 - `main.rs` — commands 注册、daemon task 启动
-- `mcp.rs` — 项目 `.mcp.json` 注册、检查、Claude CLI 版本校验、preview 启动
+- `mcp.rs` — 项目 `.mcp.json` 注册、检查、inline/strict MCP config 生成
 - `codex/auth.rs` — 读取 `$HOME/.codex/auth.json`
 - `codex/oauth.rs` — OAuth 登录 / 取消 / 登出
 - `codex/usage.rs` — 用量查询
 - `codex/models.rs` — 模型缓存读取
 - `commands.rs` — Tauri command handlers（从 main.rs 拆出）
-- `claude_session/` — Claude PTY 会话管理（spawn/stop/prompt 自动确认）
-- `claude_launch.rs` — Terminal 启动 helpers（macOS/other）
 - `daemon/mod.rs` — command channel + daemon 主循环
+- `daemon/claude_sdk/` — Claude SDK subprocess、WS/HTTP ingress、stdio drain
 - `daemon/state.rs` — 运行时共享状态
 - `daemon/routing.rs` — 唯一消息投递入口
 - `daemon/control/` — bridge 控制通道 WS server
@@ -38,14 +37,13 @@ paths:
 - `pick_directory`
 - `register_mcp`
 - `check_mcp_registered`
-- `launch_claude_terminal`
 - `stop_claude`
-- `claude_terminal_input`
-- `claude_terminal_resize`
 - `codex_login`
 - `codex_cancel_login`
 - `codex_logout`
 - `daemon_send_user_input`
+- `daemon_launch_claude_sdk`
+- `daemon_stop_claude_sdk`
 - `daemon_launch_codex`
 - `daemon_stop_codex`
 - `daemon_set_claude_role`
@@ -61,10 +59,6 @@ paths:
 - `system_log`
 - `agent_status`
 - `permission_prompt`
-- `claude_terminal_data`
-- `claude_terminal_reset`
-- `claude_terminal_status`
-- `claude_terminal_attention`
 - `claude_stream`
 - `codex_stream`
 

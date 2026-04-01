@@ -6,7 +6,6 @@ import type { BridgeMessage } from "@/types";
 import { PermissionQueue } from "./PermissionQueue";
 import { TabBtn } from "./TabBtn";
 import { MessageList } from "./MessageList";
-import { ClaudeTerminalPane } from "./ClaudeTerminalPane";
 import { ReviewGateBadge } from "@/components/TaskPanel/ReviewGateBadge";
 import { getReviewBadge } from "@/components/TaskPanel/view-model";
 import {
@@ -14,7 +13,7 @@ import {
   getClaudeAttentionResolution,
 } from "./view-model";
 
-type Tab = "messages" | "claude" | "logs" | "approvals";
+type Tab = "messages" | "logs" | "approvals";
 
 interface MessagePanelProps {
   messages: BridgeMessage[];
@@ -23,8 +22,6 @@ interface MessagePanelProps {
 
 export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
   const [tab, setTabState] = useState<Tab>("messages");
-  const prevClaudeRef = useRef({ connected: false, chunks: 0 });
-  const [claudeTabAttention, setClaudeTabAttention] = useState(false);
   const setTab = (t: Tab) => {
     setTabState(t);
     onTabChange?.(t);
@@ -33,20 +30,12 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
 
   const clearMessages = useBridgeStore((s) => s.clearMessages);
   const allTerminalLines = useBridgeStore((s) => s.terminalLines);
-  const claudeTerminalChunks = useBridgeStore((s) => s.claudeTerminalChunks);
-  const claudeTerminalRunning = useBridgeStore((s) => s.claudeTerminalRunning);
-  const claudeTerminalDetail = useBridgeStore((s) => s.claudeTerminalDetail);
   const permissionPrompts = useBridgeStore((s) => s.permissionPrompts);
   const respondToPermission = useBridgeStore((s) => s.respondToPermission);
-  const claudeConnected =
-    useBridgeStore((s) => s.agents.claude?.status) === "connected";
   const claudeNeedsAttention = useBridgeStore((s) => s.claudeNeedsAttention);
-  const claudeFocusNonce = useBridgeStore((s) => s.claudeFocusNonce);
   const clearClaudeAttention = useBridgeStore((s) => s.clearClaudeAttention);
   const activeTaskId = useTaskStore((s) => s.activeTaskId);
   const tasks = useTaskStore((s) => s.tasks);
-  const claudeTerminalAvailable =
-    claudeConnected || claudeTerminalRunning || claudeTerminalChunks.length > 0;
   const activeTask = activeTaskId ? tasks[activeTaskId] : null;
   const reviewBadge = getReviewBadge(activeTask?.reviewStatus);
 
@@ -60,21 +49,6 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
   );
 
   useEffect(() => {
-    if (!prevClaudeRef.current.connected && claudeConnected)
-      setClaudeTabAttention(true);
-    if (
-      claudeTerminalChunks.length > prevClaudeRef.current.chunks &&
-      tab !== "claude"
-    )
-      setClaudeTabAttention(true);
-    prevClaudeRef.current = {
-      connected: claudeConnected,
-      chunks: claudeTerminalChunks.length,
-    };
-  }, [claudeConnected, claudeTerminalChunks.length, tab]);
-
-  useEffect(() => {
-    if (tab === "claude") setClaudeTabAttention(false);
     const attention = getClaudeAttentionResolution(tab, claudeNeedsAttention);
     if (attention.nextTab) {
       setTab(attention.nextTab);
@@ -93,14 +67,6 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
         <TabBtn active={tab === "logs"} onClick={() => setTab("logs")}>
           Logs {errorLines.length > 0 && `(${errorLines.length})`}
         </TabBtn>
-        {claudeTerminalAvailable && (
-          <TabBtn active={tab === "claude"} onClick={() => setTab("claude")}>
-            Claude Terminal
-            {claudeTabAttention && (
-              <span className="ml-2 inline-flex size-2 rounded-full bg-claude animate-pulse" />
-            )}
-          </TabBtn>
-        )}
         <TabBtn
           active={tab === "approvals"}
           onClick={() => setTab("approvals")}
@@ -150,15 +116,6 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
             </div>
           ))}
         </div>
-      )}
-      {tab === "claude" && claudeTerminalAvailable && (
-        <ClaudeTerminalPane
-          chunks={claudeTerminalChunks}
-          connected={claudeConnected}
-          running={claudeTerminalRunning}
-          detail={claudeTerminalDetail}
-          focusNonce={claudeFocusNonce}
-        />
       )}
       {tab === "approvals" && (
         <PermissionQueue

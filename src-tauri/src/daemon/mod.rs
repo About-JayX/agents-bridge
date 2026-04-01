@@ -1,5 +1,5 @@
-mod cmd;
 pub mod claude_sdk;
+mod cmd;
 pub mod codex;
 pub mod control;
 pub mod gui;
@@ -15,12 +15,10 @@ pub mod session_manager;
 pub mod state;
 pub mod task_graph;
 pub mod types;
-mod window_focus;
 
 pub use cmd::{channel, is_valid_agent_role, DaemonCmd};
 pub use state::DaemonState;
 
-use crate::claude_session::ClaudeSessionManager;
 use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::{mpsc, RwLock};
@@ -79,10 +77,6 @@ async fn stop_codex_session(
     gui::emit_agent_status(app, "codex", false, None, None);
 }
 
-async fn stop_claude_session(claude_manager: &ClaudeSessionManager) {
-    crate::claude_session::stop_if_running(claude_manager).await;
-}
-
 async fn stop_claude_sdk_session(
     handle: &mut Option<claude_sdk::ClaudeSdkHandle>,
     state: &SharedState,
@@ -100,6 +94,7 @@ async fn launch_claude_sdk(
     role_id: &str,
     cwd: &str,
     model: Option<String>,
+    effort: Option<String>,
     resume_session_id: Option<String>,
     state: &SharedState,
     app: &AppHandle,
@@ -113,9 +108,9 @@ async fn launch_claude_sdk(
         return Err(err);
     }
     // Previous session is already stopped by the daemon loop caller.
-    let claude_bin = which::which("claude")
-        .map_err(|e| format!("claude CLI not found: {e}"))?;
+    let claude_bin = crate::claude_cli::resolve_claude_bin()?;
     let session_id = uuid::Uuid::new_v4().to_string();
+    let mcp_config = crate::mcp::build_agentnexus_mcp_config(cwd, role_id)?;
 
     let opts = claude_sdk::process::ClaudeLaunchOpts {
         claude_bin,
@@ -123,10 +118,10 @@ async fn launch_claude_sdk(
         cwd: cwd.to_string(),
         session_id: session_id.clone(),
         model,
-        effort: None,
+        effort,
         resume: resume_session_id,
         daemon_port: 4502,
-        mcp_config: None,
+        mcp_config: Some(mcp_config),
     };
 
     match claude_sdk::launch(opts, state.clone(), app.clone()).await {
@@ -156,7 +151,7 @@ async fn attach_provider_history(
     cwd: String,
     role: crate::daemon::task_graph::types::SessionRole,
     codex_handle: &mut Option<codex::CodexHandle>,
-    claude_manager: Arc<ClaudeSessionManager>,
+    claude_sdk_handle: &mut Option<claude_sdk::ClaudeSdkHandle>,
     state: &SharedState,
     app: &AppHandle,
 ) -> Result<String, String> {
@@ -185,19 +180,18 @@ async fn attach_provider_history(
                     "role '{role_id}' already in use by online {conflict_agent}"
                 ));
             }
-            stop_claude_session(claude_manager.as_ref()).await;
-            crate::claude_launch::resume(
+            stop_claude_sdk_session(claude_sdk_handle, state, app).await;
+            let handle = launch_claude_sdk(
+                role_id,
                 &cwd,
                 None,
                 None,
-                role_id,
-                &external_id,
-                None,
-                None,
-                claude_manager,
-                app.clone(),
+                Some(external_id.clone()),
+                state,
+                app,
             )
             .await?;
+            *claude_sdk_handle = Some(handle);
             let transcript_path =
                 crate::daemon::provider::claude::default_transcript_path(&cwd, &external_id)?
                     .to_string_lossy()
@@ -287,7 +281,6 @@ async fn emit_task_context_events(state: &SharedState, app: &AppHandle, task_id:
 
 pub async fn run(
     app: AppHandle,
-    claude_manager: Arc<ClaudeSessionManager>,
     mut cmd_rx: mpsc::Receiver<DaemonCmd>,
 ) {
     let state: SharedState = Arc::new(RwLock::new(DaemonState::new()));
@@ -414,12 +407,21 @@ pub async fn run(
                 role_id,
                 cwd,
                 model,
+                effort,
                 resume_session_id,
                 reply,
             } => {
                 stop_claude_sdk_session(&mut claude_sdk_handle, &state, &app).await;
-                let result =
-                    launch_claude_sdk(&role_id, &cwd, model, resume_session_id, &state, &app).await;
+                let result = launch_claude_sdk(
+                    &role_id,
+                    &cwd,
+                    model,
+                    effort,
+                    resume_session_id,
+                    &state,
+                    &app,
+                )
+                .await;
                 match result {
                     Ok(handle) => {
                         claude_sdk_handle = Some(handle);
@@ -438,67 +440,6 @@ pub async fn run(
                 stop_claude_sdk_session(&mut claude_sdk_handle, &state, &app).await;
                 let _ = reply.send(());
                 break;
-            }
-            DaemonCmd::RegisterClaudeLaunch {
-                role_id,
-                cwd,
-                external_id,
-                transcript_path,
-                connection_mode,
-                reply,
-            } => {
-                let task_id = {
-                    let mut daemon = state.write().await;
-                    daemon.set_provider_connection(
-                        "claude",
-                        crate::daemon::types::ProviderConnectionState {
-                            provider: crate::daemon::task_graph::types::Provider::Claude,
-                            external_session_id: external_id.clone(),
-                            cwd: cwd.clone(),
-                            connection_mode,
-                        },
-                    );
-                    match connection_mode {
-                        crate::daemon::types::ProviderConnectionMode::New => {
-                            crate::daemon::provider::claude::register_on_launch(
-                                &mut daemon,
-                                &role_id,
-                                &cwd,
-                                &external_id,
-                                &transcript_path,
-                            );
-                            daemon.active_task_id.clone()
-                        }
-                        crate::daemon::types::ProviderConnectionMode::Resumed => {
-                            let normalized_session_id = daemon
-                                .task_graph
-                                .find_session_by_external_id(
-                                    crate::daemon::task_graph::types::Provider::Claude,
-                                    &external_id,
-                                )
-                                .map(|session| session.session_id.clone());
-                            if let Some(session_id) = normalized_session_id {
-                                if let Ok(path) =
-                                    crate::daemon::provider::claude::default_transcript_path(
-                                        &cwd,
-                                        &external_id,
-                                    )
-                                {
-                                    let _ = daemon
-                                        .task_graph
-                                        .set_transcript_path(&session_id, &path.to_string_lossy());
-                                }
-                                daemon.resume_session(&session_id).ok()
-                            } else {
-                                None
-                            }
-                        }
-                    }
-                };
-                if let Some(task_id) = task_id {
-                    emit_task_context_events(&state, &app, &task_id).await;
-                }
-                let _ = reply.send(Ok(()));
             }
             DaemonCmd::ReadClaudeRole { reply } => {
                 let _ = reply.send(state.read().await.claude_role.clone());
@@ -668,21 +609,25 @@ pub async fn run(
                                         "role '{role_id}' already in use by online {conflict_agent}"
                                     ))
                                 } else {
-                                    stop_claude_session(claude_manager.as_ref()).await;
-                                    match crate::claude_launch::resume(
+                                    stop_claude_sdk_session(
+                                        &mut claude_sdk_handle,
+                                        &state,
+                                        &app,
+                                    )
+                                    .await;
+                                    match launch_claude_sdk(
+                                        role_id,
                                         &target.cwd,
                                         None,
                                         None,
-                                        role_id,
-                                        &target.external_id,
-                                        None,
-                                        None,
-                                        claude_manager.clone(),
-                                        app.clone(),
+                                        Some(target.external_id.clone()),
+                                        &state,
+                                        &app,
                                     )
                                     .await
                                     {
-                                        Ok(()) => {
+                                        Ok(handle) => {
+                                            claude_sdk_handle = Some(handle);
                                             let mut daemon = state.write().await;
                                             if let Ok(path) =
                                                 crate::daemon::provider::claude::default_transcript_path(
@@ -697,7 +642,7 @@ pub async fn run(
                                             }
                                             daemon.resume_session(&session_id)
                                         }
-                                        Err(err) => Err(err),
+                                        Err(err) => Err(err.to_string()),
                                     }
                                 }
                             }
@@ -725,7 +670,7 @@ pub async fn run(
                     cwd,
                     role,
                     &mut codex_handle,
-                    claude_manager.clone(),
+                    &mut claude_sdk_handle,
                     &state,
                     &app,
                 )

@@ -1,8 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod claude_cli;
-mod claude_launch;
-mod claude_session;
 mod codex;
 mod commands;
 mod commands_task;
@@ -13,9 +11,9 @@ use codex::auth::CodexProfile;
 use codex::models::CodexModel;
 use codex::oauth::OAuthHandle;
 use codex::usage::UsageSnapshot;
+use std::sync::Arc;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc,
 };
 use tauri::{Manager, WindowEvent};
 use tauri_plugin_dialog::DialogExt;
@@ -33,10 +31,6 @@ fn request_app_shutdown(app: tauri::AppHandle) {
         return;
     }
     let sender = app.state::<DaemonSender>().0.clone();
-    let claude_session = app
-        .state::<Arc<claude_session::ClaudeSessionManager>>()
-        .inner()
-        .clone();
     tauri::async_runtime::spawn(async move {
         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
         if sender
@@ -46,7 +40,6 @@ fn request_app_shutdown(app: tauri::AppHandle) {
         {
             let _ = reply_rx.await;
         }
-        claude_session::stop_if_running(claude_session.as_ref()).await;
         app.exit(0);
     });
 }
@@ -84,19 +77,13 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(Arc::new(OAuthHandle::new()))
-        .manage(Arc::new(claude_session::ClaudeSessionManager::default()))
         .manage(ExitState::default())
         .setup(|app| {
             let (cmd_tx, cmd_rx) = daemon::channel();
             app.handle().manage(DaemonSender(cmd_tx));
 
             let handle = app.handle().clone();
-            let claude_manager = app
-                .handle()
-                .state::<Arc<claude_session::ClaudeSessionManager>>()
-                .inner()
-                .clone();
-            tauri::async_runtime::spawn(daemon::run(handle, claude_manager, cmd_rx));
+            tauri::async_runtime::spawn(daemon::run(handle, cmd_rx));
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -120,7 +107,6 @@ fn main() {
             pick_directory,
             mcp::register_mcp,
             mcp::check_mcp_registered,
-            mcp::launch_claude_terminal,
             commands::oauth::codex_login,
             commands::oauth::codex_cancel_login,
             commands::oauth::codex_logout,
@@ -142,8 +128,6 @@ fn main() {
             commands_task::daemon_resume_session,
             commands_task::daemon_attach_provider_history,
             commands::stop_claude,
-            commands::claude_terminal_input,
-            commands::claude_terminal_resize,
             commands::daemon_launch_claude_sdk,
             commands::daemon_stop_claude_sdk,
         ])

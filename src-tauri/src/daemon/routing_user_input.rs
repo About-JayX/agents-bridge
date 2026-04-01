@@ -52,8 +52,8 @@ pub fn resolve_user_targets(state: &DaemonState, target: &str) -> Vec<String> {
         }
     }
     let mut targets = Vec::with_capacity(2);
-    let claude_online = state.attached_agents.contains_key("claude");
-    let codex_online = state.codex_inject_tx.is_some();
+    let claude_online = state.is_agent_online("claude");
+    let codex_online = state.is_agent_online("codex");
     if claude_online && state.claude_role != "user" {
         targets.push(state.claude_role.clone());
     }
@@ -64,8 +64,8 @@ pub fn resolve_user_targets(state: &DaemonState, target: &str) -> Vec<String> {
 }
 
 fn role_is_online(state: &DaemonState, role: &str) -> bool {
-    (state.attached_agents.contains_key("claude") && state.claude_role == role)
-        || (state.codex_inject_tx.is_some() && state.codex_role == role)
+    (state.is_agent_online("claude") && state.claude_role == role)
+        || (state.is_agent_online("codex") && state.codex_role == role)
 }
 
 fn build_user_message(now: u64, to: &str, content: &str) -> BridgeMessage {

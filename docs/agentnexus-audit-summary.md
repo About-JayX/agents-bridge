@@ -616,3 +616,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 - `docs/agents/claude-channel-api.md`
 - `docs/agents/codex-app-server-api.md`
 - `docs/agents/codex-app-server-api.zh-CN.md`
+### 2026-04-02 Claude `--sdk-url` 全量回归收口
+
+- [已修复] Claude 新建 / resume / provider history attach 现已统一走 `--sdk-url`，前端不再暴露 PTY terminal / dev-confirm / channel-preview 交互。
+- [已修复] 旧的 `launch_claude_terminal` 运行时入口、`claude_terminal_*` 前端 store 状态和对应残留组件已从主编译路径摘除，Claude SDK 成为当前唯一 Claude 主链路。
+- [已修复] SDK 启动现在复用 `resolve_claude_bin()` + `enriched_path()`，避免 macOS GUI 环境里因 PATH 过窄导致 `claude` wrapper 找不到 Node。
+- [已修复] Claude MCP bridge 在 SDK turn 中途 attach 时，SDK fallback 文本不会再因为 hard switch 而吞掉最后一个 `result`；当前 direct-routing handoff 会保留到本轮完成再结束。

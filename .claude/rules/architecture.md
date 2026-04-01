@@ -6,12 +6,13 @@
 React UI
   ↕ Tauri invoke / listen
 Tauri main.rs
-  ├── mcp.rs                  # .mcp.json 注册 + Claude channel preflight / 启动
+  ├── mcp.rs                  # .mcp.json 注册 + strict MCP config 生成
   ├── codex/*                 # 账号 / OAuth / 用量 / 模型
   └── daemon/*
-      ├── control server      # WS :4502，bridge 连入
+      ├── control server      # WS/HTTP :4502，bridge + Claude SDK ingress
       ├── routing             # Claude / Codex / GUI 路由
       ├── permission relay    # Claude permission request ↔ GUI 审批
+      ├── claude_sdk          # Claude --sdk-url subprocess / stdio / WS state
       ├── codex session       # WS :4500，连 codex app-server
       └── session manager     # 临时 CODEX_HOME
 
@@ -42,12 +43,12 @@ Rust daemon
 
 - 前端调用 `register_mcp`
 - Tauri 在项目根写 `.mcp.json`，command 固定写 app-bundled bridge 绝对路径
-- 前端调用 `launch_claude_terminal`
-- Tauri 先检查 `claude -v` 是否 `>= 2.1.80`
-- 外部终端以 preview 模式运行 `claude --dangerously-load-development-channels server:agentnexus`
-- Claude 通过 MCP 启动 `agent-nexus-bridge`
+- 前端调用 `daemon_launch_claude_sdk`
+- daemon 用 `resolve_claude_bin()` + `enriched_path()` 启动 `claude --print --sdk-url ... --strict-mcp-config <json>`
+- Claude 通过 WS `/claude` 接收 NDJSON 输入，通过 HTTP POST `/claude/events` 回传事件
+- Claude 会按 strict MCP config 启动 `agent-nexus-bridge`
 - bridge 用 WS 连内嵌 daemon
-- permission request 走 daemon → GUI → daemon → bridge 闭环返回 Claude
+- permission request 走 daemon → GUI → daemon → Claude SDK verdict / bridge 闭环返回 Claude
 
 ### Codex 方向
 
@@ -61,7 +62,7 @@ Rust daemon
 
 - `routing.rs` 是消息投递权威入口
 - `to = "user"` 只显示到 GUI
-- `to = claude_role` 走 bridge WS
+- `to = claude_role` 优先走 Claude SDK WS；必要时 bridge tool 负责正式 reply
 - `to = codex_role` 走 `codex_inject_tx`
 - 离线消息进入 `buffered_messages`
 - 发往 Claude 的消息只允许来自 `user`、`system`、当前 `codex_role`

@@ -88,6 +88,7 @@ pub async fn handle_connection(socket: WebSocket, state: SharedState, app: AppHa
             FromAgent::AgentReply { mut message } => {
                 // Bind message.from to the authenticated agent's role
                 // (prevents spoofing — bridge can't claim to be a different sender)
+                let mut suppress_message = false;
                 if let Some(id) = agent_id.as_deref() {
                     let role = {
                         let s = state.read().await;
@@ -107,10 +108,28 @@ pub async fn handle_connection(socket: WebSocket, state: SharedState, app: AppHa
                         .await
                         .stamp_message_context(&role, &mut message);
                     if id == "claude" && status.is_terminal() {
-                        gui::emit_claude_stream(&app, ClaudeStreamPayload::Done);
+                        if message.content.trim().is_empty() {
+                            gui::emit_claude_stream(&app, ClaudeStreamPayload::Done);
+                        } else {
+                            let should_route = state
+                                .write()
+                                .await
+                                .claim_claude_bridge_terminal_delivery();
+                            if should_route {
+                                gui::emit_claude_stream(&app, ClaudeStreamPayload::Done);
+                            } else {
+                                suppress_message = true;
+                                state.write().await.finish_claude_sdk_direct_text_turn();
+                                gui::emit_system_log(
+                                    &app,
+                                    "info",
+                                    "[Control] suppressed duplicate Claude terminal reply after SDK fallback",
+                                );
+                            }
+                        }
                     }
                 }
-                if message.content.trim().is_empty() {
+                if suppress_message || message.content.trim().is_empty() {
                     continue;
                 }
                 routing::route_message(&state, &app, message).await;
@@ -154,14 +173,25 @@ pub async fn handle_connection(socket: WebSocket, state: SharedState, app: AppHa
             .get(id.as_str())
             .is_some_and(|s| s.gen == my_gen);
         if is_ours {
+            let claude_sdk_still_online = id == "claude" && daemon.is_claude_sdk_online();
             daemon.attached_agents.remove(id);
-            daemon.clear_provider_connection(id);
+            if !claude_sdk_still_online {
+                daemon.clear_provider_connection(id);
+            }
             drop(daemon);
-            if id == "claude" {
+            if id == "claude" && !claude_sdk_still_online {
                 gui::emit_claude_stream(&app, ClaudeStreamPayload::Reset);
             }
-            gui::emit_agent_status(&app, id, false, None, None);
-            gui::emit_system_log(&app, "info", &format!("[Control] {id} disconnected"));
+            if claude_sdk_still_online {
+                gui::emit_system_log(
+                    &app,
+                    "info",
+                    "[Control] claude MCP bridge disconnected; SDK session still online",
+                );
+            } else {
+                gui::emit_agent_status(&app, id, false, None, None);
+                gui::emit_system_log(&app, "info", &format!("[Control] {id} disconnected"));
+            }
         } else {
             drop(daemon);
             gui::emit_system_log(

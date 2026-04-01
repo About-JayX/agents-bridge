@@ -68,6 +68,16 @@ fn auto_with_claude_only() {
 }
 
 #[test]
+fn auto_with_claude_sdk_only() {
+    let mut s = DaemonState::new();
+    let (tx, _rx) = tokio::sync::mpsc::channel(1);
+    s.begin_claude_sdk_launch();
+    assert!(s.attach_claude_sdk_ws(s.claude_sdk_epoch(), tx));
+    let targets = resolve_user_targets(&s, "auto");
+    assert_eq!(targets, vec!["lead"]);
+}
+
+#[test]
 fn auto_with_codex_only() {
     let mut s = DaemonState::new();
     let (tx, _rx) = tokio::sync::mpsc::channel(1);

@@ -107,11 +107,7 @@ pub async fn events_handler(
 }
 
 /// Dispatch a single Claude SDK event to the event handler module.
-async fn process_sdk_event(
-    state: &SharedState,
-    app: &AppHandle,
-    event: serde_json::Value,
-) {
+async fn process_sdk_event(state: &SharedState, app: &AppHandle, event: serde_json::Value) {
     let role = state.read().await.claude_role.clone();
     crate::daemon::claude_sdk::event_handler::handle_events(
         vec![event],

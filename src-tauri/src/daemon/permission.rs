@@ -1,6 +1,20 @@
 use crate::daemon::{gui, types, SharedState};
 use tauri::AppHandle;
 
+fn format_claude_sdk_control_response(request_id: &str, allow: bool) -> String {
+    let payload = serde_json::json!({
+        "type": "control_response",
+        "response": {
+            "subtype": "success",
+            "request_id": request_id,
+            "response": {
+                "behavior": if allow { "allow" } else { "deny" }
+            }
+        }
+    });
+    format!("{payload}\n")
+}
+
 pub async fn handle_permission_verdict(
     state: &SharedState,
     app: &AppHandle,
@@ -33,7 +47,7 @@ pub async fn handle_permission_verdict(
         if let Some(v) = &verdict {
             let sdk_tx = state.read().await.claude_sdk_ws_tx.clone();
             if let Some(tx) = sdk_tx {
-                let ndjson = crate::daemon::claude_sdk::protocol::format_control_response(
+                let ndjson = format_claude_sdk_control_response(
                     &v.request_id,
                     v.behavior == types::PermissionBehavior::Allow,
                 );
