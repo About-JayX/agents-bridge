@@ -11,7 +11,7 @@
 | Claude 接入 | managed hidden PTY 启动 `claude` + 项目 `.mcp.json` 注册 Rust bridge sidecar |
 | Codex 接入 | Rust daemon 启动 `codex app-server` 并通过 WS 建立 session |
 | 桥接 sidecar | Rust 二进制 `agent-nexus-bridge`（`bridge/` crate） |
-| 会话记忆 | daemon `task_graph` + provider history index + runtime resume |
+| 会话记忆 | provider-native history + daemon `task_graph` + runtime resume |
 | 前端 | React 19 + Vite + TypeScript + Tailwind CSS v4 + Zustand + task-centric shell |
 
 ### 硬性约束
@@ -66,11 +66,11 @@
                 │ invoke / listen
                 ▼
 ┌─ React 前端 ────────────────────────────────────────────────────┐
-│ bridge-store      → 监听 agent_message / system_log / codex_stream│
-│ task-store        → 监听 task/session/artifact/provider history   │
-│ ClaudePanel       → register_mcp + launch_claude_terminal        │
-│ AgentStatus/      → CodexPanel / RoleSelect / StatusDot          │
-│ TaskPanel         → session tree / history / artifact timeline   │
+│ bridge-store      → 监听 agent_message / system_log / claude_stream / codex_stream │
+│ task-store        → 监听 task/session/artifact/provider history                   │
+│ ClaudePanel       → project picker + history dropdown + connect/resume            │
+│ AgentStatus/      → CodexPanel / RoleSelect / StatusDot                           │
+│ TaskPanel         → session tree / artifact timeline / review gate                │
 │ MessagePanel      → 消息与日志与 Permission 审批                  │
 └──────────────────────────────────────────────────────────────────┘
 
@@ -81,27 +81,30 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 
 ### Claude 链路
 
-1. 前端选择项目目录后调用 `register_mcp`。
-2. Tauri 在项目根写入 **`.mcp.json`**，注册 `agent-nexus-bridge`。
-3. 前端再调用 `launch_claude_terminal`，由 Tauri 在 managed PTY 中运行 `claude`。
-4. Claude Code 读取项目 `.mcp.json`，以 MCP stdio 方式启动 bridge sidecar。
-5. bridge 通过 `ws://127.0.0.1:4502/ws` 连入内嵌 daemon。
-6. Permission 链路: bridge `permission_request` → daemon → GUI → `permission_verdict` → bridge
-7. Claude 新会话显式分配 `--session-id`，恢复历史会话走 `--resume <session_id>`
+1. `ClaudePanel` 先根据当前项目目录拉 Claude provider history；用户可选择 `New session` 或某个历史 `session_id`。
+2. 前端选择项目目录后调用 `register_mcp`。
+3. Tauri 在项目根写入 **`.mcp.json`**，注册 `agent-nexus-bridge`。
+4. 前端再调用 `launch_claude_terminal`，由 Tauri 在 managed PTY 中运行 `claude`。
+5. Claude Code 读取项目 `.mcp.json`，以 MCP stdio 方式启动 bridge sidecar。
+6. bridge 通过 `ws://127.0.0.1:4502/ws` 连入内嵌 daemon。
+7. Permission 链路: bridge `permission_request` → daemon → GUI → `permission_verdict` → bridge
+8. Claude 新会话显式分配 `--session-id`，恢复历史会话走 `--resume <session_id>`
 
 ### Codex 链路
 
-1. 前端调用 `daemon_launch_codex`。
-2. `session_manager.rs` 创建 `/tmp/agentnexus-<pid>-<sessionId>/` 临时 `CODEX_HOME`。
-3. 当前实现会写入：
+1. `CodexPanel` 先根据当前项目目录拉 Codex provider history；用户可选择 `New session` 或某个历史 `thread_id`。
+2. 前端调用 `daemon_launch_codex`。
+3. `session_manager.rs` 创建 `/tmp/agentnexus-<pid>-<sessionId>/` 临时 `CODEX_HOME`。
+4. 当前实现会写入：
    - `auth.json` symlink → `$HOME/.codex/auth.json`
    - `config.toml` → `sandbox_mode` / `approval_policy` / `apply_patch_freeform=false`
-4. daemon 启动 `codex app-server --listen ws://127.0.0.1:4500`。
-5. `session.rs` 通过 WS 完成 `initialize` + `thread/start`，并注册动态工具：
+5. daemon 启动 `codex app-server --listen ws://127.0.0.1:4500`。
+6. `session.rs` 通过 WS 完成 `initialize` + `thread/start`，并注册动态工具：
    - `reply`
    - `check_messages`
    - `get_status`
-6. Codex history 通过 `thread/list` 映射到 provider history picker，恢复时重新连回原 thread
+7. Codex history 优先走 `thread/list`；离线时回退扫描 `$HOME/.codex/sessions/**/*.jsonl`
+8. 恢复时重新连回原 thread，而不是把 transcript 重放给模型
 
 ### 消息路由
 
@@ -114,12 +117,41 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 
 ## Task / Session Memory
 
-- `src-tauri/src/daemon/task_graph/` 是标准化 task/session/artifact 事实源，并带 JSON 持久化快照
+- `src-tauri/src/daemon/task_graph/` 是标准化 `task / session / artifact` 事实源，并带 JSON 持久化快照
 - `src-tauri/src/daemon/provider/claude.rs` 负责 Claude transcript history index 与 runtime resume
-- `src-tauri/src/daemon/provider/codex.rs` / `history.rs` 负责 Codex thread history 与 provider-agnostic history DTO
-- `src/stores/task-store/` 把 daemon 事件水合到前端 task store
-- `src/components/TaskPanel/` 展示 session tree、provider history picker、artifact timeline、review gate badge
-- `daemon_attach_provider_history` 允许把外部 provider history 直接挂到当前 task，作为 lead/coder 会话恢复
+- `src-tauri/src/daemon/provider/codex.rs` / `history.rs` 负责 Codex thread history、离线 fallback 与 provider-agnostic history DTO
+- `src/stores/task-store/` 把 daemon 的 task/session/artifact/provider-history 事件水合到前端 store
+- `src/components/ClaudePanel/` 与 `src/components/AgentStatus/CodexPanel.tsx` 是 provider history 的主入口：按 `cwd` 拉历史，选择后决定 `new` 或 `resumed` 连接
+- `src/components/TaskPanel/` 现在只展示 active normalized task 的 session tree、artifact timeline、review gate badge，不再负责 provider history picker
+- `daemon_attach_provider_history` 仍然存在，但它是“把外部 provider history 显式挂到当前 task”的 task 语义入口，不等同于 provider-native connect/resume
+
+### 三种会话语义
+
+当前项目里必须明确区分这三层状态，很多历史 bug 都来自把它们混为一谈：
+
+1. **provider history**
+   - Claude 的 `session_id` / transcript
+   - Codex 的 `thread_id`
+   - 来源于 provider 自身的历史存储或 API，不要求先有 active task
+2. **live provider connection**
+   - 当前在线的 Claude/Codex 运行时连接
+   - daemon 通过 `ProviderConnectionState { provider, external_session_id, cwd, connection_mode }` 广播给前端
+   - 只表示“现在连着哪条外部会话”，不自动等同于 task attachment
+3. **normalized task session**
+   - daemon `task_graph` 里的持久化 session 记录
+   - 可以绑定外部 `session_id` / `thread_id`
+   - 只有进入 task graph 后，才会参与 review gate、artifact timeline、session tree
+
+结论：`provider history`、`live connection`、`normalized task session` 不是同一个概念，UI 和文档都必须保持这个边界。
+
+### 当前已知限制
+
+- Claude 的 provider-native resume 已接通，但消息面板里的执行状态仍弱于 Codex：
+  - daemon 仍会发 `claude_stream.preview`
+  - 前端当前明确忽略 `preview` 文本，只保留稳定的 `thinking…` 占位和 `Claude Terminal`
+  - 这是当前实现的有意选择，避免 PTY 摘要噪音直接污染消息区
+- provider history 当前按 workspace/cwd 查询；如果没有 active task，也仍然可以在 Claude/Codex 面板里查看历史并恢复连接
+- `resume_session()` 既可用于 normalized session 指针恢复，也会在 provider 具备外部会话 id 时尝试触发真实 runtime reconnect；不要再把它理解成“只移动 task graph 指针”的旧逻辑
 
 ## 端口分配
 

@@ -162,9 +162,13 @@ impl DaemonState {
             .collect()
     }
 
-    /// Resume a session: set its task as active, update the task's session pointer,
-    /// and mark the session as Active. Minimal skeleton — provider reconnection
-    /// is not yet implemented.
+    /// Resume a normalized session locally: set its task as active, update the
+    /// task's current session pointer, and mark the session as Active.
+    ///
+    /// Note: provider-native reconnect is orchestrated by `daemon/mod.rs`
+    /// before calling this method when the session carries an external
+    /// Claude/Codex identifier. This function only updates normalized task
+    /// graph state and persists it.
     /// Returns the task_id on success for event emission.
     pub fn resume_session(&mut self, session_id: &str) -> Result<String, String> {
         let sess = self

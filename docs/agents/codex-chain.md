@@ -31,10 +31,10 @@
 - `register_on_launch()` 现在同时支持 lead / coder 角色，供 task workspace 直接 attach 外部 thread
 
 **前端可见结果:**
-- `TaskPanel` 可展示 Codex 历史 thread
-- 已映射 thread 可直接 `Resume`
-- 未映射 thread 可 `As Lead` / `As Coder` 挂回当前 task
-- `AgentStatus/CodexHeader` 会显示当前 active task 绑定的 thread id
+- `CodexPanel` 会按当前 workspace 展示 Codex 历史 thread，下拉默认 `New session`
+- 选中历史 thread 后，`Connect Codex` 会恢复该 provider-native thread，而不是总是新建会话
+- 如果历史 thread 已映射到 normalized session，恢复成功后会同步当前 task context
+- `AgentStatus/CodexHeader` 会显示当前 live provider connection 的 thread 摘要（`new` / `resumed`）
 
 **验证:**
 - `cargo test --manifest-path src-tauri/Cargo.toml provider`
