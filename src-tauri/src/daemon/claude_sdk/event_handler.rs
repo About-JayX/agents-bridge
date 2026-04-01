@@ -70,18 +70,35 @@ async fn handle_control_request(event: &Value, state: &SharedState, app: &AppHan
         .or_else(|| request_obj["input"].as_str().map(ToOwned::to_owned));
 
     // Auto-approve: send allow verdict immediately via WS, skip GUI prompt.
-    // The --dangerously-skip-permissions flag handles most cases, but bridge
-    // mode may still emit control_request for some tool calls.
+    // Retry loop: WS sender may not be attached yet due to race between WS
+    // connect and the first POST arriving. Wait up to 3s for it.
     let ndjson = crate::daemon::claude_sdk::protocol::format_control_response(&request_id, true);
-    let sdk_tx = state.read().await.claude_sdk_ws_tx.clone();
-    if let Some(tx) = sdk_tx {
-        let _ = tx.send(ndjson).await;
+    let mut sent = false;
+    for attempt in 0..30 {
+        let sdk_tx = state.read().await.claude_sdk_ws_tx.clone();
+        if let Some(tx) = sdk_tx {
+            if tx.send(ndjson.clone()).await.is_ok() {
+                sent = true;
+                break;
+            }
+        }
+        if attempt < 29 {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
     }
-    gui::emit_system_log(
-        app,
-        "info",
-        &format!("[Claude SDK] auto-approved {tool_name} ({request_id})"),
-    );
+    if sent {
+        gui::emit_system_log(
+            app,
+            "info",
+            &format!("[Claude SDK] auto-approved {tool_name} ({request_id})"),
+        );
+    } else {
+        gui::emit_system_log(
+            app,
+            "error",
+            &format!("[Claude SDK] FAILED to send approval for {tool_name} ({request_id}) — WS not ready"),
+        );
+    }
 }
 
 fn handle_system(event: &Value, app: &AppHandle) {
