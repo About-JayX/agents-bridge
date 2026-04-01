@@ -2,10 +2,10 @@ use crate::daemon::codex::handler;
 use crate::daemon::codex::structured_output::{
     parse_structured_output, should_emit_final_message, StreamPreviewState,
 };
-use crate::daemon::gui_task::TaskUiEvent;
-use crate::daemon::task_graph::types::{Provider, SessionStatus};
 use crate::daemon::codex::ws_client::WsTx;
 use crate::daemon::gui::{self, CodexStreamPayload};
+use crate::daemon::gui_task::TaskUiEvent;
+use crate::daemon::task_graph::types::{Provider, SessionStatus};
 use crate::daemon::types::{BridgeMessage, MessageStatus};
 use crate::daemon::{routing, SharedState};
 use serde_json::Value;
@@ -189,8 +189,16 @@ fn map_thread_runtime_status(raw: &str) -> SessionStatus {
 
 async fn sync_thread_status_change(v: &Value, state: &SharedState, app: &AppHandle) {
     let thread_id = v["params"]["threadId"].as_str().unwrap_or("");
-    let status_type = v["params"]["status"]["type"].as_str().unwrap_or("notLoaded");
-    sync_thread_session_status(thread_id, map_thread_runtime_status(status_type), state, app).await;
+    let status_type = v["params"]["status"]["type"]
+        .as_str()
+        .unwrap_or("notLoaded");
+    sync_thread_session_status(
+        thread_id,
+        map_thread_runtime_status(status_type),
+        state,
+        app,
+    )
+    .await;
 }
 
 async fn sync_thread_archive(v: &Value, state: &SharedState, app: &AppHandle) {

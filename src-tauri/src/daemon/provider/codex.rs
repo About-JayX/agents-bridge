@@ -24,6 +24,9 @@ pub fn register_session(store: &mut TaskGraphStore, reg: SessionRegistration) ->
     if let Some(ext_id) = &reg.external_id {
         store.set_external_session_id(&sess.session_id, ext_id);
     }
+    if let Some(transcript_path) = &reg.transcript_path {
+        store.set_transcript_path(&sess.session_id, transcript_path);
+    }
     // Re-fetch to return the updated record
     store.get_session(&sess.session_id).cloned().unwrap_or(sess)
 }
@@ -62,6 +65,7 @@ pub fn register_on_launch(
         cwd: cwd.into(),
         title: format!("Codex {role_id}"),
         external_id: Some(thread_id.into()),
+        transcript_path: None,
     };
     let sess = register_session(&mut state.task_graph, reg);
     if session_role == SessionRole::Coder {
@@ -128,6 +132,7 @@ pub fn register_forked_session(
         cwd: source.cwd.clone(),
         title: title.unwrap_or(&source.title).to_string(),
         external_id: Some(thread_id.to_string()),
+        transcript_path: None,
     };
     Ok(register_session(store, reg))
 }
@@ -181,8 +186,8 @@ pub async fn list_threads(
     if let Some(cwd) = params.cwd.as_deref() {
         rpc_params.insert("cwd".into(), Value::String(cwd.to_string()));
     }
-    let result = crate::daemon::codex::ws_client::thread_list(port, Value::Object(rpc_params), app)
-        .await?;
+    let result =
+        crate::daemon::codex::ws_client::thread_list(port, Value::Object(rpc_params), app).await?;
     map_thread_page_response(&result, params.archived)
 }
 

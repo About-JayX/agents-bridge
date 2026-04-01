@@ -78,6 +78,8 @@ pub struct SessionHandle {
     pub provider: Provider,
     pub role: SessionRole,
     pub external_session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transcript_path: Option<String>,
     pub status: SessionStatus,
     pub cwd: String,
     pub title: String,

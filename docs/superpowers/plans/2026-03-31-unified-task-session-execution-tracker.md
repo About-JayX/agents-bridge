@@ -6,7 +6,15 @@
 
 ## 当前审查结论
 
-本次变更已完成一部分底层铺垫，但整体仍处于“Task 1 已大体落地、Task 4 做了早期路由试探、其余任务大多未开始”的状态。
+截至当前执行点，Task 1/2/3/4/5/6 已完成第一阶段落地，系统已经具备：
+- 标准化 task/session/artifact 持久化模型
+- Codex provider 的 history/fork/archive/resume 基础能力
+- Claude provider 的 session metadata capture、本地 transcript history index 与 runtime resume
+- 基础 orchestrator / review gate / task store / 最小 task shell
+
+当前主缺口已经收敛到：
+- Task 7：更完整的 session tree / history picker / artifact timeline / review badge UI
+- Task 8：全流程验证、文档收尾与最终交付证据
 
 ### 已有进展
 
@@ -64,7 +72,7 @@
 
 ### Task 2：补齐 Codex provider adapter、history、resume、fork、archive
 
-**状态：❌ 未完成（已完成第一阶段基础接入，优先级 P0）**
+**状态：✅ 已完成第一阶段（优先级 P0）**
 
 **已覆盖：**
 - Codex WS 握手、resume helper、thread id 获取逻辑已整理
@@ -74,36 +82,33 @@
 - Codex 启动时已能把 normalized session 注册进 task graph，并绑定 `thread.id`
 - `codex_tests.rs` 已覆盖 session 注册、child 关系、late bind 与 launch registration
 
-**未完成：**
-- 没有统一 DTO 映射层
-- 没有 `thread/list` / `thread/fork` / `thread/archive` 适配
-- provider 级 `resume/list/fork/archive` 仍未接到真实 Codex WS 调用
+**本轮新增完成：**
+- 已新增 provider DTO：
+  - `ProviderHistoryEntry`
+  - `ProviderHistoryPage`
+  - `ProviderResumeTarget`
+- 已实现 `thread/list` / `thread/fork` / `thread/archive` 的 provider 适配与 WS RPC helper
+- `resume_session` 已对 Codex provider 走真实 runtime reconnect，而不是只改 normalized 指针
+- 已补 provider mapping / resume target / archive 状态同步 / stable `CODEX_HOME` 测试覆盖
 
-**本阶段子任务：**
-1. 完成 provider DTO 映射层
-2. 实现 list/resume/fork/archive 适配接口
-3. 把 provider adapter 真正接入 commands / resume path
-4. 补真实 provider 调用覆盖，而不仅是 registration 测试
+**仍待后续阶段完成：**
+- provider history / fork / archive 还未暴露到统一前端 history picker
+- 更高层的端到端 GUI 验证待 Task 8 收尾
 
 ### Task 3：补齐 Claude provider adapter、session capture、history、resume
 
-**状态：❌ 未完成（优先级 P1）**
+**状态：✅ 已完成第一阶段（优先级 P1）**
 
 **已覆盖：**
-- `provider/{mod,claude,shared}.rs` 已创建，Claude adapter 骨架已落地
-- Claude connect 时已能注册 normalized session，并写回 lead/coder pointer
-- `claude_tests.rs` 已覆盖 session 注册、late bind 与 connect registration
+- `SessionHandle` 已新增 `transcript_path`
+- Claude managed launch 现在会显式分配 `session_id`，并把 `session_id + transcript_path` 注册进 normalized task graph
+- 已实现 workspace 级本地 transcript history index，按 `~/.claude/projects/<workspace-slug>/*.jsonl` 构建 provider history DTO
+- `resume_session` 已对 Claude provider 走真实 runtime resume（`--resume <session_id>`），并在恢复后补齐 transcript metadata
+- 已补 Claude adapter / launch argv / relative-path history slug 回归测试
 
-**未完成：**
-- Claude session metadata capture 未接入 task graph
-- 本地 history index/resume 入口未实现
-- provider 级 resume 仍未真正重连 Claude runtime
-
-**本阶段子任务：**
-1. 设计 Claude session 元数据采集点
-2. 建立 workspace 级本地 history index
-3. 实现 normalized session 映射与 resume 流程
-4. 把 provider adapter 真正接入 commands / resume path，并补更高层测试
+**仍待后续阶段完成：**
+- 当前 history index 仍基于本地 transcript 文件解析，尚未形成统一前端 history picker
+- `--session-id` / `--resume` 的完整人工 GUI 回放验证待 Task 8 收尾
 
 ### Task 4：构建 Task Orchestrator 与严格 Review Gate
 

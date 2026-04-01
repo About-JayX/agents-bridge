@@ -1,5 +1,7 @@
 use crate::daemon::provider::codex;
-use crate::daemon::provider::shared::{ProviderHistoryEntry, ProviderHistoryPage, SessionRegistration};
+use crate::daemon::provider::shared::{
+    ProviderHistoryEntry, ProviderHistoryPage, SessionRegistration,
+};
 use crate::daemon::task_graph::store::TaskGraphStore;
 use crate::daemon::task_graph::types::*;
 use serde_json::json;
@@ -18,6 +20,7 @@ fn register_codex_session_binds_thread_id() {
         cwd: "/ws".into(),
         title: "Codex coder".into(),
         external_id: Some("thread_abc123".into()),
+        transcript_path: None,
     };
     let sess = codex::register_session(&mut store, reg);
 
@@ -40,6 +43,7 @@ fn register_codex_session_without_thread_id() {
         cwd: "/ws".into(),
         title: "Codex coder".into(),
         external_id: None,
+        transcript_path: None,
     };
     let sess = codex::register_session(&mut store, reg);
     assert!(sess.external_session_id.is_none());
@@ -65,6 +69,7 @@ fn register_codex_session_as_child_of_lead() {
         cwd: "/ws".into(),
         title: "Codex coder".into(),
         external_id: Some("thread_xyz".into()),
+        transcript_path: None,
     };
     let sess = codex::register_session(&mut store, reg);
 
@@ -310,6 +315,7 @@ fn build_resume_target_requires_external_thread_id() {
         provider: Provider::Codex,
         role: SessionRole::Coder,
         external_session_id: None,
+        transcript_path: None,
         status: SessionStatus::Paused,
         cwd: "/ws".into(),
         title: "Codex coder".into(),
@@ -334,7 +340,10 @@ fn mark_archived_updates_normalized_session_status() {
         title: "Coder",
     });
 
-    assert!(codex::mark_session_archived(&mut store, &session.session_id));
+    assert!(codex::mark_session_archived(
+        &mut store,
+        &session.session_id
+    ));
     assert_eq!(
         store.get_session(&session.session_id).unwrap().status,
         SessionStatus::Completed

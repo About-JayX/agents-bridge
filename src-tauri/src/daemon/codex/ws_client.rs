@@ -77,7 +77,14 @@ pub(crate) async fn thread_fork(
     thread_id: &str,
     app: &AppHandle,
 ) -> Result<String, String> {
-    let result = rpc_call(port, 21, "thread/fork", json!({ "threadId": thread_id }), app).await?;
+    let result = rpc_call(
+        port,
+        21,
+        "thread/fork",
+        json!({ "threadId": thread_id }),
+        app,
+    )
+    .await?;
     result["thread"]["id"]
         .as_str()
         .map(ToOwned::to_owned)
@@ -89,9 +96,15 @@ pub(crate) async fn thread_archive(
     thread_id: &str,
     app: &AppHandle,
 ) -> Result<(), String> {
-    rpc_call(port, 22, "thread/archive", json!({ "threadId": thread_id }), app)
-        .await
-        .map(|_| ())
+    rpc_call(
+        port,
+        22,
+        "thread/archive",
+        json!({ "threadId": thread_id }),
+        app,
+    )
+    .await
+    .map(|_| ())
 }
 
 async fn open_ws(port: u16, app: &AppHandle) -> Option<FullWs> {

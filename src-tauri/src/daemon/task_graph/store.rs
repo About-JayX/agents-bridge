@@ -117,6 +117,7 @@ impl TaskGraphStore {
             provider: params.provider,
             role: params.role,
             external_session_id: None,
+            transcript_path: None,
             status: SessionStatus::Active,
             cwd: params.cwd.to_string(),
             title: params.title.to_string(),
@@ -160,6 +161,17 @@ impl TaskGraphStore {
     pub fn set_external_session_id(&mut self, session_id: &str, external_id: &str) -> bool {
         if let Some(sess) = self.sessions.get_mut(session_id) {
             sess.external_session_id = Some(external_id.to_string());
+            sess.updated_at = chrono::Utc::now().timestamp_millis() as u64;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Bind a provider-owned transcript path to a session.
+    pub fn set_transcript_path(&mut self, session_id: &str, transcript_path: &str) -> bool {
+        if let Some(sess) = self.sessions.get_mut(session_id) {
+            sess.transcript_path = Some(transcript_path.to_string());
             sess.updated_at = chrono::Utc::now().timestamp_millis() as u64;
             true
         } else {

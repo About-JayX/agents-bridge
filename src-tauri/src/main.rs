@@ -91,7 +91,12 @@ fn main() {
             app.handle().manage(DaemonSender(cmd_tx));
 
             let handle = app.handle().clone();
-            tauri::async_runtime::spawn(daemon::run(handle, cmd_rx));
+            let claude_manager = app
+                .handle()
+                .state::<Arc<claude_session::ClaudeSessionManager>>()
+                .inner()
+                .clone();
+            tauri::async_runtime::spawn(daemon::run(handle, claude_manager, cmd_rx));
             Ok(())
         })
         .on_window_event(|window, event| {

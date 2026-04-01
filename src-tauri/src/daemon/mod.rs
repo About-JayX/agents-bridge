@@ -19,6 +19,7 @@ mod window_focus;
 pub use cmd::{channel, is_valid_agent_role, DaemonCmd};
 pub use state::DaemonState;
 
+use crate::claude_session::ClaudeSessionManager;
 use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::{mpsc, RwLock};
@@ -77,6 +78,10 @@ async fn stop_codex_session(
     gui::emit_agent_status(app, "codex", false, None);
 }
 
+async fn stop_claude_session(claude_manager: &ClaudeSessionManager) {
+    crate::claude_session::stop_if_running(claude_manager).await;
+}
+
 /// Emit a full task context sync for the selected task.
 async fn emit_task_context_events(state: &SharedState, app: &AppHandle, task_id: &str) {
     let s = state.read().await;
@@ -100,7 +105,11 @@ async fn emit_task_context_events(state: &SharedState, app: &AppHandle, task_id:
     }
 }
 
-pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
+pub async fn run(
+    app: AppHandle,
+    claude_manager: Arc<ClaudeSessionManager>,
+    mut cmd_rx: mpsc::Receiver<DaemonCmd>,
+) {
     let state: SharedState = Arc::new(RwLock::new(DaemonState::new()));
     // WS control server — bridge processes connect here
     {
@@ -176,6 +185,29 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
                 stop_codex_session(&mut codex_handle, &state, &app).await;
                 let _ = reply.send(());
                 break;
+            }
+            DaemonCmd::RegisterClaudeLaunch {
+                role_id,
+                cwd,
+                external_id,
+                transcript_path,
+                reply,
+            } => {
+                let task_id = {
+                    let mut daemon = state.write().await;
+                    crate::daemon::provider::claude::register_on_launch(
+                        &mut daemon,
+                        &role_id,
+                        &cwd,
+                        &external_id,
+                        &transcript_path,
+                    );
+                    daemon.active_task_id.clone()
+                };
+                if let Some(task_id) = task_id {
+                    emit_task_context_events(&state, &app, &task_id).await;
+                }
+                let _ = reply.send(Ok(()));
             }
             DaemonCmd::ReadClaudeRole { reply } => {
                 let _ = reply.send(state.read().await.claude_role.clone());
@@ -275,9 +307,7 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
                                 let launch_epoch = state.write().await.begin_codex_launch();
                                 let role_id = match target.role {
                                     crate::daemon::task_graph::types::SessionRole::Lead => "lead",
-                                    crate::daemon::task_graph::types::SessionRole::Coder => {
-                                        "coder"
-                                    }
+                                    crate::daemon::task_graph::types::SessionRole::Coder => "coder",
                                 }
                                 .to_string();
                                 match codex::resume(
@@ -298,6 +328,60 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
                                         state.write().await.resume_session(&session_id)
                                     }
                                     Err(err) => Err(err.to_string()),
+                                }
+                            }
+                            Err(err) => Err(err),
+                        }
+                    }
+                    Some(sess)
+                        if sess.provider == crate::daemon::task_graph::types::Provider::Claude =>
+                    {
+                        let target = crate::daemon::provider::claude::build_resume_target(&sess);
+                        match target {
+                            Ok(target) => {
+                                let role_id = match target.role {
+                                    crate::daemon::task_graph::types::SessionRole::Lead => "lead",
+                                    crate::daemon::task_graph::types::SessionRole::Coder => "coder",
+                                };
+                                if let Some(conflict_agent) = {
+                                    let daemon = state.read().await;
+                                    daemon.online_role_conflict("claude", role_id)
+                                } {
+                                    Err(format!(
+                                        "role '{role_id}' already in use by online {conflict_agent}"
+                                    ))
+                                } else {
+                                    stop_claude_session(claude_manager.as_ref()).await;
+                                    match crate::claude_launch::resume(
+                                        &target.cwd,
+                                        None,
+                                        None,
+                                        role_id,
+                                        &target.external_id,
+                                        None,
+                                        None,
+                                        claude_manager.clone(),
+                                        app.clone(),
+                                    )
+                                    .await
+                                    {
+                                        Ok(()) => {
+                                            let mut daemon = state.write().await;
+                                            if let Ok(path) =
+                                                crate::daemon::provider::claude::default_transcript_path(
+                                                    &target.cwd,
+                                                    &target.external_id,
+                                                )
+                                            {
+                                                let _ = daemon.task_graph.set_transcript_path(
+                                                    &session_id,
+                                                    &path.to_string_lossy(),
+                                                );
+                                            }
+                                            daemon.resume_session(&session_id)
+                                        }
+                                        Err(err) => Err(err),
+                                    }
                                 }
                             }
                             Err(err) => Err(err),

@@ -23,6 +23,13 @@ pub enum DaemonCmd {
     ReadStatusSnapshot {
         reply: oneshot::Sender<types::DaemonStatusSnapshot>,
     },
+    RegisterClaudeLaunch {
+        role_id: String,
+        cwd: String,
+        external_id: String,
+        transcript_path: String,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
     ReadClaudeRole {
         reply: oneshot::Sender<String>,
     },

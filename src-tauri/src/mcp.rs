@@ -183,17 +183,50 @@ pub async fn launch_claude_terminal(
     if codex_online && snapshot.codex_role == role {
         return Err(format!("role '{role}' already in use by online codex"));
     }
-    crate::claude_launch::launch(
+
+    let claude_session_id = uuid::Uuid::new_v4().to_string();
+    let transcript_path =
+        crate::daemon::provider::claude::default_transcript_path(&dir, &claude_session_id)?
+            .to_string_lossy()
+            .to_string();
+
+    crate::claude_launch::launch_new(
         &dir,
         model,
         effort,
         &role,
+        &claude_session_id,
         cols,
         rows,
         session.inner().clone(),
-        app,
+        app.clone(),
     )
-    .await
+    .await?;
+
+    let (register_tx, register_rx) = tokio::sync::oneshot::channel();
+    let register_result = daemon_tx
+        .0
+        .send(crate::daemon::DaemonCmd::RegisterClaudeLaunch {
+            role_id: role,
+            cwd: dir,
+            external_id: claude_session_id,
+            transcript_path,
+            reply: register_tx,
+        })
+        .await
+        .map_err(|_| "daemon channel closed".to_string());
+    if let Err(err) = register_result {
+        crate::claude_session::stop_if_running(session.inner().as_ref()).await;
+        return Err(err);
+    }
+    let result = register_rx
+        .await
+        .map_err(|_| "daemon dropped Claude launch registration reply".to_string())?;
+    if let Err(err) = &result {
+        crate::claude_session::stop_if_running(session.inner().as_ref()).await;
+        return Err(err.clone());
+    }
+    result
 }
 
 #[cfg(test)]

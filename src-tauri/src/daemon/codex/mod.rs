@@ -111,7 +111,10 @@ pub async fn resume(
     } = opts;
     let (sandbox_mode, approval_policy, _, _) = resolve_role_launch_config(&role_id);
     launch(
-        LaunchMode::Resume { role_id: role_id.clone(), thread_id },
+        LaunchMode::Resume {
+            role_id: role_id.clone(),
+            thread_id,
+        },
         role_id,
         cwd,
         launch_epoch,
@@ -244,7 +247,9 @@ async fn launch(
         let attached = s.attach_codex_session_if_current(launch_epoch, inject_tx.clone());
         let buffered = if attached {
             if is_new_session {
-                crate::daemon::provider::codex::register_on_launch(&mut s, &role_id, &cwd, &thread_id);
+                crate::daemon::provider::codex::register_on_launch(
+                    &mut s, &role_id, &cwd, &thread_id,
+                );
             }
             s.take_buffered_for(&role_id)
         } else {

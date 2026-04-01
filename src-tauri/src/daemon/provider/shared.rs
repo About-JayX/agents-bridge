@@ -9,6 +9,8 @@ pub struct SessionRegistration {
     pub title: String,
     /// Provider-specific external ID (e.g. Codex thread_id, Claude session_id).
     pub external_id: Option<String>,
+    /// Provider-owned transcript or history file when applicable.
+    pub transcript_path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
