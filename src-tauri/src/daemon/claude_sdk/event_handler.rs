@@ -37,6 +37,9 @@ async fn handle_assistant(event: &Value, role: &str, state: &SharedState, app: &
     if text.is_empty() || !begin_sdk_direct_text_turn_if_allowed(state).await {
         return;
     }
+    // SDK fallback intentionally keeps in-progress text out of chat bubbles.
+    // Assistant chunks only lock in direct-routing ownership for this turn so a
+    // late bridge attach cannot steal the final visible result mid-turn.
     if let Some(msg) = build_direct_sdk_gui_message(role, &text, MessageStatus::InProgress) {
         routing::route_message(state, app, msg).await;
     }
@@ -103,7 +106,7 @@ async fn handle_result(event: &Value, role: &str, state: &SharedState, app: &App
     let text = event["result"]
         .as_str()
         .map(ToOwned::to_owned)
-        .or_else(|| extract_assistant_text(event).into());
+        .or_else(|| Some(extract_assistant_text(event)));
     if let Some(text) = text.filter(|text| !text.is_empty()) {
         if !claim_sdk_terminal_delivery(state).await {
             gui::emit_system_log(
@@ -139,6 +142,9 @@ fn build_direct_sdk_gui_message(
     text: &str,
     status: MessageStatus,
 ) -> Option<BridgeMessage> {
+    // Direct SDK fallback only renders terminal text. UI already exposes a
+    // single Claude thinking indicator, so surfacing partial assistant chunks
+    // here would reintroduce the duplicate/preview noise we removed.
     if !status.is_terminal() || text.is_empty() {
         return None;
     }

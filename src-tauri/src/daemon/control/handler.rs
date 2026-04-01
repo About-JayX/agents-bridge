@@ -13,6 +13,10 @@ fn is_allowed_agent(agent_id: &str) -> bool {
     matches!(agent_id, "claude" | "codex")
 }
 
+fn claude_terminal_reply_claims_visible_result(status: MessageStatus, content: &str) -> bool {
+    status.is_terminal() && !content.trim().is_empty()
+}
+
 pub async fn handle_connection(socket: WebSocket, state: SharedState, app: AppHandle) {
     let (mut sink, mut stream) = socket.split();
     let (tx, mut rx) = mpsc::channel::<ToAgent>(64);
@@ -108,9 +112,7 @@ pub async fn handle_connection(socket: WebSocket, state: SharedState, app: AppHa
                         .await
                         .stamp_message_context(&role, &mut message);
                     if id == "claude" && status.is_terminal() {
-                        if message.content.trim().is_empty() {
-                            gui::emit_claude_stream(&app, ClaudeStreamPayload::Done);
-                        } else {
+                        if claude_terminal_reply_claims_visible_result(status, &message.content) {
                             let should_route = state
                                 .write()
                                 .await
@@ -126,6 +128,11 @@ pub async fn handle_connection(socket: WebSocket, state: SharedState, app: AppHa
                                     "[Control] suppressed duplicate Claude terminal reply after SDK fallback",
                                 );
                             }
+                        } else {
+                            // Empty terminal replies are allowed to end the visible
+                            // thinking state without stealing final-message ownership
+                            // from an in-flight SDK fallback turn.
+                            gui::emit_claude_stream(&app, ClaudeStreamPayload::Done);
                         }
                     }
                 }
@@ -200,6 +207,36 @@ pub async fn handle_connection(socket: WebSocket, state: SharedState, app: AppHa
                 &format!("[Control] {id} stale connection closed"),
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::claude_terminal_reply_claims_visible_result;
+    use crate::daemon::types::MessageStatus;
+
+    #[test]
+    fn empty_terminal_claude_reply_only_ends_thinking() {
+        assert!(!claude_terminal_reply_claims_visible_result(
+            MessageStatus::Done,
+            "   "
+        ));
+        assert!(!claude_terminal_reply_claims_visible_result(
+            MessageStatus::Error,
+            ""
+        ));
+    }
+
+    #[test]
+    fn non_empty_terminal_claude_reply_claims_visible_result() {
+        assert!(claude_terminal_reply_claims_visible_result(
+            MessageStatus::Done,
+            "final reply"
+        ));
+        assert!(claude_terminal_reply_claims_visible_result(
+            MessageStatus::Error,
+            "blocked"
+        ));
     }
 }
 
