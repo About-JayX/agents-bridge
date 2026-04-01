@@ -1,6 +1,6 @@
 # AgentNexus
 
-通用 AI Agent 桥接桌面应用。当前实现把 **Tauri/Rust 主进程** 作为唯一常驻后端，把 **Claude Code** 和 **Codex app-server** 接到同一个消息路由层里，让用户在一个桌面界面里协调两个 agent。
+通用 AI Agent 桥接桌面应用。当前实现把 **Tauri/Rust 主进程** 作为唯一常驻后端，把 **Claude Code** 和 **Codex app-server** 接到同一个消息路由层里，并由 daemon 维护标准化的 **task / session / artifact** 图，让用户在一个桌面界面里协调两个 agent、恢复历史会话并查看 review gate。
 
 ### 当前产品形态
 
@@ -8,10 +8,11 @@
 |------|----------|
 | 桌面壳 | Tauri 2 |
 | 主后端 | Rust 内嵌 async daemon（`src-tauri/src/daemon/`） |
-| Claude 接入 | 外部终端启动 `claude` + 项目 `.mcp.json` 注册 Rust bridge sidecar |
+| Claude 接入 | managed hidden PTY 启动 `claude` + 项目 `.mcp.json` 注册 Rust bridge sidecar |
 | Codex 接入 | Rust daemon 启动 `codex app-server` 并通过 WS 建立 session |
 | 桥接 sidecar | Rust 二进制 `agent-nexus-bridge`（`bridge/` crate） |
-| 前端 | React 19 + Vite + TypeScript + Tailwind CSS v4 |
+| 会话记忆 | daemon `task_graph` + provider history index + runtime resume |
+| 前端 | React 19 + Vite + TypeScript + Tailwind CSS v4 + Zustand + task-centric shell |
 
 ### 硬性约束
 
@@ -35,7 +36,7 @@
 ## 当前架构
 
 ```text
-┌─ Claude Code（外部终端） ───────────────────────────────────────┐
+┌─ Claude Code（managed PTY） ───────────────────────────────────┐
 │  读取项目 .mcp.json                                            │
 │  spawn: agent-nexus-bridge                                    │
 └───────────────┬─────────────────────────────────────────────────┘
@@ -52,20 +53,24 @@
                 ▼
 ┌─ Tauri 主进程 / Rust daemon ────────────────────────────────────┐
 │ main.rs                   → commands 注册 + daemon task 启动     │
-│ mcp.rs                    → .mcp.json 注册 + 启动 Claude 终端    │
+│ mcp.rs                    → .mcp.json 注册 + 启动 Claude PTY     │
 │ claude_cli.rs             → Claude CLI 版本校验 + channel 启动    │
 │ codex/auth|oauth|usage    → 账号/OAuth/用量/模型                 │
 │ daemon/control/           → bridge 接入与消息投递                │
 │ daemon/routing.rs         → Claude / Codex / GUI 路由            │
 │ daemon/codex/             → app-server 生命周期 + session        │
 │ daemon/session_manager.rs → 临时 CODEX_HOME 生命周期             │
+│ daemon/task_graph/        → task/session/artifact 标准化持久化    │
+│ daemon/provider/          → Claude/Codex history + resume adapter│
 └───────────────┬─────────────────────────────────────────────────┘
                 │ invoke / listen
                 ▼
 ┌─ React 前端 ────────────────────────────────────────────────────┐
 │ bridge-store      → 监听 agent_message / system_log / codex_stream│
+│ task-store        → 监听 task/session/artifact/provider history   │
 │ ClaudePanel       → register_mcp + launch_claude_terminal        │
 │ AgentStatus/      → CodexPanel / RoleSelect / StatusDot          │
+│ TaskPanel         → session tree / history / artifact timeline   │
 │ MessagePanel      → 消息与日志与 Permission 审批                  │
 └──────────────────────────────────────────────────────────────────┘
 
@@ -78,10 +83,11 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 
 1. 前端选择项目目录后调用 `register_mcp`。
 2. Tauri 在项目根写入 **`.mcp.json`**，注册 `agent-nexus-bridge`。
-3. 前端再调用 `launch_claude_terminal`，打开外部终端并在该目录运行 `claude`。
+3. 前端再调用 `launch_claude_terminal`，由 Tauri 在 managed PTY 中运行 `claude`。
 4. Claude Code 读取项目 `.mcp.json`，以 MCP stdio 方式启动 bridge sidecar。
 5. bridge 通过 `ws://127.0.0.1:4502/ws` 连入内嵌 daemon。
 6. Permission 链路: bridge `permission_request` → daemon → GUI → `permission_verdict` → bridge
+7. Claude 新会话显式分配 `--session-id`，恢复历史会话走 `--resume <session_id>`
 
 ### Codex 链路
 
@@ -95,6 +101,7 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
    - `reply`
    - `check_messages`
    - `get_status`
+6. Codex history 通过 `thread/list` 映射到 provider history picker，恢复时重新连回原 thread
 
 ### 消息路由
 
@@ -104,6 +111,15 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 - **任一 agent → user**: `to = "user"` 时只发到 GUI
 - **离线缓冲**: 目标离线时写入 `buffered_messages`，Claude bridge 重连或 Codex session 启动后回放
 - **Sender gating**: Claude 只接受 `user`/`system`/当前 `codex_role`；control WS 只接受 `claude`/`codex`
+
+## Task / Session Memory
+
+- `src-tauri/src/daemon/task_graph/` 是标准化 task/session/artifact 事实源，并带 JSON 持久化快照
+- `src-tauri/src/daemon/provider/claude.rs` 负责 Claude transcript history index 与 runtime resume
+- `src-tauri/src/daemon/provider/codex.rs` / `history.rs` 负责 Codex thread history 与 provider-agnostic history DTO
+- `src/stores/task-store/` 把 daemon 事件水合到前端 task store
+- `src/components/TaskPanel/` 展示 session tree、provider history picker、artifact timeline、review gate badge
+- `daemon_attach_provider_history` 允许把外部 provider history 直接挂到当前 task，作为 lead/coder 会话恢复
 
 ## 端口分配
 
@@ -372,11 +388,12 @@ src/
 - Claude 项目级 `.mcp.json` 注册
 - Claude channel preview 启动链路与版本 preflight
 - Claude channel `instructions` / `reply(to, text, status)` / `get_online_agents()` / permission relay
-- 外部终端启动 Claude CLI
+- managed PTY 启动 Claude CLI
 - Codex account / OAuth / models / usage
 - 临时 `CODEX_HOME` + `auth.json` symlink + `config.toml`
 - Rust control server + routing + message buffering
 - Tauri event 驱动的消息 / 日志 / agent 状态 / permission prompt 同步
+- unified task/session/artifact graph + provider history / runtime resume
 
 ### 已删除或不再适用
 

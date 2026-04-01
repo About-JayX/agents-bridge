@@ -186,6 +186,32 @@
 
 - 当前代码主链已明显稳定，但自动化验证层仍落后于这几轮修复速度。
 
+## 最新补充（2026-04-01：统一 task/session memory 与 Task Workspace）
+
+这一轮完成了 unified task/session architecture 的第一阶段收口：
+
+- [已修复] daemon 现在持有标准化 `task / session / artifact` 图，并把 provider metadata（Claude session id/transcript、Codex thread id）纳入统一持久化模型
+- [已修复] Codex history / Claude transcript history 现在能在同一个 history picker 里展示
+- [已修复] `resume_session` 对 Claude/Codex provider 都走真实 runtime reconnect，而不是只移动 normalized 指针
+- [已修复] 前端已落地 task-centric workspace：session tree、history picker、artifact timeline、review gate badge
+- [已修复] `MessagePanel`、`ReplyInput`、`AgentStatus` 已显示当前 active task / review 状态，不再只有消息流而没有 task context
+
+本轮验证证据：
+
+- `cargo test --manifest-path src-tauri/Cargo.toml`
+- `cargo test --manifest-path src-tauri/Cargo.toml daemon::`
+- `cargo test --manifest-path src-tauri/Cargo.toml provider`
+- `bun test tests/task-store.test.ts tests/task-panel-view-model.test.ts`
+- `bun run build`
+- 运行时 smoke：
+  - `agent-nexus` 进程持续监听 `127.0.0.1:4502`
+  - `codex app-server` 持续监听 `127.0.0.1:4500`
+  - `curl -fsS http://127.0.0.1:4500/readyz` 返回成功
+
+仍需保留的限制：
+
+- [已知限制] 原生 Tauri GUI 的完整点击式回放仍无法在当前自动化环境中完全脚本化，因此最终用户视角的“create task -> attach history -> resume -> review gate”还需要本机人工 smoke 一次
+
 ### 4. [已修复] user 输入在 auto 模式下显示两条 message 气泡
 
 - [已修复] 根因：前端在 `auto` 模式下会把一次用户输入拆成多条 transport 级 `BridgeMessage`，daemon 又会把每条都 `emit_agent_message` 到 GUI，导致消息面板出现多条一模一样的 user 气泡。

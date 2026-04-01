@@ -6,14 +6,15 @@
 
 ## 当前审查结论
 
-截至当前执行点，Task 1/2/3/4/5/6 已完成第一阶段落地，系统已经具备：
+截至当前执行点，Task 1/2/3/4/5/6/7/8 已完成第一阶段落地，系统已经具备：
 - 标准化 task/session/artifact 持久化模型
 - Codex provider 的 history/fork/archive/resume 基础能力
 - Claude provider 的 session metadata capture、本地 transcript history index 与 runtime resume
-- 基础 orchestrator / review gate / task store / 最小 task shell
+- 基础 orchestrator / review gate / task store / 完整 task workspace 第一阶段
+- 自动化验证与链路文档收尾证据
 
 当前主缺口已经收敛到：
-- Task 8：全流程验证、文档收尾与最终交付证据
+- 原生 Tauri GUI 的完整点击式手工回放仍需在本机继续做最终 smoke
 
 ### 已有进展
 
@@ -30,18 +31,12 @@
 4. Codex WS 连接层做了整理，补出 `ws_helpers.rs`，为后续 session/history 能力打底：
    - `src-tauri/src/daemon/codex/{session,session_event,ws_client,ws_helpers}.rs`
 
-### 关键缺口
+### 当前残余限制
 
-1. **没有真正落地持久化存储**
-   - 当前 `TaskGraphStore` 仅是内存结构，未实现本地持久化。
-2. **没有 provider adapter 层**
-   - `provider/{mod,codex,claude,shared}.rs` 尚不存在。
-3. **没有 orchestrator 模块**
-   - `orchestrator/{mod,task_flow,review_gate}.rs` 尚不存在。
-4. **review gate 逻辑与 spec 不完全一致**
-   - 目前 `reviewer -> lead` 完成后会直接解除阻塞，**没有 lead 最终批准关卡**。
-5. **没有 commands / GUI events / frontend task store / task UI**
-   - Task 5~7 基本未开始。
+1. **原生 GUI 完整回放仍未自动化**
+   - 当前环境可以完成 Tauri/daemon/codex 启动 smoke，但无法完整脚本化 native WebView 点击流程。
+2. **Codex history 仍依赖 app-server 在线**
+   - `provider/history.rs` 读取 Codex history 目前仍走 `thread/list`，因此 `4500` 不在线时无法像 Claude transcript 那样离线索引。
 
 ## 按 Plan 拆分后的执行任务
 
@@ -203,17 +198,29 @@
 
 ### Task 8：整体验证、文档与硬化
 
-**状态：❌ 未完成（优先级 P2）**
+**状态：✅ 已完成第一阶段（优先级 P2）**
 
-**已有最小进展：**
-- 已补充 execution tracker 与 Claude 逆向/链路文档
-- 已完成多组后端与前端局部测试验证
+**本轮新增完成：**
+1. 已完成全量自动化验证：
+   - `cargo test --manifest-path src-tauri/Cargo.toml`
+   - `cargo test --manifest-path src-tauri/Cargo.toml daemon::`
+   - `cargo test --manifest-path src-tauri/Cargo.toml provider`
+   - `bun test tests/task-store.test.ts tests/task-panel-view-model.test.ts`
+   - `bun run build`
+2. 已完成运行时 smoke：
+   - `agent-nexus` 继续监听 `127.0.0.1:4502`
+   - `codex app-server` 继续监听 `127.0.0.1:4500`
+   - `curl -fsS http://127.0.0.1:4500/readyz` 成功
+3. 已更新架构与链路文档：
+   - `CLAUDE.md`
+   - `UPDATE.md`
+   - `docs/agents/codex-chain.md`
+   - `docs/agents/claude-chain.md`
+   - `docs/agentnexus-audit-summary.md`
+4. 已同步 execution tracker 到最新实现状态
 
-**本阶段仍未完成：**
-1. 全量后端/前端测试验收
-2. 全流程手工验证
-3. 全量架构与交付文档收尾
-4. 汇总最终交付证据
+**仍待后续阶段完成：**
+- 最终用户视角的 native GUI 点击式 smoke 仍建议在本机做一次人工回放
 
 ## 推荐执行顺序
 
@@ -233,18 +240,18 @@
 ### Phase D（验收）
 8. Task 8：整体验证与文档
 
-## 审查中发现的高优先级风险
+## 审查中发现的当前风险
 
-1. 当前 task graph 与 provider session 仍是松耦合，导致“统一 task/session 产品模型”还没有真正闭环。
-2. Claude provider adapter / history / resume 仍未开始，双 provider 架构还不完整。
-3. 前端虽然已有最小 task shell，但 session tree / history picker / artifact timeline 仍未完成，产品形态还不完整。
+1. 原生 Tauri GUI 的完整点击式回放仍未自动化，最终用户视角的 smoke 还需要本机人工补一次。
+2. Codex workspace history 仍依赖 app-server 在线；当 `4500` 不在线时，history picker 无法像 Claude transcript 一样离线索引。
 
 ## 已验证项
 
-- `cargo test task_graph --manifest-path src-tauri/Cargo.toml`
-- `cargo test routing --manifest-path src-tauri/Cargo.toml`
-- `cargo test state_tests --manifest-path src-tauri/Cargo.toml`
-- `cargo test state_task_snapshot_tests --manifest-path src-tauri/Cargo.toml`
-- `bun test tests/task-store.test.ts tests/message-panel-view-model.test.ts`
+- `cargo test --manifest-path src-tauri/Cargo.toml`
+- `cargo test --manifest-path src-tauri/Cargo.toml daemon::`
+- `cargo test --manifest-path src-tauri/Cargo.toml provider`
+- `bun test tests/task-store.test.ts tests/task-panel-view-model.test.ts`
+- `bun run build`
+- `curl -fsS http://127.0.0.1:4500/readyz`
 
 结果：以上测试均通过。

@@ -123,6 +123,39 @@ tool 调用通过 `CallToolRequestSchema` handler 处理，返回格式:
 | Sender gating | `channel_state.rs` ALLOWED_SENDERS（当前为 `user/system/lead/coder/reviewer`） | ✅ 已实现 |
 | Pre-init message buffering | `mcp.rs` pre_init_buffer | ✅ 已实现 |
 
+## 最新修复记录
+
+### 2026-04-01: Claude session memory / transcript history / runtime resume
+
+#### [已修复] Claude 历史会话之前没有进入统一 task workspace
+
+**问题:** Claude managed PTY 已经能跑通 channel，但 session metadata、workspace transcript history、runtime resume 之前没有接进统一 task/session 模型，用户也无法在 task workspace 里选择历史会话。
+
+**根因:** Claude 启动链缺少显式 session id、transcript path 注册和 workspace transcript index；前端只有最小 task shell，没有 history picker / session tree / artifact timeline。
+
+**修复:**
+- managed launch 现在显式分配 `--session-id <uuid>`
+- 恢复历史会话时走 `--resume <session_id>`
+- `provider/claude.rs` 新增：
+  - transcript path 推导
+  - workspace transcript index（`$HOME/.claude/projects/<workspace-slug>/*.jsonl`）
+  - `build_resume_target()`
+  - `register_on_launch()` / `register_on_connect()` metadata capture
+- `launch_claude_terminal` 在 daemon 中注册 `external_id + transcript_path`
+- `ResumeSession` / `AttachProviderHistory` 对 Claude provider 走真实 runtime resume
+- 前端新增 session tree、history picker、artifact timeline、review gate badge，以及 ReplyInput / MessagePanel / AgentStatus 的 task context 摘要
+
+**验证:**
+- `cargo test --manifest-path src-tauri/Cargo.toml provider`
+- `cargo test --manifest-path src-tauri/Cargo.toml daemon::`
+- `cargo test --manifest-path src-tauri/Cargo.toml`
+- `bun test tests/task-store.test.ts tests/task-panel-view-model.test.ts`
+- `bun run build`
+- 运行中的 `agent-nexus` daemon 继续监听 `127.0.0.1:4502`
+
+**已知限制:**
+- 原生 Tauri 窗口中的“完整人工点击恢复 Claude 历史会话”仍需在本机 GUI 上做最终人工回放；当前自动化环境只能完成启动 smoke 与后端/前端验证
+
 ## 修复记录
 
 ### 2026-03-25: 初始审计

@@ -12,6 +12,41 @@
 
 ## 协议对照与修复记录
 
+### 2026-04-01: Codex provider history / runtime resume / task workspace
+
+#### [已修复] Codex 历史 thread 之前没有进入统一 session memory
+
+**问题:** task-centric UI 只能展示 normalized session，Codex provider 自己的 thread history 没有进入统一 history picker，也无法从 task workspace 里恢复。
+
+**根因:** Codex provider 之前只有 launch / session 注册能力，没有把 `thread/list` 输出映射成 provider-agnostic history DTO，也没有把“外部 thread 挂回当前 task”的命令面暴露给前端。
+
+**修复:**
+- 新增 `ProviderHistoryEntry` / `ProviderHistoryPage`
+- `provider/codex.rs` 新增 `list_threads()` DTO 映射与 `build_resume_target()`
+- `provider/history.rs` 合并 Claude transcript history + Codex thread history，按 workspace 产出统一列表
+- `DaemonCmd` / Tauri commands 新增：
+  - `ListProviderHistory`
+  - `AttachProviderHistory`
+- `ResumeSession` 对 Codex provider 走真实 runtime reconnect，不再只是移动 normalized 指针
+- `register_on_launch()` 现在同时支持 lead / coder 角色，供 task workspace 直接 attach 外部 thread
+
+**前端可见结果:**
+- `TaskPanel` 可展示 Codex 历史 thread
+- 已映射 thread 可直接 `Resume`
+- 未映射 thread 可 `As Lead` / `As Coder` 挂回当前 task
+- `AgentStatus/CodexHeader` 会显示当前 active task 绑定的 thread id
+
+**验证:**
+- `cargo test --manifest-path src-tauri/Cargo.toml provider`
+- `cargo test --manifest-path src-tauri/Cargo.toml daemon::`
+- `cargo test --manifest-path src-tauri/Cargo.toml`
+- `bun test tests/task-store.test.ts tests/task-panel-view-model.test.ts`
+- `bun run build`
+- `curl -fsS http://127.0.0.1:4500/readyz`
+
+**已知限制:**
+- Codex history picker 目前仍依赖 app-server 在线时的 `thread/list`
+
 ### 2026-03-25: 初始协议审计
 
 #### [已修复] 缺少 `initialized` 通知
