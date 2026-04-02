@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { TaskContextPopover } from "./TaskContextPopover";
 
 function installTauriStub() {
   let callbackId = 0;
@@ -29,8 +28,21 @@ function installTauriStub() {
 }
 
 describe("TaskContextPopover", () => {
-  test("renders the task-context pane when requested", () => {
+  test("renders an embedded shell panel even while collapsed", async () => {
     installTauriStub();
+    const { TaskContextPopover } = await import("./TaskContextPopover");
+    const html = renderToStaticMarkup(
+      <TaskContextPopover activePane={null} onClose={() => {}} task={null} />,
+    );
+
+    expect(html).toContain("data-shell-sidebar-panel=\"true\"");
+    expect(html).toContain("aria-hidden=\"true\"");
+    expect(html).not.toContain("fixed left-20 top-4");
+  });
+
+  test("renders the task-context pane when requested", async () => {
+    installTauriStub();
+    const { TaskContextPopover } = await import("./TaskContextPopover");
     const html = renderToStaticMarkup(
       <TaskContextPopover
         activePane="task"
@@ -39,7 +51,7 @@ describe("TaskContextPopover", () => {
       />,
     );
 
-    expect(html).toContain("data-shell-sidebar-drawer=\"true\"");
+    expect(html).toContain("data-shell-sidebar-panel=\"true\"");
     expect(html).toContain("Task workspace");
     expect(html).toContain("No active task");
     expect(html).not.toContain("Runtime control");
@@ -48,8 +60,9 @@ describe("TaskContextPopover", () => {
     );
   });
 
-  test("renders the agents pane when requested", () => {
+  test("renders the agents pane when requested", async () => {
     installTauriStub();
+    const { TaskContextPopover } = await import("./TaskContextPopover");
     const html = renderToStaticMarkup(
       <TaskContextPopover
         activePane="agents"
@@ -71,8 +84,9 @@ describe("TaskContextPopover", () => {
     expect(html).not.toContain("Task workspace");
   });
 
-  test("renders approvals inside the shared shell drawer", () => {
+  test("renders approvals inside the shared shell drawer", async () => {
     installTauriStub();
+    const { TaskContextPopover } = await import("./TaskContextPopover");
     const html = renderToStaticMarkup(
       <TaskContextPopover activePane="approvals" onClose={() => {}} task={null} />,
     );

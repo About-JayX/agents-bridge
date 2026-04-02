@@ -54,3 +54,14 @@ export function closeShellSidebar(state: ShellLayoutState): ShellLayoutState {
     mainSurface: state.mainSurface,
   };
 }
+
+export function getMountedShellPanes(
+  mountedPanes: ShellSidebarPane[],
+  activePane: ShellSidebarPane | null,
+): ShellSidebarPane[] {
+  if (!activePane || mountedPanes.includes(activePane)) {
+    return mountedPanes;
+  }
+
+  return [...mountedPanes, activePane];
+}

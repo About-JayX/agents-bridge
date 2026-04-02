@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   createShellLayoutState,
+  getMountedShellPanes,
   toggleShellNavItem,
 } from "../src/components/shell-layout-state";
 
@@ -53,5 +54,22 @@ describe("toggleShellNavItem", () => {
       sidebarPane: null,
       mainSurface: "logs",
     });
+  });
+});
+
+describe("getMountedShellPanes", () => {
+  test("mounts the active pane the first time it is opened", () => {
+    expect(getMountedShellPanes([], "agents")).toEqual(["agents"]);
+  });
+
+  test("retains mounted panes while the drawer is collapsed", () => {
+    expect(getMountedShellPanes(["agents"], null)).toEqual(["agents"]);
+  });
+
+  test("keeps prior panes mounted when switching between sections", () => {
+    expect(getMountedShellPanes(["task"], "approvals")).toEqual([
+      "task",
+      "approvals",
+    ]);
   });
 });
