@@ -1,9 +1,24 @@
+import { memo } from "react";
 import { MessageMarkdown } from "@/components/MessageMarkdown";
 import { SourceBadge } from "./SourceBadge";
 import type { BridgeMessage } from "@/types";
 import { getMessageIdentityPresentation } from "./view-model";
 
-export function MessageBubble({ msg }: { msg: BridgeMessage }) {
+export function areMessageBubblePropsEqual(
+  prev: { msg: BridgeMessage },
+  next: { msg: BridgeMessage },
+): boolean {
+  return (
+    prev.msg.id === next.msg.id &&
+    prev.msg.from === next.msg.from &&
+    prev.msg.to === next.msg.to &&
+    prev.msg.content === next.msg.content &&
+    prev.msg.timestamp === next.msg.timestamp &&
+    prev.msg.displaySource === next.msg.displaySource
+  );
+}
+
+function MessageBubbleInner({ msg }: { msg: BridgeMessage }) {
   const isUser = msg.from === "user";
   const { badgeSource, roleLabel } = getMessageIdentityPresentation(msg);
   return (
@@ -35,3 +50,6 @@ export function MessageBubble({ msg }: { msg: BridgeMessage }) {
     </div>
   );
 }
+
+export const MessageBubble = memo(MessageBubbleInner, areMessageBubblePropsEqual);
+MessageBubble.displayName = "MessageBubble";

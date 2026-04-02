@@ -1,8 +1,11 @@
+import { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { stripEscapes } from "@/lib/strip-escapes";
 
 const remarkPlugins = [remarkGfm];
+const MARKDOWN_SYNTAX_PATTERN =
+  /(^|\n)\s{0,3}(#{1,6}\s|[-*+]\s|>\s|\d+\.\s|```)|`[^`]+`|\[[^\]]+\]\([^)]+\)|^\|.+\|$/m;
 
 const mdComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
   pre: ({ children, node }) => {
@@ -97,12 +100,34 @@ interface MessageMarkdownProps {
   content: string;
 }
 
-export function MessageMarkdown({ content }: MessageMarkdownProps) {
+export function prepareMessageContent(content: string): {
+  cleaned: string;
+  renderMode: "plain" | "markdown";
+} {
   const cleaned = stripEscapes(content);
+  return {
+    cleaned,
+    renderMode: MARKDOWN_SYNTAX_PATTERN.test(cleaned) ? "markdown" : "plain",
+  };
+}
+
+export function MessageMarkdown({ content }: MessageMarkdownProps) {
+  const prepared = useMemo(() => prepareMessageContent(content), [content]);
+
+  if (prepared.renderMode === "plain") {
+    return (
+      <div className="space-y-3 break-words text-[13px] leading-relaxed">
+        <div className="whitespace-pre-wrap text-foreground/90">
+          {prepared.cleaned}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3 break-words text-[13px] leading-relaxed">
       <ReactMarkdown remarkPlugins={remarkPlugins} components={mdComponents}>
-        {cleaned}
+        {prepared.cleaned}
       </ReactMarkdown>
     </div>
   );
