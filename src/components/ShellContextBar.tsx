@@ -1,10 +1,9 @@
-import { FolderTree, AlertTriangle, Workflow, TerminalSquare } from "lucide-react";
-import { shortenPath } from "@/lib/utils";
+import { useEffect, useState } from "react";
+import { FolderTree, AlertTriangle, PanelLeft, TerminalSquare } from "lucide-react";
 import { StatusDot } from "@/components/AgentStatus/StatusDot";
-import { ReviewGateBadge } from "@/components/TaskPanel/ReviewGateBadge";
-import { getReviewBadge } from "@/components/TaskPanel/view-model";
 import { useBridgeStore } from "@/stores/bridge-store";
 import { Button } from "@/components/ui/button";
+import { TaskContextPopover } from "@/components/TaskContextPopover";
 import {
   selectConnected,
   selectPermissionPromptCount,
@@ -44,6 +43,7 @@ export function ShellContextBar({
   mobileInspectorOpen?: boolean;
   onToggleMobileInspector?: () => void;
 }) {
+  const [taskContextOpen, setTaskContextOpen] = useState(false);
   const connected = useBridgeStore(selectConnected);
   const claudeStatus = useBridgeStore(
     (s) => s.agents.claude?.status ?? "disconnected",
@@ -56,10 +56,15 @@ export function ShellContextBar({
   const activeTask = useTaskStore(selectActiveTask);
   const sessionCount = useTaskStore(selectActiveTaskSessionCount);
   const artifactCount = useTaskStore(selectActiveTaskArtifactCount);
-  const reviewBadge = getReviewBadge(activeTask?.reviewStatus);
+
+  useEffect(() => {
+    if (mobileInspectorOpen) {
+      setTaskContextOpen(false);
+    }
+  }, [mobileInspectorOpen]);
 
   return (
-    <header className="border-b border-border/45 bg-background/95">
+    <header className="relative border-b border-border/45 bg-background/95">
       <div className="flex min-h-16 flex-wrap items-center gap-3 px-4 py-3">
         <div className="flex min-w-[180px] items-center gap-3">
           <div className="rounded-xl border border-border/45 bg-card/80 px-3 py-2">
@@ -79,43 +84,28 @@ export function ShellContextBar({
               </span>
             </div>
           </div>
-        </div>
-
-        <div className="flex min-w-0 flex-1 items-center">
-          {activeTask ? (
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 rounded-2xl border border-border/40 bg-card/70 px-4 py-3">
-              <div className="min-w-0 flex-1">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/55">
-                  Current Task
-                </div>
-                <div className="truncate text-sm font-semibold text-foreground">
-                  {activeTask.title}
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground/70">
-                  <span className="inline-flex items-center gap-1.5">
-                    <FolderTree className="size-3.5" />
-                    {shortenPath(activeTask.workspaceRoot)}
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <Workflow className="size-3.5" />
-                    {sessionCount} sessions
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <TerminalSquare className="size-3.5" />
-                    {artifactCount} artifacts
-                  </span>
-                </div>
+          <button
+            type="button"
+            className="min-w-[210px] max-w-[320px] rounded-xl border border-border/40 bg-card/60 px-3 py-2 text-left transition-colors hover:border-border/65 hover:bg-card/80"
+            onClick={() => setTaskContextOpen((open) => !open)}
+          >
+            <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/55">
+              Task context
+            </div>
+            <div className="mt-0.5 flex items-center gap-2">
+              <PanelLeft className="size-3.5 text-muted-foreground/65" />
+              <div className="min-w-0 truncate text-sm font-semibold text-foreground">
+                {activeTask ? activeTask.title : "No task"}
               </div>
-              {reviewBadge && <ReviewGateBadge badge={reviewBadge} />}
             </div>
-          ) : (
-            <div className="flex min-w-0 flex-1 items-center rounded-2xl border border-dashed border-border/45 bg-card/30 px-4 py-3 text-[12px] text-muted-foreground/70">
-              No active task selected. The conversation timeline stays live, but task context and review state will appear here once a task is active.
+            <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground/68">
+              <FolderTree className="size-3.5" />
+              {activeTask ? `${sessionCount} sessions · ${artifactCount} artifacts` : "Open summary"}
             </div>
-          )}
+          </button>
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           {onToggleMobileInspector && (
             <Button
               size="xs"
@@ -142,6 +132,14 @@ export function ShellContextBar({
           )}
         </div>
       </div>
+
+      <TaskContextPopover
+        open={taskContextOpen}
+        onClose={() => setTaskContextOpen(false)}
+        task={activeTask}
+        sessionCount={sessionCount}
+        artifactCount={artifactCount}
+      />
     </header>
   );
 }

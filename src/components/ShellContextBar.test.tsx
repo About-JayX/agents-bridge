@@ -35,5 +35,7 @@ describe("ShellContextBar", () => {
     );
 
     expect(html).toContain("Open inspector");
+    expect(html).toContain("Task context");
+    expect(html).not.toContain("No active task selected. The conversation timeline stays live");
   });
 });
