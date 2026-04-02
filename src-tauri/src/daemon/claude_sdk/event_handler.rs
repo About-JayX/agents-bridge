@@ -21,7 +21,7 @@ pub async fn handle_events(events: Vec<Value>, role: &str, state: SharedState, a
             "system" => handle_system(&event, &app),
             "result" => handle_result(&event, role, &state, &app).await,
             "user" | "keep_alive" | "control_cancel_request" => { /* echo / heartbeat / cancel — ignore */ }
-            "stream_event" => { /* raw API token stream — could emit for live typing indicator */ }
+            "stream_event" => handle_stream_event(&event, &app),
             "rate_limit_event" => {
                 let status = event["rate_limit_info"]["status"].as_str().unwrap_or("?");
                 gui::emit_system_log(&app, "info", &format!("[Claude SDK] rate_limit: {status}"));
@@ -216,6 +216,43 @@ fn build_direct_sdk_gui_message(
         session_id: None,
         sender_agent_id: Some("claude".to_string()),
     })
+}
+
+/// Parse `stream_event` and emit `claude_stream` for real-time UI updates.
+///
+/// stream_event.event contains raw Anthropic API events:
+/// - content_block_start {content_block: {type: "text"|"tool_use"|...}}
+/// - content_block_delta {delta: {type: "text_delta", text: "..."}}
+/// - message_start, message_delta, message_stop
+fn handle_stream_event(event: &Value, app: &AppHandle) {
+    let inner = &event["event"];
+    let event_type = inner["type"].as_str().unwrap_or("");
+
+    match event_type {
+        "content_block_start" => {
+            let block_type = inner["content_block"]["type"].as_str().unwrap_or("");
+            if block_type == "text" {
+                gui::emit_claude_stream(app, ClaudeStreamPayload::ThinkingStarted);
+            }
+        }
+        "content_block_delta" => {
+            let delta_type = inner["delta"]["type"].as_str().unwrap_or("");
+            if delta_type == "text_delta" {
+                if let Some(text) = inner["delta"]["text"].as_str() {
+                    if !text.is_empty() {
+                        gui::emit_claude_stream(
+                            app,
+                            ClaudeStreamPayload::Preview {
+                                text: text.to_string(),
+                            },
+                        );
+                    }
+                }
+            }
+        }
+        // message_start, message_delta, message_stop — no UI action needed
+        _ => {}
+    }
 }
 
 fn extract_assistant_text(event: &Value) -> String {
