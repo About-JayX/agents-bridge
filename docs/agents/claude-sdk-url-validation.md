@@ -1,5 +1,9 @@
 # Claude --sdk-url / stream-json 协议验证记录（2026-04-01）
 
+> **文档状态：** `Current`
+>
+> **当前采用方案：** `--sdk-url` transport + MCP tools bridge
+
 ## 验证结论
 
 | 方案 | 结果 | 原因 |

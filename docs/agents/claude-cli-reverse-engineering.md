@@ -1,5 +1,9 @@
 # Claude CLI 深度逆向记录（2026-03-31）
 
+> **文档状态：** `Active reference`
+>
+> **说明：** 本文记录 Claude CLI 参数、prompt 注入位点和隐藏能力的逆向结果。它是理解 `--sdk-url` / `--append-system-prompt` / `--system-prompt` 的参考资料，但不直接代表 AgentNexus 当前启用了哪些能力。
+
 > 目标：确认 Claude CLI 是否存在比 `--append-system-prompt` 更强的 prompt 注入位点，并梳理它与 channel / stream / teammate 模式的真实链路。
 
 ## 结论先行

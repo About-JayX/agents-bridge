@@ -1,5 +1,9 @@
 # Claude 链路修复记录
 
+> **文档状态：** `Legacy`
+>
+> **说明：** 这是 Claude 链路的修复总账，保留了大量 PTY/channel 时代记录，也包含后续向 `--sdk-url` 迁移的节点。它适合查历史问题，不适合单独充当“当前架构说明”。当前方案请先看 [claude-docs-index.md](/Users/jason/floder/agent-bridge/docs/agents/claude-docs-index.md)、[claude-sdk-url-validation.md](/Users/jason/floder/agent-bridge/docs/agents/claude-sdk-url-validation.md) 和 [CLAUDE.md](/Users/jason/floder/agent-bridge/CLAUDE.md)。
+
 > **强制规则:** 每次修复或发现 Claude 链路问题，必须在此文档记录。
 > 包括：问题描述、根因、修复方案、运行时验证结果。
 > 错误的修复尝试也必须记录。

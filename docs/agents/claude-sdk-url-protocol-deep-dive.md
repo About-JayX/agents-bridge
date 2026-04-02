@@ -1,5 +1,9 @@
 # Claude Code `--sdk-url` Protocol Deep Dive
 
+> **文档状态：** `Active reference`
+>
+> **用途：** 这是当前 `--sdk-url` 主链路的协议逆向资料，但它不是产品级 Source of Truth。当前实现选择、运行时边界和哪些能力实际启用，以 [claude-sdk-url-validation.md](/Users/jason/floder/agent-bridge/docs/agents/claude-sdk-url-validation.md) 与 [CLAUDE.md](/Users/jason/floder/agent-bridge/CLAUDE.md) 为准。
+
 Extracted from CLI bundle `@anthropic-ai/claude-code/cli.js`.
 
 ---

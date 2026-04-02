@@ -8,9 +8,9 @@
 |------|----------|
 | 桌面壳 | Tauri 2 |
 | 主后端 | Rust 内嵌 async daemon（`src-tauri/src/daemon/`） |
-| Claude 接入 | managed hidden PTY 启动 `claude` + 项目 `.mcp.json` 注册 Rust bridge sidecar |
+| Claude 接入 | `--sdk-url` + `stream-json` transport；bridge sidecar 仅保留为 MCP tools 提供者 |
 | Codex 接入 | Rust daemon 启动 `codex app-server` 并通过 WS 建立 session |
-| 桥接 sidecar | Rust 二进制 `agent-nexus-bridge`（`bridge/` crate） |
+| 桥接 sidecar | Rust 二进制 `agent-nexus-bridge`（`bridge/` crate），当前主要服务 Claude MCP tools |
 | 会话记忆 | provider-native history + daemon `task_graph` + runtime resume |
 | 前端 | React 19 + Vite + TypeScript + Tailwind CSS v4 + Zustand + task-centric shell |
 
@@ -28,35 +28,46 @@
 
 - **桌面应用**: Tauri 2 + Rust
 - **内嵌 daemon**: tokio + axum + tokio-tungstenite
-- **Claude bridge sidecar**: Rust MCP stdio server + daemon WS client
+- **Claude MCP bridge sidecar**: Rust MCP stdio server + daemon WS client
 - **前端**: React 19 + Vite + TypeScript + Tailwind CSS v4 + Zustand + shadcn/ui
 - **外部工具**: Claude Code CLI、Codex CLI
 - **通信协议**: MCP stdio、WebSocket、Tauri `invoke` / `listen`、Codex JSON-RPC 2.0
 
+## Claude 文档地图
+
+- 当前采用方案: [docs/agents/claude-docs-index.md](/Users/jason/floder/agent-bridge/docs/agents/claude-docs-index.md)
+- 当前 Claude 主链路验证: [docs/agents/claude-sdk-url-validation.md](/Users/jason/floder/agent-bridge/docs/agents/claude-sdk-url-validation.md)
+- 当前与旧链路差异: [docs/channel-vs-sdk-url-diff.md](/Users/jason/floder/agent-bridge/docs/channel-vs-sdk-url-diff.md)
+- `--sdk-url` 协议逆向: [docs/agents/claude-sdk-url-protocol-deep-dive.md](/Users/jason/floder/agent-bridge/docs/agents/claude-sdk-url-protocol-deep-dive.md)
+- 全量备选方案分析: [docs/claude-code-integration-alternatives.md](/Users/jason/floder/agent-bridge/docs/claude-code-integration-alternatives.md)
+- 旧 channel 合同参考: [docs/agents/claude-channel-api.md](/Users/jason/floder/agent-bridge/docs/agents/claude-channel-api.md)
+- 历史修复总账: [docs/agents/claude-chain.md](/Users/jason/floder/agent-bridge/docs/agents/claude-chain.md)
+
 ## 当前架构
 
 ```text
-┌─ Claude Code（managed PTY） ───────────────────────────────────┐
-│  读取项目 .mcp.json                                            │
-│  spawn: agent-nexus-bridge                                    │
+┌─ Claude Code（--sdk-url child） ───────────────────────────────┐
+│  WS /claude 接收 NDJSON user/control_response                  │
+│  POST /claude/events 回传 system/assistant/result/control_request │
+│  同时读取项目 .mcp.json / inline strict MCP config            │
 └───────────────┬─────────────────────────────────────────────────┘
-                │ MCP stdio
+                │ MCP stdio（tools only）
                 ▼
 ┌─ bridge/agent-nexus-bridge ────────────────────────────────────┐
-│ tools.rs         → reply + get_online_agents tools               │
-│ mcp.rs           → Claude Channel notification / tools/list     │
-│ channel_state.rs → reply target tracking / permission cache     │
+│ tools.rs         → reply + get_online_agents tools             │
+│ mcp.rs           → MCP tools/list / call                        │
+│ channel_state.rs → legacy channel state + shared reply helpers  │
 │ mcp_protocol.rs  → RPC parsing / initialize result              │
-│ daemon_client.rs → WS client → 127.0.0.1:4502                   │
+│ daemon_client.rs → WS client → 127.0.0.1:4502/ws                │
 └───────────────┬─────────────────────────────────────────────────┘
-                │ WS :4502
+                │ WS :4502/ws
                 ▼
 ┌─ Tauri 主进程 / Rust daemon ────────────────────────────────────┐
 │ main.rs                   → commands 注册 + daemon task 启动     │
-│ mcp.rs                    → .mcp.json 注册 + 启动 Claude PTY     │
-│ claude_cli.rs             → Claude CLI 版本校验 + channel 启动    │
+│ mcp.rs                    → .mcp.json 注册 + inline MCP config    │
+│ claude_cli.rs             → Claude CLI 版本校验                    │
 │ codex/auth|oauth|usage    → 账号/OAuth/用量/模型                 │
-│ daemon/control/           → bridge 接入与消息投递                │
+│ daemon/control/           → bridge WS + Claude SDK WS/HTTP       │
 │ daemon/routing.rs         → Claude / Codex / GUI 路由            │
 │ daemon/codex/             → app-server 生命周期 + session        │
 │ daemon/session_manager.rs → 临时 CODEX_HOME 生命周期             │
@@ -76,6 +87,9 @@
 
 Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 ```
+
+**Claude 当前采用方案：** `--sdk-url` transport + MCP tools bridge。
+**Claude 非当前方案：** PTY/channel transport、纯 stdio stream-json transport、Agent SDK sidecar。
 
 ## 运行链路
 
@@ -109,11 +123,11 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 ### 消息路由
 
 - **用户 → agent**: 前端 `daemon_send_user_input` → `routing::route_user_input`（单次 GUI echo + 内部 fan-out）
-- **Claude → Codex**: bridge `reply` tool → WS :4502 → `routing.rs` → `codex_inject_tx`
-- **Codex → Claude**: Codex 动态 `reply` → `routing.rs` → bridge WS channel → Claude Channel notification
+- **Claude → Codex**: bridge `reply` tool → WS :4502/ws → `routing.rs` → `codex_inject_tx`
+- **Codex → Claude**: `routing.rs` 直接写 Claude SDK WS NDJSON user message；Claude 可继续调用 bridge tools
 - **任一 agent → user**: `to = "user"` 时只发到 GUI
 - **离线缓冲**: 目标离线时写入 `buffered_messages`，Claude bridge 重连或 Codex session 启动后回放
-- **Sender gating**: Claude 只接受 `user`/`system`/当前 `codex_role`；control WS 只接受 `claude`/`codex`
+- **Sender gating**: Claude 只接受 `user`/`system`/当前 `codex_role`；bridge control WS 只接受 `claude`/`codex`
 
 ## Task / Session Memory
 
@@ -146,10 +160,8 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 
 ### 当前已知限制
 
-- Claude 的 provider-native resume 已接通，但消息面板里的执行状态仍弱于 Codex：
-  - daemon 仍会发 `claude_stream.preview`
-  - 前端当前明确忽略 `preview` 文本，只保留稳定的 `thinking…` 占位和 `Claude Terminal`
-  - 这是当前实现的有意选择，避免 PTY 摘要噪音直接污染消息区
+- Claude 的 provider-native resume 已接通，但当前前端仍然只消费稳定的 `thinking…` / 最终结果，不展示 `claude_stream.preview` 文本
+- 这是当前实现的有意选择，避免 `stream_event` 级摘要噪音直接污染消息区
 - provider history 当前按 workspace/cwd 查询；如果没有 active task，也仍然可以在 Claude/Codex 面板里查看历史并恢复连接
 - `resume_session()` 既可用于 normalized session 指针恢复，也会在 provider 具备外部会话 id 时尝试触发真实 runtime reconnect；不要再把它理解成“只移动 task graph 指针”的旧逻辑
 
@@ -158,10 +170,10 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 | 端口 | 用途 | 当前实现 |
 |------|------|----------|
 | `4500` | Codex app-server WebSocket | `src-tauri/src/daemon/codex/` |
-| `4502` | bridge ↔ daemon 控制通道 | `src-tauri/src/daemon/control/` |
+| `4502` | Claude SDK WS/HTTP + bridge ↔ daemon 控制通道 | `src-tauri/src/daemon/control/` |
 | `1420` | Vite dev server | `bun run dev` |
 
-当前 **没有** GUI WebSocket `4503`。Claude PTY 由 `claude_session/` 内嵌管理。
+当前 **没有** GUI WebSocket `4503`。Claude 当前也不再走 `claude_session/` PTY runtime。
 
 ## 角色系统
 
