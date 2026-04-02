@@ -4,6 +4,7 @@ import { StatusDot } from "@/components/AgentStatus/StatusDot";
 import { ReviewGateBadge } from "@/components/TaskPanel/ReviewGateBadge";
 import { getReviewBadge } from "@/components/TaskPanel/view-model";
 import { useBridgeStore } from "@/stores/bridge-store";
+import { Button } from "@/components/ui/button";
 import {
   selectConnected,
   selectPermissionPromptCount,
@@ -36,7 +37,13 @@ function StatusPill({
   );
 }
 
-export function ShellContextBar() {
+export function ShellContextBar({
+  mobileInspectorOpen = false,
+  onToggleMobileInspector,
+}: {
+  mobileInspectorOpen?: boolean;
+  onToggleMobileInspector?: () => void;
+}) {
   const connected = useBridgeStore(selectConnected);
   const claudeStatus = useBridgeStore(
     (s) => s.agents.claude?.status ?? "disconnected",
@@ -109,6 +116,16 @@ export function ShellContextBar() {
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {onToggleMobileInspector && (
+            <Button
+              size="xs"
+              variant={mobileInspectorOpen ? "secondary" : "outline"}
+              className="lg:hidden"
+              onClick={onToggleMobileInspector}
+            >
+              {mobileInspectorOpen ? "Close inspector" : "Open inspector"}
+            </Button>
+          )}
           <StatusPill label="Claude" status={claudeStatus} variant="claude" />
           <StatusPill label="Codex" status={codexStatus} variant="codex" />
           {permissionCount > 0 && (

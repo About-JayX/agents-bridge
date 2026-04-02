@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import {
   buildCodexLaunchConfig,
   canConnectCodex,
+  CODEX_CONNECT_READY_TIMEOUT_MS,
+  getCodexConnectTimeoutMessage,
   getDefaultReasoningEffort,
+  hasCodexConnectTimedOut,
 } from "../src/components/AgentStatus/codex-launch-config";
 
 describe("canConnectCodex", () => {
@@ -67,5 +70,53 @@ describe("getDefaultReasoningEffort", () => {
         reasoningLevels: [{ effort: "medium" }, { effort: "high" }],
       }),
     ).toBe("medium");
+  });
+});
+
+describe("Codex connect timeout helpers", () => {
+  test("times out a pending launch when no running state arrives before the deadline", () => {
+    expect(
+      hasCodexConnectTimedOut({
+        connecting: true,
+        running: false,
+        connectStartedAt: 1_000,
+        now: 1_000 + CODEX_CONNECT_READY_TIMEOUT_MS - 1,
+      }),
+    ).toBe(false);
+
+    expect(
+      hasCodexConnectTimedOut({
+        connecting: true,
+        running: false,
+        connectStartedAt: 1_000,
+        now: 1_000 + CODEX_CONNECT_READY_TIMEOUT_MS,
+      }),
+    ).toBe(true);
+  });
+
+  test("does not time out when launch is not pending or Codex is already running", () => {
+    expect(
+      hasCodexConnectTimedOut({
+        connecting: false,
+        running: false,
+        connectStartedAt: 1_000,
+        now: 1_000 + CODEX_CONNECT_READY_TIMEOUT_MS,
+      }),
+    ).toBe(false);
+
+    expect(
+      hasCodexConnectTimedOut({
+        connecting: true,
+        running: true,
+        connectStartedAt: 1_000,
+        now: 1_000 + CODEX_CONNECT_READY_TIMEOUT_MS,
+      }),
+    ).toBe(false);
+  });
+
+  test("returns a user-facing timeout message that explains the failure mode", () => {
+    expect(getCodexConnectTimeoutMessage()).toContain(
+      "did not report ready state",
+    );
   });
 });

@@ -20,9 +20,17 @@ import {
 import {
   buildCodexLaunchConfig,
   canConnectCodex,
+  CODEX_CONNECT_READY_TIMEOUT_MS,
+  getCodexConnectTimeoutMessage,
   getDefaultReasoningEffort,
+  hasCodexConnectTimedOut,
 } from "./codex-launch-config";
 import { ChevronDown, ChevronUp, SlidersHorizontal } from "lucide-react";
+import {
+  makeProviderHistoryErrorSelector,
+  makeProviderHistoryLoadingSelector,
+  makeProviderHistorySelector,
+} from "@/stores/task-store/selectors";
 
 interface CodexPanelProps {
   codexTuiRunning: boolean;
@@ -48,9 +56,6 @@ export function CodexPanel({
   const pickDirectory = useCodexAccountStore((s) => s.pickDirectory);
   const applyConfig = useBridgeStore((s) => s.applyConfig);
   const fetchProviderHistory = useTaskStore((s) => s.fetchProviderHistory);
-  const providerHistory = useTaskStore((s) => s.providerHistory);
-  const providerHistoryLoading = useTaskStore((s) => s.providerHistoryLoading);
-  const providerHistoryError = useTaskStore((s) => s.providerHistoryError);
 
   const [selectedModel, setSelectedModel] = useState("");
   const [selectedReasoning, setSelectedReasoning] = useState("");
@@ -64,22 +69,69 @@ export function CodexPanel({
   );
 
   const [connecting, setConnecting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [connectStartedAt, setConnectStartedAt] = useState<number | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const locked = codexTuiRunning;
   const prevRunningRef = useRef(codexTuiRunning);
   const [justConnected, setJustConnected] = useState(false);
+  const selectWorkspaceHistory = useMemo(
+    () => makeProviderHistorySelector(effectiveCwd),
+    [effectiveCwd],
+  );
+  const selectWorkspaceHistoryLoading = useMemo(
+    () => makeProviderHistoryLoadingSelector(effectiveCwd),
+    [effectiveCwd],
+  );
+  const selectWorkspaceHistoryError = useMemo(
+    () => makeProviderHistoryErrorSelector(effectiveCwd),
+    [effectiveCwd],
+  );
+  const workspaceHistory = useTaskStore(selectWorkspaceHistory);
+  const historyLoading = useTaskStore(selectWorkspaceHistoryLoading);
+  const historyError = useTaskStore(selectWorkspaceHistoryError);
 
   useEffect(() => {
     if (codexTuiRunning && !prevRunningRef.current) {
       setConnecting(false);
+      setActionError(null);
+      setConnectStartedAt(null);
       setJustConnected(true);
       setShowAdvanced(false);
       const t = setTimeout(() => setJustConnected(false), 600);
       return () => clearTimeout(t);
     }
-    if (!codexTuiRunning) setConnecting(false);
+    if (!codexTuiRunning && !connecting) {
+      setConnectStartedAt(null);
+    }
     prevRunningRef.current = codexTuiRunning;
-  }, [codexTuiRunning]);
+  }, [codexTuiRunning, connecting]);
+
+  useEffect(() => {
+    if (!connecting || codexTuiRunning || connectStartedAt === null) return;
+
+    const elapsed = Date.now() - connectStartedAt;
+    if (
+      hasCodexConnectTimedOut({
+        connecting,
+        running: codexTuiRunning,
+        connectStartedAt,
+      })
+    ) {
+      setConnecting(false);
+      setConnectStartedAt(null);
+      setActionError(getCodexConnectTimeoutMessage());
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setConnecting(false);
+      setConnectStartedAt(null);
+      setActionError(getCodexConnectTimeoutMessage());
+    }, CODEX_CONNECT_READY_TIMEOUT_MS - elapsed);
+
+    return () => clearTimeout(timer);
+  }, [codexTuiRunning, connectStartedAt, connecting]);
 
   useEffect(() => {
     fetchModels();
@@ -109,9 +161,6 @@ export function CodexPanel({
     () => reasoningOptions.map((r) => ({ value: r.effort, label: r.effort })),
     [reasoningOptions],
   );
-  const workspaceHistory = effectiveCwd
-    ? providerHistory[effectiveCwd] ?? []
-    : [];
   const historyOptions = useMemo(
     () => buildProviderHistoryOptions("codex", workspaceHistory),
     [workspaceHistory],
@@ -124,10 +173,6 @@ export function CodexPanel({
     () => formatProviderConnectionLabel(providerSession),
     [providerSession],
   );
-  const historyLoading = effectiveCwd
-    ? providerHistoryLoading[effectiveCwd]
-    : false;
-  const historyError = effectiveCwd ? providerHistoryError[effectiveCwd] : null;
 
   const handleModelChange = useCallback(
     (slug: string) => {
@@ -161,6 +206,8 @@ export function CodexPanel({
 
   const handleConnect = useCallback(async () => {
     setConnecting(true);
+    setActionError(null);
+    setConnectStartedAt(Date.now());
     try {
       await applyConfig(
         buildCodexLaunchConfig({
@@ -170,8 +217,10 @@ export function CodexPanel({
           resumeThreadId: selectedHistory?.externalId,
         }),
       );
-    } catch {
+    } catch (error) {
       setConnecting(false);
+      setConnectStartedAt(null);
+      setActionError(error instanceof Error ? error.message : String(error));
     }
   }, [
     applyConfig,
@@ -317,6 +366,10 @@ export function CodexPanel({
             </div>
           )}
         </div>
+      )}
+
+      {actionError && (
+        <div className="mt-2 text-[11px] text-destructive">{actionError}</div>
       )}
 
       {!!codexTuiRunning && (

@@ -1,10 +1,14 @@
+import { useState } from "react";
 import { AgentStatusPanel } from "./components/AgentStatus";
 import { MessagePanel } from "./components/MessagePanel";
+import { MobileInspectorSheet } from "./components/MobileInspectorSheet";
 import { ReplyInput } from "./components/ReplyInput";
 import { ShellContextBar } from "./components/ShellContextBar";
 import { TaskPanel } from "./components/TaskPanel";
 
 export default function App() {
+  const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
+
   return (
     <div
       className="flex h-screen flex-col overflow-hidden font-sans text-foreground"
@@ -13,7 +17,12 @@ export default function App() {
           "radial-gradient(circle at top, rgba(34,197,94,0.08), transparent 28%), linear-gradient(180deg, #090a0d 0%, #0c0d12 48%, #08090c 100%)",
       }}
     >
-      <ShellContextBar />
+      <ShellContextBar
+        mobileInspectorOpen={mobileInspectorOpen}
+        onToggleMobileInspector={() =>
+          setMobileInspectorOpen((open) => !open)
+        }
+      />
 
       <div className="flex flex-1 min-h-0">
         <main className="flex min-w-0 flex-1 flex-col animate-in fade-in duration-500">
@@ -30,6 +39,11 @@ export default function App() {
           </div>
         </aside>
       </div>
+
+      <MobileInspectorSheet
+        open={mobileInspectorOpen}
+        onClose={() => setMobileInspectorOpen(false)}
+      />
     </div>
   );
 }

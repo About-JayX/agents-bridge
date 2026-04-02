@@ -10,6 +10,11 @@ import type { ProviderSessionInfo } from "@/types";
 import { RoleSelect } from "@/components/AgentStatus/RoleSelect";
 import { StatusDot } from "@/components/AgentStatus/StatusDot";
 import {
+  makeProviderHistoryErrorSelector,
+  makeProviderHistoryLoadingSelector,
+  makeProviderHistorySelector,
+} from "@/stores/task-store/selectors";
+import {
   buildProviderHistoryOptions,
   findProviderHistoryEntry,
   formatProviderConnectionLabel,
@@ -43,17 +48,26 @@ export function ClaudePanel({
   const pickDirectory = useCodexAccountStore((s) => s.pickDirectory);
   const claudeRole = useBridgeStore((s) => s.claudeRole);
   const fetchProviderHistory = useTaskStore((s) => s.fetchProviderHistory);
-  const providerHistory = useTaskStore((s) => s.providerHistory);
-  const providerHistoryLoading = useTaskStore((s) => s.providerHistoryLoading);
-  const providerHistoryError = useTaskStore((s) => s.providerHistoryError);
   const effectiveCwd = useMemo(
     () => resolveProviderHistoryWorkspace(cwd, providerSession),
     [cwd, providerSession],
   );
+  const selectWorkspaceHistory = useMemo(
+    () => makeProviderHistorySelector(effectiveCwd),
+    [effectiveCwd],
+  );
+  const selectWorkspaceHistoryLoading = useMemo(
+    () => makeProviderHistoryLoadingSelector(effectiveCwd),
+    [effectiveCwd],
+  );
+  const selectWorkspaceHistoryError = useMemo(
+    () => makeProviderHistoryErrorSelector(effectiveCwd),
+    [effectiveCwd],
+  );
+  const workspaceHistory = useTaskStore(selectWorkspaceHistory);
+  const historyLoading = useTaskStore(selectWorkspaceHistoryLoading);
+  const historyError = useTaskStore(selectWorkspaceHistoryError);
 
-  const workspaceHistory = effectiveCwd
-    ? (providerHistory[effectiveCwd] ?? [])
-    : [];
   const historyOptions = useMemo(
     () => buildProviderHistoryOptions("claude", workspaceHistory),
     [workspaceHistory],
@@ -63,10 +77,6 @@ export function ClaudePanel({
       findProviderHistoryEntry("claude", workspaceHistory, selectedHistoryId),
     [selectedHistoryId, workspaceHistory],
   );
-  const historyLoading = effectiveCwd
-    ? providerHistoryLoading[effectiveCwd]
-    : false;
-  const historyError = effectiveCwd ? providerHistoryError[effectiveCwd] : null;
   const connectionLabel = useMemo(
     () => formatProviderConnectionLabel(providerSession),
     [providerSession],

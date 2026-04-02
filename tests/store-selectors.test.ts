@@ -8,6 +8,11 @@ import {
   selectActiveTask,
   selectActiveTaskArtifactCount,
   selectActiveTaskSessionCount,
+  selectActiveTaskArtifacts,
+  selectActiveTaskSessions,
+  makeProviderHistoryErrorSelector,
+  makeProviderHistoryLoadingSelector,
+  makeProviderHistorySelector,
 } from "../src/stores/task-store/selectors";
 
 describe("selectAnyAgentConnected", () => {
@@ -106,5 +111,93 @@ describe("active task counters", () => {
 
     expect(selectActiveTaskSessionCount(state as any)).toBe(0);
     expect(selectActiveTaskArtifactCount(state as any)).toBe(0);
+  });
+});
+
+describe("active task collection selectors", () => {
+  test("reuses a stable empty sessions array when there is no active task", () => {
+    const state = {
+      activeTaskId: null,
+      sessions: {},
+    };
+
+    expect(selectActiveTaskSessions(state as any)).toBe(
+      selectActiveTaskSessions(state as any),
+    );
+  });
+
+  test("reuses a stable empty artifacts array when there is no active task", () => {
+    const state = {
+      activeTaskId: null,
+      artifacts: {},
+    };
+
+    expect(selectActiveTaskArtifacts(state as any)).toBe(
+      selectActiveTaskArtifacts(state as any),
+    );
+  });
+
+  test("reuses a stable empty sessions array when the active task has no session entry", () => {
+    const state = {
+      activeTaskId: "task-1",
+      sessions: {},
+    };
+
+    expect(selectActiveTaskSessions(state as any)).toBe(
+      selectActiveTaskSessions(state as any),
+    );
+  });
+
+  test("reuses a stable empty artifacts array when the active task has no artifact entry", () => {
+    const state = {
+      activeTaskId: "task-1",
+      artifacts: {},
+    };
+
+    expect(selectActiveTaskArtifacts(state as any)).toBe(
+      selectActiveTaskArtifacts(state as any),
+    );
+  });
+});
+
+describe("provider history selectors", () => {
+  test("reuse stable defaults when the requested workspace has no provider history entry", () => {
+    const state = {
+      providerHistory: {},
+      providerHistoryLoading: {},
+      providerHistoryError: {},
+    };
+    const selectHistory = makeProviderHistorySelector("/tmp/project");
+    const selectLoading = makeProviderHistoryLoadingSelector("/tmp/project");
+    const selectError = makeProviderHistoryErrorSelector("/tmp/project");
+
+    expect(selectHistory(state as any)).toBe(selectHistory(state as any));
+    expect(selectLoading(state as any)).toBe(false);
+    expect(selectError(state as any)).toBeNull();
+  });
+
+  test("read only the requested workspace slice", () => {
+    const selectHistory = makeProviderHistorySelector("/tmp/project-a");
+    const selectLoading = makeProviderHistoryLoadingSelector("/tmp/project-a");
+    const selectError = makeProviderHistoryErrorSelector("/tmp/project-a");
+    const entry = { externalId: "claude-1" };
+    const state = {
+      providerHistory: {
+        "/tmp/project-a": [entry],
+        "/tmp/project-b": [{ externalId: "codex-2" }],
+      },
+      providerHistoryLoading: {
+        "/tmp/project-a": true,
+        "/tmp/project-b": false,
+      },
+      providerHistoryError: {
+        "/tmp/project-a": "failed",
+        "/tmp/project-b": null,
+      },
+    };
+
+    expect(selectHistory(state as any)).toEqual([entry]);
+    expect(selectLoading(state as any)).toBe(true);
+    expect(selectError(state as any)).toBe("failed");
   });
 });
