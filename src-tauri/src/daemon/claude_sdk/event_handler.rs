@@ -20,13 +20,24 @@ pub async fn handle_events(events: Vec<Value>, role: &str, state: SharedState, a
             "control_request" => handle_control_request(&event, &state, &app).await,
             "system" => handle_system(&event, &app),
             "result" => handle_result(&event, role, &state, &app).await,
-            "user" | "keep_alive" => { /* echo / heartbeat — ignore */ }
+            "user" | "keep_alive" | "control_cancel_request" => { /* echo / heartbeat / cancel — ignore */ }
+            "stream_event" => { /* raw API token stream — could emit for live typing indicator */ }
             "rate_limit_event" => {
-                let detail = event["message"].as_str().unwrap_or("rate limited");
-                gui::emit_system_log(&app, "warn", &format!("[Claude SDK] {detail}"));
+                let status = event["rate_limit_info"]["status"].as_str().unwrap_or("?");
+                gui::emit_system_log(&app, "info", &format!("[Claude SDK] rate_limit: {status}"));
+            }
+            "prompt_suggestion" => {
+                let suggestion = event["suggestion"].as_str().unwrap_or("");
+                if !suggestion.is_empty() {
+                    gui::emit_system_log(&app, "info", &format!("[Claude SDK] suggestion: {suggestion}"));
+                }
+            }
+            "auth_status" => {
+                let is_auth = event["isAuthenticating"].as_bool().unwrap_or(false);
+                gui::emit_system_log(&app, "info", &format!("[Claude SDK] auth_status: authenticating={is_auth}"));
             }
             other => {
-                eprintln!("[Claude SDK] unhandled event type: {other}");
+                gui::emit_system_log(&app, "info", &format!("[Claude SDK] unhandled event: {other}"));
             }
         }
     }
@@ -48,31 +59,45 @@ async fn handle_assistant(event: &Value, role: &str, state: &SharedState, app: &
 async fn handle_control_request(event: &Value, state: &SharedState, app: &AppHandle) {
     let request_obj = &event["request"];
     let subtype = request_obj["subtype"].as_str().unwrap_or("");
-    if subtype != "can_use_tool" {
-        eprintln!("[Claude SDK] unknown control_request subtype: {subtype}");
-        return;
-    }
     let request_id = match event["request_id"].as_str() {
         Some(id) => id.to_string(),
         None => return,
     };
-    let tool_name = request_obj["tool_name"]
-        .as_str()
-        .unwrap_or("unknown")
-        .to_string();
-    let description = request_obj["description"]
-        .as_str()
-        .unwrap_or("")
-        .to_string();
-    let input_preview = request_obj["input"]
-        .as_object()
-        .map(|obj| serde_json::to_string_pretty(obj).unwrap_or_default())
-        .or_else(|| request_obj["input"].as_str().map(ToOwned::to_owned));
 
-    // Auto-approve: send allow verdict immediately via WS, skip GUI prompt.
-    // Retry loop: WS sender may not be attached yet due to race between WS
-    // connect and the first POST arriving. Wait up to 3s for it.
-    let ndjson = crate::daemon::claude_sdk::protocol::format_control_response(&request_id, true);
+    let ndjson = match subtype {
+        "can_use_tool" => {
+            let tool_name = request_obj["tool_name"].as_str().unwrap_or("unknown");
+            gui::emit_system_log(
+                app,
+                "info",
+                &format!("[Claude SDK] auto-approving {tool_name} ({request_id})"),
+            );
+            crate::daemon::claude_sdk::protocol::format_control_response(&request_id, true)
+        }
+        "initialize" => {
+            gui::emit_system_log(app, "info", "[Claude SDK] responding to initialize");
+            crate::daemon::claude_sdk::protocol::format_initialize_response(&request_id)
+        }
+        // set_permission_mode, set_model, interrupt, etc. — ack with empty success
+        _ => {
+            gui::emit_system_log(
+                app,
+                "info",
+                &format!("[Claude SDK] acking control_request subtype={subtype} ({request_id})"),
+            );
+            let msg = serde_json::json!({
+                "type": "control_response",
+                "response": {
+                    "subtype": "success",
+                    "request_id": request_id,
+                    "response": {}
+                }
+            });
+            format!("{msg}\n")
+        }
+    };
+
+    // Send response via WS. Retry up to 3s in case WS isn't attached yet.
     let mut sent = false;
     for attempt in 0..30 {
         let sdk_tx = state.read().await.claude_sdk_ws_tx.clone();
@@ -86,17 +111,11 @@ async fn handle_control_request(event: &Value, state: &SharedState, app: &AppHan
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
     }
-    if sent {
-        gui::emit_system_log(
-            app,
-            "info",
-            &format!("[Claude SDK] auto-approved {tool_name} ({request_id})"),
-        );
-    } else {
+    if !sent {
         gui::emit_system_log(
             app,
             "error",
-            &format!("[Claude SDK] FAILED to send approval for {tool_name} ({request_id}) — WS not ready"),
+            &format!("[Claude SDK] FAILED to respond to {subtype} ({request_id}) — WS not ready"),
         );
     }
 }

@@ -80,67 +80,64 @@ pub struct ControlRequestInner {
     pub description: Option<String>,
 }
 
-/// NDJSON user message sent from daemon → Claude over WS.
-#[derive(Serialize)]
-pub struct OutboundUserMessage {
-    #[serde(rename = "type")]
-    pub msg_type: &'static str,
-    pub message: OutboundMessageBody,
-}
+// ── Outbound: daemon → Claude (via WS) ─────────────────────
 
-#[derive(Serialize)]
-pub struct OutboundMessageBody {
-    pub role: &'static str,
-    pub content: String,
-}
-
-/// NDJSON control_response sent from daemon → Claude over WS.
-#[derive(Serialize)]
-pub struct OutboundControlResponse {
-    #[serde(rename = "type")]
-    pub msg_type: &'static str,
-    pub response: ControlResponseBody,
-}
-
-#[derive(Serialize)]
-pub struct ControlResponseBody {
-    pub subtype: &'static str,
-    pub request_id: String,
-    pub response: ControlVerdictBody,
-}
-
-#[derive(Serialize)]
-pub struct ControlVerdictBody {
-    pub behavior: String,
-}
-
-/// Format a user message as an NDJSON line (with trailing newline).
+/// Format a user message as NDJSON matching the verified protocol.
+/// Format: `{"type":"user","session_id":"","message":{"role":"user","content":[{"type":"text","text":"..."}]},"parent_tool_use_id":null}`
 pub fn format_user_message(content: &str) -> String {
-    let msg = OutboundUserMessage {
-        msg_type: "user",
-        message: OutboundMessageBody {
-            role: "user",
-            content: content.to_string(),
+    let msg = serde_json::json!({
+        "type": "user",
+        "session_id": "",
+        "message": {
+            "role": "user",
+            "content": [{"type": "text", "text": content}]
         },
-    };
-    let mut line = serde_json::to_string(&msg).unwrap_or_default();
-    line.push('\n');
-    line
+        "parent_tool_use_id": null
+    });
+    format!("{msg}\n")
 }
 
-/// Format a control_response verdict as an NDJSON line.
+/// Format a control_response (allow) with required `updatedInput` field.
+/// Spec: TnY requires `{ behavior: "allow", updatedInput: {} }`.
 pub fn format_control_response(request_id: &str, allow: bool) -> String {
-    let msg = OutboundControlResponse {
-        msg_type: "control_response",
-        response: ControlResponseBody {
-            subtype: "success",
-            request_id: request_id.to_string(),
-            response: ControlVerdictBody {
-                behavior: if allow { "allow" } else { "deny" }.into(),
-            },
-        },
+    let inner = if allow {
+        serde_json::json!({
+            "behavior": "allow",
+            "updatedInput": {}
+        })
+    } else {
+        serde_json::json!({
+            "behavior": "deny",
+            "message": "Denied by AgentNexus daemon"
+        })
     };
-    let mut line = serde_json::to_string(&msg).unwrap_or_default();
-    line.push('\n');
-    line
+    let msg = serde_json::json!({
+        "type": "control_response",
+        "response": {
+            "subtype": "success",
+            "request_id": request_id,
+            "response": inner
+        }
+    });
+    format!("{msg}\n")
+}
+
+/// Format an initialize control_response.
+pub fn format_initialize_response(request_id: &str) -> String {
+    let msg = serde_json::json!({
+        "type": "control_response",
+        "response": {
+            "subtype": "success",
+            "request_id": request_id,
+            "response": {
+                "commands": [],
+                "agents": [],
+                "output_style": "default",
+                "available_output_styles": ["default"],
+                "models": [],
+                "account": {}
+            }
+        }
+    });
+    format!("{msg}\n")
 }

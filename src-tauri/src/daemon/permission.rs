@@ -1,18 +1,9 @@
 use crate::daemon::{gui, types, SharedState};
 use tauri::AppHandle;
 
+/// Delegate to the canonical protocol formatter (single source of truth).
 fn format_claude_sdk_control_response(request_id: &str, allow: bool) -> String {
-    let payload = serde_json::json!({
-        "type": "control_response",
-        "response": {
-            "subtype": "success",
-            "request_id": request_id,
-            "response": {
-                "behavior": if allow { "allow" } else { "deny" }
-            }
-        }
-    });
-    format!("{payload}\n")
+    crate::daemon::claude_sdk::protocol::format_control_response(request_id, allow)
 }
 
 pub async fn handle_permission_verdict(
