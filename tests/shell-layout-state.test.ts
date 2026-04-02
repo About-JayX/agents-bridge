@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   createShellLayoutState,
   getMountedShellPanes,
+  resolveShellWorkspaceLabel,
   toggleShellNavItem,
 } from "../src/components/shell-layout-state";
 
@@ -71,5 +72,25 @@ describe("getMountedShellPanes", () => {
       "task",
       "approvals",
     ]);
+  });
+});
+
+describe("resolveShellWorkspaceLabel", () => {
+  test("prefers the active task workspace when present", () => {
+    expect(
+      resolveShellWorkspaceLabel("/Users/jason/Desktop/figma", [
+        "/Users/jason/projects/other",
+      ]),
+    ).toBe("~/Desktop/figma");
+  });
+
+  test("falls back to the first connected provider workspace", () => {
+    expect(
+      resolveShellWorkspaceLabel(null, ["", "/Users/jason/projects/agent-bridge"]),
+    ).toBe("~/projects/agent-bridge");
+  });
+
+  test("returns a clear empty label when nothing is active", () => {
+    expect(resolveShellWorkspaceLabel(null, [])).toBe("No workspace selected");
   });
 });

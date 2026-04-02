@@ -1,3 +1,5 @@
+import { shortenPath } from "@/lib/utils";
+
 export type ShellSidebarPane = "task" | "agents" | "approvals";
 export type ShellNavItem = ShellSidebarPane | "logs";
 export type ShellMainSurface = "chat" | "logs";
@@ -64,4 +66,21 @@ export function getMountedShellPanes(
   }
 
   return [...mountedPanes, activePane];
+}
+
+export function resolveShellWorkspaceLabel(
+  activeTaskWorkspace: string | null | undefined,
+  providerSessionCwds: Array<string | null | undefined>,
+): string {
+  const preferredWorkspace = activeTaskWorkspace?.trim();
+  if (preferredWorkspace) {
+    return shortenPath(preferredWorkspace);
+  }
+
+  const providerWorkspace = providerSessionCwds.find((cwd) => cwd?.trim());
+  if (providerWorkspace) {
+    return shortenPath(providerWorkspace);
+  }
+
+  return "No workspace selected";
 }
