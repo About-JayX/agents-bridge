@@ -44,7 +44,7 @@ export function AuthActions() {
       <Button
         size="sm"
         variant="outline"
-        className="w-full mt-2 text-[11px] border-codex/30 text-codex hover:bg-codex/10 hover:border-codex/50 transition-all"
+        className="w-full mt-2 text-[11px] border-codex/30 text-codex hover:bg-codex/10 hover:border-codex/50 transition-colors"
         onClick={login}
       >
         Login to Codex

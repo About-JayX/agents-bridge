@@ -22,6 +22,7 @@ import {
   canConnectCodex,
   getDefaultReasoningEffort,
 } from "./codex-launch-config";
+import { ChevronDown, ChevronUp, SlidersHorizontal } from "lucide-react";
 
 interface CodexPanelProps {
   codexTuiRunning: boolean;
@@ -63,6 +64,7 @@ export function CodexPanel({
   );
 
   const [connecting, setConnecting] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const locked = codexTuiRunning;
   const prevRunningRef = useRef(codexTuiRunning);
   const [justConnected, setJustConnected] = useState(false);
@@ -71,6 +73,7 @@ export function CodexPanel({
     if (codexTuiRunning && !prevRunningRef.current) {
       setConnecting(false);
       setJustConnected(true);
+      setShowAdvanced(false);
       const t = setTimeout(() => setJustConnected(false), 600);
       return () => clearTimeout(t);
     }
@@ -178,10 +181,22 @@ export function CodexPanel({
     selectedHistory,
   ]);
 
+  const summaryChips = useMemo(
+    () => [
+      effectiveCwd ? effectiveCwd.split("/").pop() || effectiveCwd : "Project required",
+      selectedModel || "Select model",
+      selectedReasoning || "Default reasoning",
+      selectedHistory
+        ? `Resume ${selectedHistory.externalId.slice(0, 12)}`
+        : "New session",
+    ],
+    [effectiveCwd, selectedHistory, selectedModel, selectedReasoning],
+  );
+
   return (
     <div
       className={cn(
-        "rounded-lg border bg-card p-3 card-depth transition-all duration-300",
+        "rounded-2xl border bg-card px-4 py-3 card-depth transition-colors",
         codexTuiRunning
           ? "border-codex/40 glow-codex-subtle border-glow-codex"
           : "border-input hover:border-input/80",
@@ -201,77 +216,109 @@ export function CodexPanel({
         />
       )}
 
-      <CodexConfigRows
-        locked={locked}
-        profile={profile}
-        models={models}
-        selectedModel={selectedModel}
-        modelSelectOptions={modelSelectOptions}
-        handleModelChange={handleModelChange}
-        reasoningOptions={reasoningOptions}
-        selectedReasoning={selectedReasoning}
-        setSelectedReasoning={setSelectedReasoning}
-        reasoningSelectOptions={reasoningSelectOptions}
-        cwd={effectiveCwd}
-        handlePickDir={handlePickDir}
-      />
-
-      <div className="mt-2 flex items-center justify-between">
-        <span className="text-[10px] text-muted-foreground">History</span>
-        <CyberSelect
-          value={selectedHistoryId}
-          options={historyOptions}
-          onChange={setSelectedHistoryId}
-          disabled={locked || !effectiveCwd || connecting}
-          placeholder="New session"
-        />
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {summaryChips.map((chip) => (
+          <span
+            key={chip}
+            className="rounded-full border border-border/45 bg-background/35 px-2 py-0.5 text-[10px] text-muted-foreground"
+          >
+            {chip}
+          </span>
+        ))}
       </div>
 
-      {locked && (
+      <div className="mt-3 flex gap-2">
+        {locked ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            className="flex-1"
+            onClick={stopCodexTui}
+          >
+            Disconnect Codex
+          </Button>
+        ) : (
+          <Button
+            className="flex-1 bg-codex text-white hover:bg-codex/90"
+            size="sm"
+            disabled={
+              !canConnectCodex({
+                cwd: effectiveCwd,
+                connecting,
+                running: !!codexTuiRunning,
+              })
+            }
+            onClick={handleConnect}
+          >
+            {connecting ? (
+              <span className="flex items-center gap-2">
+                <span className="size-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Connecting…
+              </span>
+            ) : (
+              "Connect Codex"
+            )}
+          </Button>
+        )}
         <Button
           size="sm"
-          variant="secondary"
-          className="w-full mt-2 active:scale-[0.98] transition-all duration-200"
-          onClick={stopCodexTui}
+          variant="outline"
+          className="shrink-0"
+          onClick={() => setShowAdvanced((open) => !open)}
         >
-          Disconnect Codex
-        </Button>
-      )}
-
-      {!locked && (
-        <Button
-          className="w-full mt-2 bg-codex text-white hover:bg-codex/90 hover:shadow-[0_0_16px_#22c55e40] active:scale-[0.98] transition-all duration-200 btn-ripple"
-          size="sm"
-          disabled={
-            !canConnectCodex({
-              cwd: effectiveCwd,
-              connecting,
-              running: !!codexTuiRunning,
-            })
-          }
-          onClick={handleConnect}
-        >
-          {connecting ? (
-            <span className="flex items-center gap-2">
-              <span className="size-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Connecting…
-            </span>
+          <SlidersHorizontal className="size-3.5" />
+          {showAdvanced ? "Hide" : "Details"}
+          {showAdvanced ? (
+            <ChevronUp className="size-3.5" />
           ) : (
-            "Connect Codex"
+            <ChevronDown className="size-3.5" />
           )}
         </Button>
-      )}
+      </div>
 
       {!locked && <AuthActions />}
 
-      {!locked && effectiveCwd && historyLoading && (
-        <div className="mt-1.5 text-[11px] text-muted-foreground">
-          Loading Codex history...
+      {showAdvanced && (
+        <div className="mt-3 rounded-xl border border-border/35 bg-background/30 px-3 py-3">
+          <CodexConfigRows
+            locked={locked}
+            profile={profile}
+            models={models}
+            selectedModel={selectedModel}
+            modelSelectOptions={modelSelectOptions}
+            handleModelChange={handleModelChange}
+            reasoningOptions={reasoningOptions}
+            selectedReasoning={selectedReasoning}
+            setSelectedReasoning={setSelectedReasoning}
+            reasoningSelectOptions={reasoningSelectOptions}
+            cwd={effectiveCwd}
+            handlePickDir={handlePickDir}
+          />
+
+          <div className="mt-2 flex items-center justify-between">
+            <span className="text-[10px] text-muted-foreground">History</span>
+            <CyberSelect
+              value={selectedHistoryId}
+              options={historyOptions}
+              onChange={setSelectedHistoryId}
+              disabled={locked || !effectiveCwd || connecting}
+              placeholder="New session"
+            />
+          </div>
+
+          {!locked && effectiveCwd && historyLoading && (
+            <div className="mt-1.5 text-[11px] text-muted-foreground">
+              Loading Codex history...
+            </div>
+          )}
+          {!locked && effectiveCwd && historyError && (
+            <div className="mt-1.5 text-[11px] text-destructive">
+              {historyError}
+            </div>
+          )}
         </div>
       )}
-      {!locked && effectiveCwd && historyError && (
-        <div className="mt-1.5 text-[11px] text-destructive">{historyError}</div>
-      )}
+
       {!!codexTuiRunning && (
         <div className="mt-1.5 text-[11px] text-muted-foreground">
           Codex app-server is starting...
