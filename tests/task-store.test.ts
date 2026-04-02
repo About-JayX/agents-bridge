@@ -8,9 +8,11 @@ import {
 } from "../src/stores/task-store/events";
 import {
   bootstrapTaskStore,
+  createFetchProviderHistoryAction,
   snapshotToPatch,
 } from "../src/stores/task-store";
 import type {
+  ProviderHistoryInfo,
   TaskStoreData,
   TaskInfo,
   SessionInfo,
@@ -258,5 +260,72 @@ describe("bootstrapTaskStore", () => {
     expect(calls[0]?.activeTaskId).toBe("t1");
     expect(calls[0]?.tasks?.t1?.title).toBe("Hydrated");
     expect(calls[0]?.sessions?.t1?.[0]?.sessionId).toBe("s1");
+  });
+});
+
+describe("createFetchProviderHistoryAction", () => {
+  test("dedupes concurrent requests for the same workspace", async () => {
+    const historyEntry: ProviderHistoryInfo = {
+      provider: "claude",
+      externalId: "session-1",
+      title: "Claude session",
+      preview: "preview",
+      cwd: "/ws",
+      archived: false,
+      createdAt: 100,
+      updatedAt: 200,
+      status: "active",
+      normalizedSessionId: null,
+      normalizedTaskId: null,
+    };
+    let state = emptyState();
+    let invokeCalls = 0;
+    let resolveRequest: ((entries: ProviderHistoryInfo[]) => void) | null = null;
+    const invokeImpl = () =>
+      new Promise<ProviderHistoryInfo[]>((resolve) => {
+        invokeCalls += 1;
+        resolveRequest = resolve;
+      });
+    const set = (
+      fn: (current: TaskStoreData) => Partial<TaskStoreData>,
+    ) => {
+      state = { ...state, ...fn(state) };
+    };
+
+    const fetchProviderHistory = createFetchProviderHistoryAction(set, invokeImpl);
+    const first = fetchProviderHistory("/ws");
+    const second = fetchProviderHistory("/ws");
+
+    expect(invokeCalls).toBe(1);
+    expect(state.providerHistoryLoading["/ws"]).toBe(true);
+
+    resolveRequest?.([historyEntry]);
+    await Promise.all([first, second]);
+
+    expect(state.providerHistory["/ws"]).toEqual([historyEntry]);
+    expect(state.providerHistoryLoading["/ws"]).toBe(false);
+    expect(state.providerHistoryError["/ws"]).toBeNull();
+  });
+
+  test("does not dedupe requests across different workspaces", async () => {
+    let state = emptyState();
+    let invokeCalls = 0;
+    const invokeImpl = async () => {
+      invokeCalls += 1;
+      return [];
+    };
+    const set = (
+      fn: (current: TaskStoreData) => Partial<TaskStoreData>,
+    ) => {
+      state = { ...state, ...fn(state) };
+    };
+
+    const fetchProviderHistory = createFetchProviderHistoryAction(set, invokeImpl);
+    await Promise.all([
+      fetchProviderHistory("/ws-a"),
+      fetchProviderHistory("/ws-b"),
+    ]);
+
+    expect(invokeCalls).toBe(2);
   });
 });
