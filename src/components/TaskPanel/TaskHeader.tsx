@@ -19,7 +19,7 @@ export function TaskHeader({
   reviewBadge: ReviewBadge | null;
 }) {
   return (
-    <div className="space-y-2 rounded-xl border border-border/40 bg-card/60 px-4 py-3 backdrop-blur-sm">
+    <div className="space-y-2 rounded-xl border border-border/35 bg-background/35 px-4 py-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/55">

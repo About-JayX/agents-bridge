@@ -1,34 +1,34 @@
 import { AgentStatusPanel } from "./components/AgentStatus";
 import { MessagePanel } from "./components/MessagePanel";
 import { ReplyInput } from "./components/ReplyInput";
+import { ShellContextBar } from "./components/ShellContextBar";
 import { TaskPanel } from "./components/TaskPanel";
 
 export default function App() {
   return (
     <div
-      className="flex h-screen text-foreground font-sans"
+      className="flex h-screen flex-col overflow-hidden font-sans text-foreground"
       style={{
         background:
-          "linear-gradient(180deg, #0a0a0a 0%, #0d0d12 50%, #0a0a0a 100%)",
+          "radial-gradient(circle at top, rgba(34,197,94,0.08), transparent 28%), linear-gradient(180deg, #090a0d 0%, #0c0d12 48%, #08090c 100%)",
       }}
     >
-      <div className="w-70 shrink-0 border-r border-border/50 flex flex-col relative noise-bg bg-linear-to-b from-[#0e0e14] to-[#0a0a0a]">
-        <div className="flex items-baseline gap-2 p-4 border-b border-border/50 relative">
-          <h2 className="m-0 text-base font-bold text-gradient-cyber relative z-10">
-            AgentNexus
-          </h2>
-          <span className="text-xs text-muted-foreground/70 relative z-10">
-            v0.1.0
-          </span>
-          <div className="absolute bottom-0 left-4 right-4 h-px bg-linear-to-r from-transparent via-claude/30 to-transparent" />
-        </div>
-        <AgentStatusPanel />
-      </div>
+      <ShellContextBar />
 
-      <div className="flex-1 flex flex-col min-w-0 animate-in fade-in duration-500">
-        <TaskPanel />
-        <MessagePanel />
-        <ReplyInput />
+      <div className="flex flex-1 min-h-0">
+        <main className="flex min-w-0 flex-1 flex-col animate-in fade-in duration-500">
+          <MessagePanel />
+          <ReplyInput />
+        </main>
+
+        <aside className="hidden w-[340px] shrink-0 border-l border-border/40 bg-linear-to-b from-card/60 via-card/35 to-background/40 lg:flex lg:flex-col xl:w-[360px]">
+          <div className="flex-1 overflow-y-auto px-4 py-4">
+            <div className="space-y-4">
+              <AgentStatusPanel />
+              <TaskPanel />
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
   );

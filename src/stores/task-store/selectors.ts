@@ -11,3 +11,11 @@ export function selectActiveTaskSessions(state: TaskStoreState) {
 export function selectActiveTaskArtifacts(state: TaskStoreState) {
   return state.activeTaskId ? state.artifacts[state.activeTaskId] ?? [] : [];
 }
+
+export function selectActiveTaskSessionCount(state: TaskStoreState) {
+  return state.activeTaskId ? (state.sessions[state.activeTaskId] ?? []).length : 0;
+}
+
+export function selectActiveTaskArtifactCount(state: TaskStoreState) {
+  return state.activeTaskId ? (state.artifacts[state.activeTaskId] ?? []).length : 0;
+}

@@ -18,3 +18,15 @@ export function selectAnyAgentConnected(state: BridgeState) {
     state.agents.claude?.status === "connected"
   );
 }
+
+export function selectPermissionPromptCount(state: BridgeState) {
+  return state.permissionPrompts.length;
+}
+
+export function selectTerminalErrorCount(state: BridgeState) {
+  let count = 0;
+  for (const line of state.terminalLines) {
+    if (line.kind === "error") count += 1;
+  }
+  return count;
+}

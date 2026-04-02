@@ -45,23 +45,62 @@ export function TaskPanel() {
 
   if (!task) {
     return (
-      <div className="border-b border-border/30 bg-card/30 px-4 py-3">
+      <section className="rounded-2xl border border-border/40 bg-card/45 px-4 py-4">
+        <div className="mb-3 text-[11px] uppercase tracking-[0.18em] text-muted-foreground/55">
+          Inspector
+        </div>
         <div className="rounded-xl border border-dashed border-border/40 bg-background/20 px-4 py-3 text-xs text-muted-foreground/65">
           {getTaskPanelEmptyStateMessage()}
         </div>
-      </div>
+      </section>
     );
   }
 
   return (
-    <div className="border-b border-border/30 bg-linear-to-b from-background/95 to-background/70">
-      <div className="max-h-[40vh] space-y-3 overflow-y-auto px-4 py-3">
+    <section className="space-y-3">
+      <div className="rounded-2xl border border-border/40 bg-card/55 px-4 py-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/55">
+              Inspector
+            </div>
+            <div className="mt-0.5 text-sm font-semibold text-foreground">
+              Session context
+            </div>
+          </div>
+          <div className="text-[11px] text-muted-foreground/65">
+            {taskSessions.length} sessions · {taskArtifacts.length} artifacts
+          </div>
+        </div>
         <TaskHeader task={task} reviewBadge={reviewBadge} />
-        <div className="space-y-3 min-w-0">
+        <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+          <div className="rounded-xl border border-border/35 bg-background/30 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground/55">
+              Active sessions
+            </div>
+            <div className="mt-1 text-lg font-semibold text-foreground">
+              {taskSessions.length}
+            </div>
+          </div>
+          <div className="rounded-xl border border-border/35 bg-background/30 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground/55">
+              Artifacts
+            </div>
+            <div className="mt-1 text-lg font-semibold text-foreground">
+              {taskArtifacts.length}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="min-w-0 space-y-3">
+        <div className="rounded-2xl border border-border/40 bg-card/45 p-0">
           <SessionTree rows={sessionRows} onResume={handleResume} />
+        </div>
+        <div className="rounded-2xl border border-border/40 bg-card/45 p-0">
           <ArtifactTimeline items={artifactTimeline} />
         </div>
       </div>
-    </div>
+    </section>
   );
 }

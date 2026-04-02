@@ -15,7 +15,7 @@ export function ArtifactTimeline({
   items: ArtifactTimelineItem[];
 }) {
   return (
-    <section className="rounded-xl border border-border/40 bg-card/50 px-4 py-3 backdrop-blur-sm">
+    <section className="px-4 py-3">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/55">
           Artifact Timeline
