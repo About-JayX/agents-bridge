@@ -24,20 +24,14 @@ function installTauriStub() {
 }
 
 describe("ShellContextBar", () => {
-  test("renders task context as a side trigger instead of a top runtime header", async () => {
+  test("renders a VS Code-style side rail without reviving the top runtime header", async () => {
     installTauriStub();
     const { ShellContextBar } = await import("./ShellContextBar");
-    const html = renderToStaticMarkup(
-      <ShellContextBar
-        mobileInspectorOpen={false}
-        onToggleMobileInspector={() => {}}
-      />,
-    );
+    const html = renderToStaticMarkup(<ShellContextBar />);
 
     expect(html).toContain("Task context");
+    expect(html).toContain("Agents");
     expect(html).not.toContain("AGENTNEXUS");
-    expect(html).not.toContain("Runtime");
-    expect(html).not.toContain("Claude");
-    expect(html).not.toContain("Codex");
+    expect(html).not.toContain("Daemon online");
   });
 });

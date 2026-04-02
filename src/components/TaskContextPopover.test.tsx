@@ -2,30 +2,57 @@ import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TaskContextPopover } from "./TaskContextPopover";
 
+function installTauriStub() {
+  let callbackId = 0;
+  Object.assign(globalThis, {
+    window: {
+      __TAURI_INTERNALS__: {
+        transformCallback: () => ++callbackId,
+        unregisterCallback: () => {},
+        invoke: async (cmd: string) => {
+          if (cmd === "plugin:event|listen") return callbackId;
+          if (cmd === "daemon_get_status_snapshot") {
+            return { agents: [], claudeRole: "lead", codexRole: "coder" };
+          }
+          if (cmd === "daemon_get_task_snapshot") return null;
+          return null;
+        },
+      },
+      __TAURI_EVENT_PLUGIN_INTERNALS__: {
+        unregisterListener: () => {},
+      },
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      innerWidth: 800,
+    },
+  });
+}
+
 describe("TaskContextPopover", () => {
-  test("renders a minimal empty state when no task is active", () => {
+  test("renders the task-context pane when requested", () => {
+    installTauriStub();
     const html = renderToStaticMarkup(
       <TaskContextPopover
-        open
+        activePane="context"
         onClose={() => {}}
         task={null}
-        sessionCount={0}
-        artifactCount={0}
       />,
     );
 
-    expect(html).toContain("data-task-context-drawer=\"true\"");
+    expect(html).toContain("data-shell-sidebar-drawer=\"true\"");
+    expect(html).toContain("Task workspace");
     expect(html).toContain("No active task");
-    expect(html).not.toContain("bg-background/28");
+    expect(html).not.toContain("Runtime control");
     expect(html).not.toContain(
       "The conversation timeline stays live, but task context and review state will appear here once a task is active.",
     );
   });
 
-  test("renders task details when an active task exists", () => {
+  test("renders the agents pane when requested", () => {
+    installTauriStub();
     const html = renderToStaticMarkup(
       <TaskContextPopover
-        open
+        activePane="agents"
         onClose={() => {}}
         task={{
           taskId: "task-1",
@@ -36,13 +63,11 @@ describe("TaskContextPopover", () => {
           createdAt: 1,
           updatedAt: 1,
         }}
-        sessionCount={3}
-        artifactCount={5}
       />,
     );
 
-    expect(html).toContain("Refine shell header");
-    expect(html).toContain("3 sessions");
-    expect(html).toContain("5 artifacts");
+    expect(html).toContain("Agents");
+    expect(html).toContain("Runtime control");
+    expect(html).not.toContain("Task workspace");
   });
 });

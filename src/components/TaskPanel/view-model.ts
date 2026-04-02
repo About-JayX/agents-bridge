@@ -64,7 +64,7 @@ export function getReviewBadge(
 }
 
 export function getTaskPanelEmptyStateMessage(): string {
-  return "No active task. Create or select a task to inspect task progress, review status, and artifacts.";
+  return "No active task. Create or select a task to track progress, review status, and artifacts.";
 }
 
 export function buildSessionTreeRows(

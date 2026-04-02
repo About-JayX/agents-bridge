@@ -47,7 +47,7 @@ export function TaskPanel() {
     return (
       <section className="rounded-2xl border border-border/40 bg-card/45 px-4 py-4">
         <div className="mb-3 text-[11px] uppercase tracking-[0.18em] text-muted-foreground/55">
-          Inspector
+          Task context
         </div>
         <div className="rounded-xl border border-dashed border-border/40 bg-background/20 px-4 py-3 text-xs text-muted-foreground/65">
           {getTaskPanelEmptyStateMessage()}
@@ -62,7 +62,7 @@ export function TaskPanel() {
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/55">
-              Inspector
+              Task context
             </div>
             <div className="mt-0.5 text-sm font-semibold text-foreground">
               Session context
