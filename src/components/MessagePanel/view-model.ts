@@ -6,6 +6,11 @@ import type {
 
 export type StreamIndicatorId = "claude" | "codex";
 export type MessagePanelTab = "messages" | "logs" | "approvals";
+const DEFAULT_LOG_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
 
 export interface CodexStreamIndicatorViewModel {
   visible: boolean;
@@ -13,6 +18,12 @@ export interface CodexStreamIndicatorViewModel {
   animatePulse: boolean;
   showStatusLabel: boolean;
   statusLabel: string;
+}
+
+export interface MessageListDisplayState {
+  timelineCount: number;
+  streamRailIndicators: StreamIndicatorId[];
+  hasContent: boolean;
 }
 
 export function getMessageIdentityPresentation(
@@ -50,6 +61,32 @@ export function getTransientIndicators(
       ? (["codex"] as const)
       : []),
   ];
+}
+
+export function getMessageListDisplayState(
+  messageCount: number,
+  streamRailIndicators: StreamIndicatorId[],
+): MessageListDisplayState {
+  return {
+    timelineCount: messageCount,
+    streamRailIndicators,
+    hasContent: messageCount > 0 || streamRailIndicators.length > 0,
+  };
+}
+
+export function getStreamTextTail(text: string, maxChars: number): string {
+  if (text.length <= maxChars) {
+    return text;
+  }
+
+  return `…${text.slice(-maxChars)}`;
+}
+
+export function formatTerminalTimestamp(
+  timestamp: number,
+  formatter: Intl.DateTimeFormat = DEFAULT_LOG_TIME_FORMATTER,
+): string {
+  return formatter.format(timestamp);
 }
 
 export function getCodexStreamIndicatorViewModel(

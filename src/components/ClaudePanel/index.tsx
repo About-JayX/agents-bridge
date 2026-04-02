@@ -10,6 +10,11 @@ import type { ProviderSessionInfo } from "@/types";
 import { RoleSelect } from "@/components/AgentStatus/RoleSelect";
 import { StatusDot } from "@/components/AgentStatus/StatusDot";
 import {
+  makeProviderHistoryErrorSelector,
+  makeProviderHistoryLoadingSelector,
+  makeProviderHistorySelector,
+} from "@/stores/task-store/selectors";
+import {
   buildProviderHistoryOptions,
   findProviderHistoryEntry,
   formatProviderConnectionLabel,
@@ -19,6 +24,7 @@ import {
 import { ClaudeConfigRows } from "./ClaudeConfigRows";
 import { ClaudeHint } from "./ClaudeHint";
 import { buildClaudeLaunchRequest } from "./launch-request";
+import { ChevronDown, ChevronUp, SlidersHorizontal } from "lucide-react";
 
 interface ClaudePanelProps {
   connected: boolean;
@@ -35,23 +41,33 @@ export function ClaudePanel({
   const [actionError, setActionError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [selectedHistoryId, setSelectedHistoryId] = useState(
     NEW_PROVIDER_SESSION_VALUE,
   );
   const pickDirectory = useCodexAccountStore((s) => s.pickDirectory);
   const claudeRole = useBridgeStore((s) => s.claudeRole);
   const fetchProviderHistory = useTaskStore((s) => s.fetchProviderHistory);
-  const providerHistory = useTaskStore((s) => s.providerHistory);
-  const providerHistoryLoading = useTaskStore((s) => s.providerHistoryLoading);
-  const providerHistoryError = useTaskStore((s) => s.providerHistoryError);
   const effectiveCwd = useMemo(
     () => resolveProviderHistoryWorkspace(cwd, providerSession),
     [cwd, providerSession],
   );
+  const selectWorkspaceHistory = useMemo(
+    () => makeProviderHistorySelector(effectiveCwd),
+    [effectiveCwd],
+  );
+  const selectWorkspaceHistoryLoading = useMemo(
+    () => makeProviderHistoryLoadingSelector(effectiveCwd),
+    [effectiveCwd],
+  );
+  const selectWorkspaceHistoryError = useMemo(
+    () => makeProviderHistoryErrorSelector(effectiveCwd),
+    [effectiveCwd],
+  );
+  const workspaceHistory = useTaskStore(selectWorkspaceHistory);
+  const historyLoading = useTaskStore(selectWorkspaceHistoryLoading);
+  const historyError = useTaskStore(selectWorkspaceHistoryError);
 
-  const workspaceHistory = effectiveCwd
-    ? (providerHistory[effectiveCwd] ?? [])
-    : [];
   const historyOptions = useMemo(
     () => buildProviderHistoryOptions("claude", workspaceHistory),
     [workspaceHistory],
@@ -61,10 +77,6 @@ export function ClaudePanel({
       findProviderHistoryEntry("claude", workspaceHistory, selectedHistoryId),
     [selectedHistoryId, workspaceHistory],
   );
-  const historyLoading = effectiveCwd
-    ? providerHistoryLoading[effectiveCwd]
-    : false;
-  const historyError = effectiveCwd ? providerHistoryError[effectiveCwd] : null;
   const connectionLabel = useMemo(
     () => formatProviderConnectionLabel(providerSession),
     [providerSession],
@@ -73,6 +85,12 @@ export function ClaudePanel({
   useEffect(() => {
     if (!connected) {
       setDisconnecting(false);
+    }
+  }, [connected]);
+
+  useEffect(() => {
+    if (connected) {
+      setShowAdvanced(false);
     }
   }, [connected]);
 
@@ -138,79 +156,76 @@ export function ClaudePanel({
     }
   }, []);
 
+  const summaryChips = useMemo(
+    () => [
+      effectiveCwd ? effectiveCwd.split("/").pop() || effectiveCwd : "Project required",
+      model || "Default model",
+      effort || "Default effort",
+      selectedHistory
+        ? `Resume ${selectedHistory.externalId.slice(0, 12)}`
+        : "New session",
+    ],
+    [effectiveCwd, effort, model, selectedHistory],
+  );
+
   return (
-    <>
-      <div
-        className={cn(
-          "rounded-lg border bg-card p-3 card-depth transition-all duration-300",
-          connected
-            ? "border-claude/40 glow-claude-subtle border-glow-claude"
-            : "border-input hover:border-input/80",
-        )}
-      >
-        <div className="flex items-center gap-2">
-          <StatusDot
-            status={connected ? "connected" : "disconnected"}
-            variant="claude"
-          />
-          <span className="flex-1 text-[13px] font-medium text-card-foreground">
-            Claude Code
-          </span>
-          <RoleSelect
-            agent="claude"
-            disabled={connected || connecting || disconnecting}
-          />
-          <span
-            key={disconnecting ? "x" : connected ? "c" : "d"}
-            className="text-[11px] uppercase text-secondary-foreground status-flash"
-          >
-            {disconnecting
-              ? "disconnecting"
-              : connected
-                ? "connected"
-                : connecting
-                  ? "starting"
-                  : "disconnected"}
-          </span>
-        </div>
-
-        {connectionLabel && (
-          <div className="mt-1 font-mono text-[11px] text-muted-foreground/80">
-            {connectionLabel}
-          </div>
-        )}
-
-        <ClaudeConfigRows
-          model={model}
-          effort={effort}
-          cwd={effectiveCwd}
-          disabled={connected || connecting || disconnecting}
-          onModelChange={setModel}
-          onEffortChange={setEffort}
-          onPickDir={handlePickDir}
+    <div
+      className={cn(
+        "rounded-2xl border bg-card px-4 py-3 card-depth transition-colors",
+        connected
+          ? "border-claude/35 glow-claude-subtle border-glow-claude"
+          : "border-input hover:border-input/80",
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <StatusDot
+          status={connected ? "connected" : "disconnected"}
+          variant="claude"
         />
+        <span className="flex-1 text-[13px] font-medium text-card-foreground">
+          Claude Code
+        </span>
+        <RoleSelect
+          agent="claude"
+          disabled={connected || connecting || disconnecting}
+        />
+        <span
+          key={disconnecting ? "x" : connected ? "c" : "d"}
+          className="text-[11px] uppercase text-secondary-foreground status-flash"
+        >
+          {disconnecting
+            ? "disconnecting"
+            : connected
+              ? "connected"
+              : connecting
+                ? "starting"
+                : "disconnected"}
+        </span>
+      </div>
 
-        <div className="mt-2 flex items-center justify-between">
-          <span className="text-[10px] text-muted-foreground">History</span>
-          <CyberSelect
-            value={selectedHistoryId}
-            options={historyOptions}
-            onChange={setSelectedHistoryId}
-            disabled={
-              connected ||
-              connecting ||
-              disconnecting ||
-              !effectiveCwd
-            }
-            placeholder="New session"
-          />
+      {connectionLabel && (
+        <div className="mt-1 font-mono text-[11px] text-muted-foreground/80">
+          {connectionLabel}
         </div>
+      )}
 
-        {connected && (
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {summaryChips.map((chip) => (
+          <span
+            key={chip}
+            className="rounded-full border border-border/45 bg-background/35 px-2 py-0.5 text-[10px] text-muted-foreground"
+          >
+            {chip}
+          </span>
+        ))}
+      </div>
+
+      <div className="mt-3 flex gap-2">
+        {connected ? (
           <Button
             size="sm"
             variant="secondary"
-            className="mt-2 w-full active:scale-[0.98] transition-all duration-200"
+            className="flex-1"
             disabled={disconnecting}
             onClick={handleDisconnect}
           >
@@ -223,12 +238,10 @@ export function ClaudePanel({
               "Disconnect Claude"
             )}
           </Button>
-        )}
-
-        {!connected && (
+        ) : (
           <Button
             size="sm"
-            className="mt-2 w-full bg-claude text-white hover:bg-claude/90 hover:shadow-[0_0_16px_#8b5cf640] active:scale-[0.98] transition-all duration-200 btn-ripple"
+            className="flex-1 bg-claude text-white hover:bg-claude/90"
             disabled={!effectiveCwd || connecting || disconnecting}
             onClick={handleLaunch}
           >
@@ -242,19 +255,64 @@ export function ClaudePanel({
             )}
           </Button>
         )}
-
-        <ClaudeHint
-          connected={connected}
-          cwd={effectiveCwd}
-          disconnecting={disconnecting}
-          actionError={actionError ?? historyError}
-        />
-        {!connected && effectiveCwd && historyLoading && (
-          <div className="mt-1.5 text-center text-[10px] text-muted-foreground">
-            Loading Claude history...
-          </div>
-        )}
+        <Button
+          size="sm"
+          variant="outline"
+          className="shrink-0"
+          onClick={() => setShowAdvanced((open) => !open)}
+        >
+          <SlidersHorizontal className="size-3.5" />
+          {showAdvanced ? "Hide" : "Details"}
+          {showAdvanced ? (
+            <ChevronUp className="size-3.5" />
+          ) : (
+            <ChevronDown className="size-3.5" />
+          )}
+        </Button>
       </div>
-    </>
+
+      <ClaudeHint
+        connected={connected}
+        cwd={effectiveCwd}
+        disconnecting={disconnecting}
+        actionError={actionError ?? historyError}
+      />
+
+      {showAdvanced && (
+        <div className="mt-3 rounded-xl border border-border/35 bg-background/30 px-3 py-3">
+          <ClaudeConfigRows
+            model={model}
+            effort={effort}
+            cwd={effectiveCwd}
+            disabled={connected || connecting || disconnecting}
+            onModelChange={setModel}
+            onEffortChange={setEffort}
+            onPickDir={handlePickDir}
+          />
+
+          <div className="mt-2 flex items-center justify-between">
+            <span className="text-[10px] text-muted-foreground">History</span>
+            <CyberSelect
+              value={selectedHistoryId}
+              options={historyOptions}
+              onChange={setSelectedHistoryId}
+              disabled={
+                connected ||
+                connecting ||
+                disconnecting ||
+                !effectiveCwd
+              }
+              placeholder="New session"
+            />
+          </div>
+
+          {!connected && effectiveCwd && historyLoading && (
+            <div className="mt-1.5 text-center text-[10px] text-muted-foreground">
+              Loading Claude history...
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

@@ -1,42 +1,31 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useEffect, useMemo } from "react";
+import { Virtuoso } from "react-virtuoso";
 import { Button } from "@/components/ui/button";
 import { useBridgeStore } from "@/stores/bridge-store";
+import { selectMessages } from "@/stores/bridge-store/selectors";
 import { useTaskStore } from "@/stores/task-store";
-import type { BridgeMessage } from "@/types";
-import { PermissionQueue } from "./PermissionQueue";
-import { TabBtn } from "./TabBtn";
+import { selectActiveTask } from "@/stores/task-store/selectors";
 import { MessageList } from "./MessageList";
 import { ReviewGateBadge } from "@/components/TaskPanel/ReviewGateBadge";
 import { getReviewBadge } from "@/components/TaskPanel/view-model";
 import {
   filterRenderableChatMessages,
-  getClaudeAttentionResolution,
+  formatTerminalTimestamp,
 } from "./view-model";
-
-type Tab = "messages" | "logs" | "approvals";
+import { TerminalSquare } from "lucide-react";
+import type { ShellMainSurface } from "@/components/shell-layout-state";
 
 interface MessagePanelProps {
-  messages: BridgeMessage[];
-  onTabChange?: (tab: Tab) => void;
+  surfaceMode: ShellMainSurface;
 }
 
-export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
-  const [tab, setTabState] = useState<Tab>("messages");
-  const setTab = (t: Tab) => {
-    setTabState(t);
-    onTabChange?.(t);
-  };
-  const logRef = useRef<HTMLDivElement>(null);
-
+export function MessagePanel({ surfaceMode }: MessagePanelProps) {
   const clearMessages = useBridgeStore((s) => s.clearMessages);
+  const messages = useBridgeStore(selectMessages);
   const allTerminalLines = useBridgeStore((s) => s.terminalLines);
-  const permissionPrompts = useBridgeStore((s) => s.permissionPrompts);
-  const respondToPermission = useBridgeStore((s) => s.respondToPermission);
   const claudeNeedsAttention = useBridgeStore((s) => s.claudeNeedsAttention);
   const clearClaudeAttention = useBridgeStore((s) => s.clearClaudeAttention);
-  const activeTaskId = useTaskStore((s) => s.activeTaskId);
-  const tasks = useTaskStore((s) => s.tasks);
-  const activeTask = activeTaskId ? tasks[activeTaskId] : null;
+  const activeTask = useTaskStore(selectActiveTask);
   const reviewBadge = getReviewBadge(activeTask?.reviewStatus);
 
   const chatMessages = useMemo(
@@ -49,79 +38,82 @@ export function MessagePanel({ messages, onTabChange }: MessagePanelProps) {
   );
 
   useEffect(() => {
-    const attention = getClaudeAttentionResolution(tab, claudeNeedsAttention);
-    if (attention.nextTab) {
-      setTab(attention.nextTab);
-    }
-    if (attention.clearStoreAttention) {
+    if (claudeNeedsAttention) {
       clearClaudeAttention();
     }
-  }, [tab, claudeNeedsAttention, clearClaudeAttention]);
+  }, [claudeNeedsAttention, clearClaudeAttention]);
 
   return (
-    <div className="flex flex-1 flex-col min-h-0">
-      <div className="flex items-center px-4 py-2 border-b border-border/50 gap-3 relative">
-        <TabBtn active={tab === "messages"} onClick={() => setTab("messages")}>
-          Messages ({chatMessages.length})
-        </TabBtn>
-        <TabBtn active={tab === "logs"} onClick={() => setTab("logs")}>
-          Logs {errorLines.length > 0 && `(${errorLines.length})`}
-        </TabBtn>
-        <TabBtn
-          active={tab === "approvals"}
-          onClick={() => setTab("approvals")}
-        >
-          Approvals
-          {permissionPrompts.length > 0 && ` (${permissionPrompts.length})`}
-        </TabBtn>
-        <div className="flex-1" />
-        {activeTask && (
-          <div className="hidden min-w-0 items-center gap-2 md:flex">
-            <span className="truncate rounded-full border border-border/50 px-2 py-0.5 text-[10px] text-muted-foreground">
-              Task: {activeTask.title}
-            </span>
-            {reviewBadge && <ReviewGateBadge badge={reviewBadge} />}
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex items-center gap-3 border-b border-border/45 px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/55">
+            {surfaceMode === "logs" ? "Diagnostics" : "Conversation"}
           </div>
-        )}
-        {tab !== "approvals" && (
-          <Button variant="secondary" size="xs" onClick={clearMessages}>
-            Clear
-          </Button>
-        )}
-        <div className="absolute bottom-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-primary/15 to-transparent" />
+          <div className="mt-0.5 flex min-w-0 items-center gap-2">
+            <div className="truncate text-sm font-semibold text-foreground">
+              {surfaceMode === "logs" ? "Runtime logs" : "Primary timeline"}
+            </div>
+            <span className="rounded-full border border-border/45 px-2 py-0.5 text-[10px] text-muted-foreground">
+              {surfaceMode === "logs"
+                ? `${allTerminalLines.length} lines`
+                : `${chatMessages.length} messages`}
+            </span>
+            {surfaceMode === "chat" && activeTask && (
+              <span className="hidden truncate rounded-full border border-border/45 px-2 py-0.5 text-[10px] text-muted-foreground lg:inline-flex">
+                {activeTask.title}
+              </span>
+            )}
+            {surfaceMode === "chat" && reviewBadge && (
+              <ReviewGateBadge badge={reviewBadge} />
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {surfaceMode === "logs" && errorLines.length > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-destructive/30 bg-destructive/8 px-2.5 py-1 text-[10px] font-medium text-destructive">
+              <TerminalSquare className="size-3" />
+              {errorLines.length} errors
+            </span>
+          )}
+          {surfaceMode === "chat" && (
+            <Button variant="secondary" size="xs" onClick={clearMessages}>
+              Clear
+            </Button>
+          )}
+        </div>
       </div>
-      {tab === "messages" && <MessageList messages={chatMessages} />}
-      {tab === "logs" && (
-        <div
-          ref={logRef}
-          className="flex-1 overflow-y-auto px-4 py-2 font-mono text-[11px] leading-relaxed"
-        >
+
+      {surfaceMode === "chat" && <MessageList messages={chatMessages} />}
+
+      {surfaceMode === "logs" && (
+        <div className="flex-1 min-h-0">
           {allTerminalLines.length === 0 && (
-            <div className="py-10 text-center text-[13px] text-muted-foreground font-sans">
+            <div className="py-10 text-center font-sans text-[13px] text-muted-foreground">
               No logs.
             </div>
           )}
-          {allTerminalLines.map((l) => (
-            <div
-              key={l.id}
-              className={`py-0.5 ${l.kind === "error" ? "text-destructive" : "text-muted-foreground"}`}
-            >
-              <span className="opacity-50 mr-2">
-                {new Date(l.timestamp).toLocaleTimeString()}
-              </span>
-              <span className="mr-1 text-secondary-foreground">
-                [{l.agent}]
-              </span>
-              {l.line}
-            </div>
-          ))}
+          {allTerminalLines.length > 0 && (
+            <Virtuoso
+              data={allTerminalLines}
+              className="h-full px-4 py-2 font-mono text-[11px] leading-relaxed"
+              increaseViewportBy={160}
+              itemContent={(_, line) => (
+                <div
+                  className={`py-0.5 ${line.kind === "error" ? "text-destructive" : "text-muted-foreground"}`}
+                >
+                  <span className="mr-2 opacity-50">
+                    {formatTerminalTimestamp(line.timestamp)}
+                  </span>
+                  <span className="mr-1 text-secondary-foreground">
+                    [{line.agent}]
+                  </span>
+                  {line.line}
+                </div>
+              )}
+            />
+          )}
         </div>
-      )}
-      {tab === "approvals" && (
-        <PermissionQueue
-          prompts={permissionPrompts}
-          onResolve={respondToPermission}
-        />
       )}
     </div>
   );

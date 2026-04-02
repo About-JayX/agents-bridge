@@ -31,7 +31,7 @@ export function CodexUsageSection({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] font-semibold uppercase text-muted-foreground">
-            {"\u7528\u91CF"}
+            Usage
           </span>
           <span
             className={cn(
@@ -41,9 +41,7 @@ export function CodexUsageSection({
                 : "bg-codex/10 text-codex",
             )}
           >
-            {usage.limitReached || !usage.allowed
-              ? "\u53D7\u9650"
-              : "\u6B63\u5E38"}
+            {usage.limitReached || !usage.allowed ? "limited" : "healthy"}
           </span>
         </div>
         <button
@@ -55,14 +53,14 @@ export function CodexUsageSection({
             refreshing && "opacity-50",
           )}
         >
-          {refreshing ? "\u5237\u65B0\u4E2D\u2026" : "\u5237\u65B0"}
+          {refreshing ? "Refreshing…" : "Refresh"}
         </button>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <MiniMeter
           label={windowLabel(
             usage.primary?.windowMinutes ?? null,
-            "\u77ED\u671F",
+            "Short window",
           )}
           used={usage.primary?.usedPercent ?? 0}
           remaining={usage.primary?.remainingPercent ?? 100}
@@ -70,7 +68,7 @@ export function CodexUsageSection({
         <MiniMeter
           label={windowLabel(
             usage.secondary?.windowMinutes ?? null,
-            "\u957F\u671F",
+            "Long window",
           )}
           used={usage.secondary?.usedPercent ?? 0}
           remaining={usage.secondary?.remainingPercent ?? 100}

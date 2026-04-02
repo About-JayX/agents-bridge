@@ -1,42 +1,56 @@
-import { useBridgeStore } from "./stores/bridge-store";
-import { AgentStatusPanel } from "./components/AgentStatus";
+import { useState } from "react";
 import { MessagePanel } from "./components/MessagePanel";
 import { ReplyInput } from "./components/ReplyInput";
-import { TaskPanel } from "./components/TaskPanel";
+import { ShellContextBar } from "./components/ShellContextBar";
+import { ShellTopBar } from "./components/ShellTopBar";
+import { TaskContextPopover } from "./components/TaskContextPopover";
+import {
+  closeShellSidebar,
+  createShellLayoutState,
+  resolveShellWorkspaceLabel,
+  toggleShellNavItem,
+} from "./components/shell-layout-state";
+import { useBridgeStore } from "./stores/bridge-store";
+import { selectAgents } from "./stores/bridge-store/selectors";
+import { useTaskStore } from "./stores/task-store";
+import { selectActiveTask } from "./stores/task-store/selectors";
 
 export default function App() {
-  const messages = useBridgeStore((s) => s.messages);
-  const agents = useBridgeStore((s) => s.agents);
-  const connected = useBridgeStore((s) => s.connected);
-  const anyAgentConnected =
-    agents.codex?.status === "connected" ||
-    agents.claude?.status === "connected";
+  const [shellLayout, setShellLayout] = useState(createShellLayoutState);
+  const agents = useBridgeStore(selectAgents);
+  const activeTask = useTaskStore(selectActiveTask);
+  const workspaceLabel = resolveShellWorkspaceLabel(activeTask?.workspaceRoot, [
+    agents.claude?.providerSession?.cwd,
+    agents.codex?.providerSession?.cwd,
+  ]);
 
   return (
     <div
-      className="flex h-screen text-foreground font-sans"
+      className="flex h-screen flex-col overflow-hidden font-sans text-foreground"
       style={{
         background:
-          "linear-gradient(180deg, #0a0a0a 0%, #0d0d12 50%, #0a0a0a 100%)",
+          "radial-gradient(circle at top, rgba(34,197,94,0.08), transparent 28%), linear-gradient(180deg, #090a0d 0%, #0c0d12 48%, #08090c 100%)",
       }}
     >
-      <div className="w-70 shrink-0 border-r border-border/50 flex flex-col relative noise-bg bg-linear-to-b from-[#0e0e14] to-[#0a0a0a]">
-        <div className="flex items-baseline gap-2 p-4 border-b border-border/50 relative">
-          <h2 className="m-0 text-base font-bold text-gradient-cyber relative z-10">
-            AgentNexus
-          </h2>
-          <span className="text-xs text-muted-foreground/70 relative z-10">
-            v0.1.0
-          </span>
-          <div className="absolute bottom-0 left-4 right-4 h-px bg-linear-to-r from-transparent via-claude/30 to-transparent" />
-        </div>
-        <AgentStatusPanel agents={agents} connected={connected} />
-      </div>
-
-      <div className="flex-1 flex flex-col min-w-0 animate-in fade-in duration-500">
-        <TaskPanel />
-        <MessagePanel messages={messages} />
-        <ReplyInput connected={anyAgentConnected} />
+      <div className="flex flex-1 min-h-0">
+        <ShellContextBar
+          activeItem={shellLayout.activeItem}
+          onToggle={(item) =>
+            setShellLayout((current) => toggleShellNavItem(current, item))
+          }
+        />
+        <TaskContextPopover
+          activePane={shellLayout.sidebarPane}
+          onClose={() =>
+            setShellLayout((current) => closeShellSidebar(current))
+          }
+          task={activeTask}
+        />
+        <main className="flex min-w-0 flex-1 flex-col animate-in fade-in duration-500">
+          <ShellTopBar workspaceLabel={workspaceLabel} />
+          <MessagePanel surfaceMode={shellLayout.mainSurface} />
+          <ReplyInput />
+        </main>
       </div>
     </div>
   );

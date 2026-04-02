@@ -60,10 +60,73 @@ export async function bootstrapTaskStore(
   unlisteners = await listenImpl(set as any);
 }
 
+type ProviderHistorySetter = (
+  fn: (state: TaskStoreData) => Partial<TaskStoreData>,
+) => void;
+
+export function createFetchProviderHistoryAction(
+  set: ProviderHistorySetter,
+  invokeImpl: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> = invoke,
+) {
+  const inFlight = new Map<string, Promise<ProviderHistoryInfo[]>>();
+
+  return async (workspace: string): Promise<void> => {
+    const existing = inFlight.get(workspace);
+    if (existing) {
+      await existing;
+      return;
+    }
+
+    set((s) => ({
+      providerHistoryLoading: { ...s.providerHistoryLoading, [workspace]: true },
+      providerHistoryError: { ...s.providerHistoryError, [workspace]: null },
+    }));
+
+    const request = invokeImpl<ProviderHistoryInfo[]>(
+      "daemon_list_provider_history",
+      {
+        workspace,
+      },
+    )
+      .then((entries) => {
+        set((s) => ({
+          providerHistory: { ...s.providerHistory, [workspace]: entries },
+          providerHistoryLoading: {
+            ...s.providerHistoryLoading,
+            [workspace]: false,
+          },
+          providerHistoryError: { ...s.providerHistoryError, [workspace]: null },
+        }));
+        return entries;
+      })
+      .catch((error) => {
+        set((s) => ({
+          providerHistoryLoading: {
+            ...s.providerHistoryLoading,
+            [workspace]: false,
+          },
+          providerHistoryError: {
+            ...s.providerHistoryError,
+            [workspace]: error instanceof Error ? error.message : String(error),
+          },
+        }));
+        throw error;
+      })
+      .finally(() => {
+        inFlight.delete(workspace);
+      });
+
+    inFlight.set(workspace, request);
+    await request;
+  };
+}
+
 export const useTaskStore = create<TaskStoreState>((set, get) => {
   if (typeof window !== "undefined") {
     void bootstrapTaskStore(set as any);
   }
+
+  const fetchProviderHistory = createFetchProviderHistoryAction(set as any);
 
   return {
     activeTaskId: null,
@@ -102,40 +165,7 @@ export const useTaskStore = create<TaskStoreState>((set, get) => {
       }));
     },
 
-    fetchProviderHistory: async (workspace) => {
-      set((s) => ({
-        providerHistoryLoading: { ...s.providerHistoryLoading, [workspace]: true },
-        providerHistoryError: { ...s.providerHistoryError, [workspace]: null },
-      }));
-      try {
-        const entries = await invoke<ProviderHistoryInfo[]>(
-          "daemon_list_provider_history",
-          {
-            workspace,
-          },
-        );
-        set((s) => ({
-          providerHistory: { ...s.providerHistory, [workspace]: entries },
-          providerHistoryLoading: {
-            ...s.providerHistoryLoading,
-            [workspace]: false,
-          },
-          providerHistoryError: { ...s.providerHistoryError, [workspace]: null },
-        }));
-      } catch (error) {
-        set((s) => ({
-          providerHistoryLoading: {
-            ...s.providerHistoryLoading,
-            [workspace]: false,
-          },
-          providerHistoryError: {
-            ...s.providerHistoryError,
-            [workspace]: error instanceof Error ? error.message : String(error),
-          },
-        }));
-        throw error;
-      }
-    },
+    fetchProviderHistory,
 
     resumeSession: async (sessionId) => {
       await invoke("daemon_resume_session", { sessionId });

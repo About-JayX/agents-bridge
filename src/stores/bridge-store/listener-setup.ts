@@ -8,8 +8,20 @@ import {
   type PermissionPromptPayload,
   type SystemLogPayload,
 } from "./listener-payloads";
-
-const MAX_CODEX_PREVIEW_CHARS = 100_000;
+import {
+  clearPendingClaudePreview,
+  clearPendingCodexStream,
+  createPendingStreamUpdates,
+  flushPendingStreamUpdates,
+  hasPendingStreamUpdates,
+  queueClaudePreviewUpdate,
+  queueCodexBufferedUpdate,
+} from "./stream-batching";
+import {
+  handleClaudeStreamEvent,
+  handleCodexStreamEvent,
+  resetClaudeStream,
+} from "./stream-reducers";
 
 type BridgeSetter = (fn: (state: BridgeState) => Partial<BridgeState>) => void;
 
@@ -19,6 +31,27 @@ export function createBridgeListeners(
   set: BridgeSetter,
   nextLogId: NextLogId,
 ): Promise<UnlistenFn[]> {
+  const pendingStreamUpdates = createPendingStreamUpdates();
+  let flushTimer: ReturnType<typeof setTimeout> | null = null;
+  const cancelPendingFlush = () => {
+    if (flushTimer === null) return;
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  };
+
+  const flushPendingStreams = () => {
+    flushTimer = null;
+    if (!hasPendingStreamUpdates(pendingStreamUpdates)) {
+      return;
+    }
+    set((s) => flushPendingStreamUpdates(s, pendingStreamUpdates));
+  };
+
+  const schedulePendingFlush = () => {
+    if (flushTimer !== null) return;
+    flushTimer = setTimeout(flushPendingStreams, 32);
+  };
+
   return Promise.all([
     listen<AgentMessagePayload>("agent_message", (e) => {
       set((s) => ({
@@ -42,6 +75,18 @@ export function createBridgeListeners(
     }),
     listen<AgentStatusPayload>("agent_status", (e) => {
       const { agent, online, providerSession } = e.payload;
+      if (agent === "claude" && !online) {
+        clearPendingClaudePreview(pendingStreamUpdates);
+        if (!hasPendingStreamUpdates(pendingStreamUpdates)) {
+          cancelPendingFlush();
+        }
+      }
+      if (agent === "codex" && !online) {
+        clearPendingCodexStream(pendingStreamUpdates);
+        if (!hasPendingStreamUpdates(pendingStreamUpdates)) {
+          cancelPendingFlush();
+        }
+      }
       set((s) => ({
         agents: {
           ...s.agents,
@@ -59,9 +104,29 @@ export function createBridgeListeners(
       }));
     }),
     listen<ClaudeStreamPayload>("claude_stream", (e) => {
+      if (queueClaudePreviewUpdate(pendingStreamUpdates, e.payload)) {
+        schedulePendingFlush();
+        return;
+      }
+      clearPendingClaudePreview(pendingStreamUpdates);
+      if (!hasPendingStreamUpdates(pendingStreamUpdates)) {
+        cancelPendingFlush();
+      }
       set((s) => handleClaudeStreamEvent(s, e.payload));
     }),
     listen<CodexStreamPayload>("codex_stream", (e) => {
+      if (queueCodexBufferedUpdate(pendingStreamUpdates, e.payload)) {
+        schedulePendingFlush();
+        return;
+      }
+      if (e.payload.kind === "thinking") {
+        clearPendingCodexStream(pendingStreamUpdates);
+        if (!hasPendingStreamUpdates(pendingStreamUpdates)) {
+          cancelPendingFlush();
+        }
+      } else {
+        flushPendingStreams();
+      }
       set((s) => handleCodexStreamEvent(s, e.payload));
     }),
     listen<PermissionPromptPayload>("permission_prompt", (e) => {
@@ -74,109 +139,5 @@ export function createBridgeListeners(
         ],
       }));
     }),
-  ]);
-}
-
-function resetClaudeStream(state: BridgeState): BridgeState["claudeStream"] {
-  return {
-    ...state.claudeStream,
-    thinking: false,
-    previewText: "",
-    lastUpdatedAt: Date.now(),
-  };
-}
-
-export function handleClaudeStreamEvent(
-  state: BridgeState,
-  payload: ClaudeStreamPayload,
-): Partial<BridgeState> {
-  switch (payload.kind) {
-    case "thinkingStarted":
-      return {
-        claudeStream: {
-          thinking: true,
-          previewText: "",
-          lastUpdatedAt: Date.now(),
-        },
-      };
-    case "preview":
-      return {};
-    case "done":
-    case "reset":
-      return { claudeStream: resetClaudeStream(state) };
-    default:
-      return {};
-  }
-}
-
-export function handleCodexStreamEvent(
-  state: BridgeState,
-  payload: CodexStreamPayload,
-): Partial<BridgeState> {
-  switch (payload.kind) {
-    case "thinking":
-      return {
-        codexStream: {
-          ...state.codexStream,
-          thinking: true,
-          currentDelta: "",
-          turnStatus: "",
-          activity: "",
-          reasoning: "",
-          commandOutput: "",
-        },
-      };
-    case "activity":
-      return {
-        codexStream: {
-          ...state.codexStream,
-          activity: payload.label ?? "",
-          commandOutput: "",
-        },
-      };
-    case "reasoning":
-      return {
-        codexStream: {
-          ...state.codexStream,
-          reasoning: (payload.text ?? "").slice(-MAX_CODEX_PREVIEW_CHARS),
-        },
-      };
-    case "commandOutput":
-      return {
-        codexStream: {
-          ...state.codexStream,
-          commandOutput: state.codexStream.commandOutput + (payload.text ?? ""),
-        },
-      };
-    case "delta":
-      return {
-        codexStream: {
-          ...state.codexStream,
-          // daemon sends the full normalized preview on each delta update
-          currentDelta: (payload.text ?? "").slice(-MAX_CODEX_PREVIEW_CHARS),
-        },
-      };
-    case "message":
-      return {
-        codexStream: {
-          ...state.codexStream,
-          lastMessage: payload.text ?? "",
-          currentDelta: "",
-        },
-      };
-    case "turnDone":
-      return {
-        codexStream: {
-          thinking: false,
-          currentDelta: "",
-          lastMessage: "",
-          turnStatus: payload.status ?? "",
-          activity: "",
-          reasoning: "",
-          commandOutput: "",
-        },
-      };
-    default:
-      return {};
-  }
+  ]).then((fns) => [...fns, cancelPendingFlush]);
 }

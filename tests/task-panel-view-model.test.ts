@@ -191,7 +191,7 @@ describe("getReviewBadge", () => {
 describe("getTaskPanelEmptyStateMessage", () => {
   test("keeps the no-task copy scoped to task workspace semantics", () => {
     expect(getTaskPanelEmptyStateMessage()).toBe(
-      "No active task. Create or select a task to inspect task progress, review status, and artifacts.",
+      "No active task. Create or select a task to track progress, review status, and artifacts.",
     );
   });
 });

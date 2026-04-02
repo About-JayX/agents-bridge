@@ -9,6 +9,7 @@ use crate::daemon::task_graph::types::*;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
+use tokio::time::{timeout, Duration};
 
 /// Register a new Codex session into the normalized task graph.
 /// If `reg.external_id` is set, it is bound immediately (typical for
@@ -199,6 +200,16 @@ pub async fn list_threads(
     let result =
         crate::daemon::codex::ws_client::thread_list(port, Value::Object(rpc_params), app).await?;
     map_thread_page_response(&result, params.archived)
+}
+
+pub async fn is_app_server_reachable(port: u16) -> bool {
+    timeout(
+        Duration::from_millis(150),
+        tokio::net::TcpStream::connect(format!("127.0.0.1:{port}")),
+    )
+    .await
+    .map(|result| result.is_ok())
+    .unwrap_or(false)
 }
 
 pub fn list_local_sessions(
