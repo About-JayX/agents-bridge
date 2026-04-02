@@ -1,11 +1,35 @@
+import { useMemo } from "react";
 import { useBridgeStore } from "@/stores/bridge-store";
 import { SourceBadge } from "./SourceBadge";
-import { getCodexStreamIndicatorViewModel } from "./view-model";
+import {
+  getCodexStreamIndicatorViewModel,
+  getStreamTextTail,
+} from "./view-model";
 
 export function CodexStreamIndicator() {
-  const codexStream = useBridgeStore((s) => s.codexStream);
-  const { thinking, currentDelta, reasoning, commandOutput } = codexStream;
+  const thinking = useBridgeStore((s) => s.codexStream.thinking);
+  const currentDelta = useBridgeStore((s) => s.codexStream.currentDelta);
+  const activity = useBridgeStore((s) => s.codexStream.activity);
+  const reasoning = useBridgeStore((s) => s.codexStream.reasoning);
+  const commandOutput = useBridgeStore((s) => s.codexStream.commandOutput);
+  const codexStream = {
+    thinking,
+    currentDelta,
+    lastMessage: "",
+    turnStatus: "",
+    activity,
+    reasoning,
+    commandOutput,
+  };
   const viewModel = getCodexStreamIndicatorViewModel(codexStream);
+  const displayReasoning = useMemo(
+    () => getStreamTextTail(reasoning, 300),
+    [reasoning],
+  );
+  const displayCommandOutput = useMemo(
+    () => getStreamTextTail(commandOutput, 500),
+    [commandOutput],
+  );
 
   if (!viewModel.visible) return null;
 
@@ -25,14 +49,12 @@ export function CodexStreamIndicator() {
           </div>
           {reasoning && !currentDelta && (
             <div className="text-[12px] text-foreground/50 italic whitespace-pre-wrap max-h-24 overflow-y-auto mb-1">
-              {reasoning.length > 300 ? "…" + reasoning.slice(-300) : reasoning}
+              {displayReasoning}
             </div>
           )}
           {commandOutput && !currentDelta && (
             <div className="text-[11px] text-emerald-300/70 font-mono whitespace-pre-wrap max-h-20 overflow-y-auto mb-1 bg-black/20 rounded px-1.5 py-1">
-              {commandOutput.length > 500
-                ? "…" + commandOutput.slice(-500)
-                : commandOutput}
+              {displayCommandOutput}
             </div>
           )}
           {currentDelta && (

@@ -15,6 +15,12 @@ export interface CodexStreamIndicatorViewModel {
   statusLabel: string;
 }
 
+export interface MessageListDisplayState {
+  timelineCount: number;
+  streamRailIndicators: StreamIndicatorId[];
+  hasContent: boolean;
+}
+
 export function getMessageIdentityPresentation(
   message: BridgeMessage,
 ): {
@@ -50,6 +56,25 @@ export function getTransientIndicators(
       ? (["codex"] as const)
       : []),
   ];
+}
+
+export function getMessageListDisplayState(
+  messageCount: number,
+  streamRailIndicators: StreamIndicatorId[],
+): MessageListDisplayState {
+  return {
+    timelineCount: messageCount,
+    streamRailIndicators,
+    hasContent: messageCount > 0 || streamRailIndicators.length > 0,
+  };
+}
+
+export function getStreamTextTail(text: string, maxChars: number): string {
+  if (text.length <= maxChars) {
+    return text;
+  }
+
+  return `…${text.slice(-maxChars)}`;
 }
 
 export function getCodexStreamIndicatorViewModel(

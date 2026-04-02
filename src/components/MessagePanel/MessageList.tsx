@@ -1,11 +1,14 @@
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useBridgeStore } from "@/stores/bridge-store";
 import type { BridgeMessage } from "@/types";
 import { MessageBubble } from "./MessageBubble";
 import { CodexStreamIndicator } from "./CodexStreamIndicator";
 import { ClaudeStreamIndicator } from "./ClaudeStreamIndicator";
-import { getTransientIndicators } from "./view-model";
+import {
+  getCodexStreamIndicatorViewModel,
+  getMessageListDisplayState,
+} from "./view-model";
 
 interface Props {
   messages: BridgeMessage[];
@@ -15,11 +18,23 @@ export function MessageList({ messages }: Props) {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const didInitialScrollRef = useRef(false);
   const [atBottom, setAtBottom] = useState(true);
-  const codexStream = useBridgeStore((s) => s.codexStream);
-  const claudeStream = useBridgeStore((s) => s.claudeStream);
-  const indicators = getTransientIndicators(claudeStream, codexStream);
+  const claudeThinking = useBridgeStore((s) => s.claudeStream.thinking);
+  const codexVisible = useBridgeStore((s) =>
+    getCodexStreamIndicatorViewModel(s.codexStream).visible,
+  );
+  const streamRailIndicators = useMemo(
+    () => [
+      ...(claudeThinking ? (["claude"] as const) : []),
+      ...(codexVisible ? (["codex"] as const) : []),
+    ],
+    [claudeThinking, codexVisible],
+  );
 
-  const totalCount = messages.length + indicators.length;
+  const displayState = useMemo(
+    () => getMessageListDisplayState(messages.length, streamRailIndicators),
+    [messages.length, streamRailIndicators],
+  );
+  const totalCount = displayState.timelineCount;
 
   const handleAtBottomChange = useCallback((bottom: boolean) => {
     setAtBottom(bottom);
@@ -42,7 +57,7 @@ export function MessageList({ messages }: Props) {
     return () => window.cancelAnimationFrame(raf);
   }, [totalCount]);
 
-  if (totalCount === 0) {
+  if (!displayState.hasContent) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-[13px] text-muted-foreground animate-in fade-in duration-500">
@@ -53,30 +68,34 @@ export function MessageList({ messages }: Props) {
   }
 
   return (
-    <div className="flex-1 min-h-0 relative">
-      <Virtuoso
-        ref={virtuosoRef}
-        totalCount={totalCount}
-        atBottomStateChange={handleAtBottomChange}
-        atBottomThreshold={80}
-        followOutput="smooth"
-        className="h-full"
-        increaseViewportBy={200}
-        itemContent={(index) => {
-          const indicator = indicators[index - messages.length];
-          return (
+    <div className="flex-1 min-h-0 relative flex flex-col">
+      <div className="flex-1 min-h-0">
+        <Virtuoso
+          ref={virtuosoRef}
+          totalCount={totalCount}
+          atBottomStateChange={handleAtBottomChange}
+          atBottomThreshold={80}
+          followOutput="smooth"
+          className="h-full"
+          increaseViewportBy={200}
+          itemContent={(index) => (
             <div className="px-4">
-              {index < messages.length ? (
-                <MessageBubble msg={messages[index]} />
-              ) : indicator === "claude" ? (
-                <ClaudeStreamIndicator />
-              ) : (
-                <CodexStreamIndicator />
-              )}
+              <MessageBubble msg={messages[index]} />
             </div>
-          );
-        }}
-      />
+          )}
+        />
+      </div>
+      {displayState.streamRailIndicators.length > 0 && (
+        <div className="border-t border-border/60 px-4 pb-2 pt-1 bg-background/95">
+          {displayState.streamRailIndicators.map((indicator) =>
+            indicator === "claude" ? (
+              <ClaudeStreamIndicator key={indicator} />
+            ) : (
+              <CodexStreamIndicator key={indicator} />
+            ),
+          )}
+        </div>
+      )}
       {!atBottom && (
         <button
           onClick={scrollToBottom}

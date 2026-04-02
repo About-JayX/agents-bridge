@@ -1,6 +1,7 @@
+import { useEffect, useMemo, useRef } from "react";
 import { useBridgeStore } from "@/stores/bridge-store";
+import { getStreamTextTail } from "./view-model";
 import { SourceBadge } from "./SourceBadge";
-import { useEffect, useRef } from "react";
 
 export function ClaudeStreamIndicator() {
   const thinking = useBridgeStore((s) => s.claudeStream.thinking);
@@ -18,8 +19,10 @@ export function ClaudeStreamIndicator() {
 
   const hasContent = previewText.length > 0;
   // Show tail of long content to keep it responsive
-  const displayText =
-    previewText.length > 3000 ? "…" + previewText.slice(-3000) : previewText;
+  const displayText = useMemo(
+    () => getStreamTextTail(previewText, 3000),
+    [previewText],
+  );
 
   return (
     <div className="py-2">
