@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { useBridgeStore } from "@/stores/bridge-store";
 import { getStreamTextTail } from "./view-model";
 import { SourceBadge } from "./SourceBadge";
@@ -6,15 +6,6 @@ import { SourceBadge } from "./SourceBadge";
 export function ClaudeStreamIndicator() {
   const thinking = useBridgeStore((s) => s.claudeStream.thinking);
   const previewText = useBridgeStore((s) => s.claudeStream.previewText);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Auto-scroll the streaming content container
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [previewText]);
-
   if (!thinking && !previewText) return null;
 
   const hasContent = previewText.length > 0;
@@ -42,10 +33,7 @@ export function ClaudeStreamIndicator() {
             )}
           </div>
           {hasContent && (
-            <div
-              ref={scrollRef}
-              className="text-[13px] text-card-foreground leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto"
-            >
+            <div className="text-[13px] text-card-foreground leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto">
               {displayText}
             </div>
           )}

@@ -7,6 +7,13 @@ import type {
 const MAX_CLAUDE_PREVIEW_CHARS = 5_000;
 const MAX_CODEX_PREVIEW_CHARS = 100_000;
 
+interface CodexStreamBatch {
+  activity: string | null;
+  reasoning: string | null;
+  delta: string | null;
+  commandOutputAppend: string;
+}
+
 export function resetClaudeStream(
   state: BridgeState,
 ): BridgeState["claudeStream"] {
@@ -118,4 +125,27 @@ export function handleCodexStreamEvent(
     default:
       return {};
   }
+}
+
+export function handleCodexStreamBatch(
+  state: BridgeState,
+  batch: CodexStreamBatch,
+): Partial<BridgeState> {
+  const next = { ...state.codexStream };
+
+  if (batch.activity !== null) {
+    next.activity = batch.activity;
+    next.commandOutput = "";
+  }
+  if (batch.reasoning !== null) {
+    next.reasoning = batch.reasoning.slice(-MAX_CODEX_PREVIEW_CHARS);
+  }
+  if (batch.delta !== null) {
+    next.currentDelta = batch.delta.slice(-MAX_CODEX_PREVIEW_CHARS);
+  }
+  if (batch.commandOutputAppend) {
+    next.commandOutput += batch.commandOutputAppend;
+  }
+
+  return { codexStream: next };
 }
