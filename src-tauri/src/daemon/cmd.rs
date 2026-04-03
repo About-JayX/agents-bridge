@@ -67,6 +67,9 @@ pub enum DaemonCmd {
         task_id: String,
         reply: oneshot::Sender<Result<(), String>>,
     },
+    ClearActiveTask {
+        reply: oneshot::Sender<Result<(), String>>,
+    },
     GetTaskSnapshot {
         reply: oneshot::Sender<Option<TaskSnapshot>>,
     },

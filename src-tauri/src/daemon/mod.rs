@@ -507,6 +507,11 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
                 }
                 let _ = reply.send(result.map(|_| ()));
             }
+            DaemonCmd::ClearActiveTask { reply } => {
+                state.write().await.set_active_task(None);
+                gui_task::TaskUiEvent::ActiveTaskChanged { task_id: None }.emit(&app);
+                let _ = reply.send(Ok(()));
+            }
             DaemonCmd::GetTaskSnapshot { reply } => {
                 let _ = reply.send(state.read().await.task_snapshot());
             }

@@ -4,6 +4,7 @@ import type {
   Provider,
   ProviderHistoryInfo,
   SessionRole,
+  TaskStoreData,
   TaskInfo,
   TaskStoreState,
 } from "./types";
@@ -28,6 +29,8 @@ type TaskSetter = (
     providerHistory: Record<string, ProviderHistoryInfo[]>;
     providerHistoryLoading: Record<string, boolean>;
     providerHistoryError: Record<string, string | null>;
+    bootstrapComplete: boolean;
+    bootstrapError: string | null;
   }) => Partial<{
     activeTaskId: string | null;
     tasks: Record<string, TaskInfo>;
@@ -36,6 +39,8 @@ type TaskSetter = (
     providerHistory: Record<string, ProviderHistoryInfo[]>;
     providerHistoryLoading: Record<string, boolean>;
     providerHistoryError: Record<string, string | null>;
+    bootstrapComplete: boolean;
+    bootstrapError: string | null;
   }>,
 ) => void;
 
@@ -53,11 +58,21 @@ export async function bootstrapTaskStore(
   invokeImpl: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> = invoke,
   listenImpl: typeof createTaskListeners = createTaskListeners,
 ) {
-  const snap = await invokeImpl<TaskSnapshot | null>("daemon_get_task_snapshot");
-  if (snap) {
-    set(() => snapshotToPatch(snap));
+  set(() => ({ bootstrapComplete: false, bootstrapError: null }));
+
+  try {
+    await invokeImpl("daemon_clear_active_task");
+    const snap = await invokeImpl<TaskSnapshot | null>("daemon_get_task_snapshot");
+    if (snap) {
+      set(() => snapshotToPatch(snap));
+    }
+    set(() => ({ bootstrapComplete: true }));
+    unlisteners = await listenImpl(set as any);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    set(() => ({ bootstrapComplete: false, bootstrapError: message }));
+    throw error;
   }
-  unlisteners = await listenImpl(set as any);
 }
 
 type ProviderHistorySetter = (
@@ -123,7 +138,7 @@ export function createFetchProviderHistoryAction(
 
 export const useTaskStore = create<TaskStoreState>((set, get) => {
   if (typeof window !== "undefined") {
-    void bootstrapTaskStore(set as any);
+    void bootstrapTaskStore(set as any).catch(() => {});
   }
 
   const fetchProviderHistory = createFetchProviderHistoryAction(set as any);
@@ -136,6 +151,8 @@ export const useTaskStore = create<TaskStoreState>((set, get) => {
     providerHistory: {},
     providerHistoryLoading: {},
     providerHistoryError: {},
+    bootstrapComplete: false,
+    bootstrapError: null,
 
     createTask: async (workspace, title) => {
       const task = await invoke<TaskInfo>("daemon_create_task", {

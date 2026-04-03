@@ -27,6 +27,8 @@ function emptyState(): TaskStoreData {
     providerHistory: {},
     providerHistoryLoading: {},
     providerHistoryError: {},
+    bootstrapComplete: false,
+    bootstrapError: null,
   };
 }
 
@@ -241,13 +243,17 @@ describe("bootstrapTaskStore", () => {
     const task = makeTask("t1", "Hydrated");
     const session = makeSession("s1", "t1");
     const calls: Partial<TaskStoreData>[] = [];
+    const commands: string[] = [];
 
     await bootstrapTaskStore(
       (fn) => {
         calls.push(fn(emptyState()));
       },
       async (cmd) => {
-        expect(cmd).toBe("daemon_get_task_snapshot");
+        commands.push(cmd);
+        if (cmd === "daemon_clear_active_task") {
+          return undefined as never;
+        }
         return {
           task,
           sessions: [session],
@@ -257,9 +263,72 @@ describe("bootstrapTaskStore", () => {
       async () => [() => {}],
     );
 
-    expect(calls[0]?.activeTaskId).toBe("t1");
-    expect(calls[0]?.tasks?.t1?.title).toBe("Hydrated");
-    expect(calls[0]?.sessions?.t1?.[0]?.sessionId).toBe("s1");
+    const hydrationPatch = calls.find((patch) => patch.activeTaskId === "t1");
+    expect(commands).toEqual([
+      "daemon_clear_active_task",
+      "daemon_get_task_snapshot",
+    ]);
+    expect(hydrationPatch?.tasks?.t1?.title).toBe("Hydrated");
+    expect(hydrationPatch?.sessions?.t1?.[0]?.sessionId).toBe("s1");
+  });
+
+  test("clears active task before hydrating snapshot", async () => {
+    const commands: string[] = [];
+
+    await bootstrapTaskStore(
+      () => {},
+      async (cmd) => {
+        commands.push(cmd);
+        if (cmd === "daemon_get_task_snapshot") {
+          return null;
+        }
+        return undefined as never;
+      },
+      async () => [() => {}],
+    );
+
+    expect(commands[0]).toBe("daemon_clear_active_task");
+    expect(commands[1]).toBe("daemon_get_task_snapshot");
+  });
+
+  test("marks bootstrap complete only after clear and snapshot finish", async () => {
+    const patches: Array<Record<string, unknown>> = [];
+    const set = (fn: (state: TaskStoreData) => Record<string, unknown>) => {
+      patches.push(fn(emptyState()));
+    };
+
+    await bootstrapTaskStore(
+      set as any,
+      async (cmd) => {
+        if (cmd === "daemon_get_task_snapshot") {
+          return null;
+        }
+        return undefined as never;
+      },
+      async () => [() => {}],
+    );
+
+    expect(patches[0]?.bootstrapComplete).toBe(false);
+    expect(patches.at(-1)?.bootstrapComplete).toBe(true);
+  });
+
+  test("records a blocking bootstrap error when clear fails", async () => {
+    const patches: Array<Record<string, unknown>> = [];
+    const set = (fn: (state: TaskStoreData) => Record<string, unknown>) => {
+      patches.push(fn(emptyState()));
+    };
+
+    await expect(
+      bootstrapTaskStore(
+        set as any,
+        async () => {
+          throw new Error("clear failed");
+        },
+        async () => [() => {}],
+      ),
+    ).rejects.toThrow("clear failed");
+
+    expect(patches.at(-1)?.bootstrapError).toBe("clear failed");
   });
 });
 

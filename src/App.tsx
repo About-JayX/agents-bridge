@@ -1,9 +1,11 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { MessagePanel } from "./components/MessagePanel";
 import { ReplyInput } from "./components/ReplyInput";
 import { ShellContextBar } from "./components/ShellContextBar";
 import { ShellTopBar } from "./components/ShellTopBar";
 import { TaskContextPopover } from "./components/TaskContextPopover";
+import { AppBootstrapGate } from "./components/AppBootstrapGate";
+import { WorkspaceEntryOverlay } from "./components/WorkspaceEntryOverlay";
 import {
   closeShellSidebar,
   createShellLayoutState,
@@ -17,13 +19,38 @@ import { selectActiveTask } from "./stores/task-store/selectors";
 import { filterRenderableChatMessages } from "./components/MessagePanel/view-model";
 import { useTheme } from "./components/use-theme";
 import { useBorderRadius } from "./components/use-border-radius";
+import { useCodexAccountStore } from "./stores/codex-account-store";
+import {
+  loadRecentWorkspaces,
+  pushRecentWorkspace,
+  selectWorkspaceCandidate,
+  type WorkspaceCandidate,
+} from "./components/workspace-entry-state";
+
+const RECENT_WORKSPACES_STORAGE_KEY = "dimweave:recent-workspaces";
+
+function deriveWorkspaceTaskTitle(workspace: string) {
+  const parts = workspace.split(/[\\/]/).filter(Boolean);
+  return parts.at(-1) || workspace;
+}
 
 export default function App() {
   const theme = useTheme();
   const radius = useBorderRadius();
   const [shellLayout, setShellLayout] = useState(createShellLayoutState);
+  const [recentWorkspaces, setRecentWorkspaces] = useState<string[]>([]);
+  const [recentWorkspacesLoaded, setRecentWorkspacesLoaded] = useState(false);
+  const [selectedWorkspace, setSelectedWorkspace] =
+    useState<WorkspaceCandidate | null>(null);
+  const [workspaceActionError, setWorkspaceActionError] = useState<string | null>(
+    null,
+  );
   const agents = useBridgeStore(selectAgents);
   const activeTask = useTaskStore(selectActiveTask);
+  const bootstrapComplete = useTaskStore((s) => s.bootstrapComplete);
+  const bootstrapError = useTaskStore((s) => s.bootstrapError);
+  const createTask = useTaskStore((s) => s.createTask);
+  const pickDirectory = useCodexAccountStore((s) => s.pickDirectory);
   const workspaceLabel = resolveShellWorkspaceLabel(activeTask?.workspaceRoot, [
     agents.claude?.providerSession?.cwd,
     agents.codex?.providerSession?.cwd,
@@ -41,8 +68,88 @@ export default function App() {
     [allTerminalLines],
   );
 
+  useEffect(() => {
+    if (!bootstrapComplete || recentWorkspacesLoaded) {
+      return;
+    }
+
+    try {
+      setRecentWorkspaces(
+        loadRecentWorkspaces(localStorage.getItem(RECENT_WORKSPACES_STORAGE_KEY)),
+      );
+    } catch {
+      setRecentWorkspaces([]);
+    }
+
+    setRecentWorkspacesLoaded(true);
+  }, [bootstrapComplete, recentWorkspacesLoaded]);
+
+  useEffect(() => {
+    if (!activeTask) {
+      return;
+    }
+    setSelectedWorkspace(null);
+    setWorkspaceActionError(null);
+  }, [activeTask]);
+
+  const handleChooseWorkspace = useCallback(async () => {
+    setWorkspaceActionError(null);
+    const picked = await pickDirectory();
+    if (!picked) {
+      return;
+    }
+    setSelectedWorkspace((current) =>
+      selectWorkspaceCandidate({ type: "picked", path: picked }, current),
+    );
+  }, [pickDirectory]);
+
+  const handleSelectRecentWorkspace = useCallback(
+    (next: WorkspaceCandidate) => {
+      setWorkspaceActionError(null);
+      setSelectedWorkspace((current) => selectWorkspaceCandidate(next, current));
+    },
+    [],
+  );
+
+  const handleContinueIntoWorkspace = useCallback(async () => {
+    if (!selectedWorkspace) {
+      return;
+    }
+
+    try {
+      setWorkspaceActionError(null);
+      await createTask(
+        selectedWorkspace.path,
+        deriveWorkspaceTaskTitle(selectedWorkspace.path),
+      );
+      const nextRecent = pushRecentWorkspace(
+        recentWorkspaces,
+        selectedWorkspace.path,
+      );
+      setRecentWorkspaces(nextRecent);
+      try {
+        localStorage.setItem(
+          RECENT_WORKSPACES_STORAGE_KEY,
+          JSON.stringify(nextRecent),
+        );
+      } catch {}
+    } catch (error) {
+      setWorkspaceActionError(
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }, [createTask, recentWorkspaces, selectedWorkspace]);
+
+  if (bootstrapError) {
+    return <AppBootstrapGate status="error" message={bootstrapError} />;
+  }
+
+  if (!bootstrapComplete) {
+    return <AppBootstrapGate status="loading" />;
+  }
+
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background font-sans text-foreground">
+    <div className="relative flex h-screen flex-col overflow-hidden bg-background font-sans text-foreground">
       <div className="flex flex-1 min-h-0">
         <ShellContextBar
           activeItem={shellLayout.activeItem}
@@ -74,6 +181,16 @@ export default function App() {
           {shellLayout.mainSurface === "chat" && <ReplyInput />}
         </main>
       </div>
+      {!activeTask && (
+        <WorkspaceEntryOverlay
+          selected={selectedWorkspace}
+          recentWorkspaces={recentWorkspaces}
+          actionError={workspaceActionError}
+          onChooseFolder={handleChooseWorkspace}
+          onSelectRecent={handleSelectRecentWorkspace}
+          onContinue={handleContinueIntoWorkspace}
+        />
+      )}
     </div>
   );
 }

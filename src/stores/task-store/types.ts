@@ -105,6 +105,8 @@ export interface TaskStoreData {
   providerHistory: Record<string, ProviderHistoryInfo[]>;
   providerHistoryLoading: Record<string, boolean>;
   providerHistoryError: Record<string, string | null>;
+  bootstrapComplete: boolean;
+  bootstrapError: string | null;
 }
 
 export interface TaskStoreState extends TaskStoreData {
