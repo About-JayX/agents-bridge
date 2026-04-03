@@ -298,8 +298,8 @@ pub async fn run(app: AppHandle, mut cmd_rx: mpsc::Receiver<DaemonCmd>) {
     let mut claude_sdk_handle: Option<claude_sdk::ClaudeSdkHandle> = None;
     while let Some(cmd) = cmd_rx.recv().await {
         match cmd {
-            DaemonCmd::SendUserInput { content, target } => {
-                routing::route_user_input(&state, &app, content, target).await;
+            DaemonCmd::SendUserInput { content, target, attachments } => {
+                routing::route_user_input(&state, &app, content, target, attachments).await;
             }
             DaemonCmd::LaunchCodex {
                 role_id,

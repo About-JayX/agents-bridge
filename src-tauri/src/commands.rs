@@ -32,6 +32,7 @@ fn validate_claude_launch_args(role_id: &str, cwd: &str) -> Result<(), String> {
 pub async fn daemon_send_user_input(
     content: String,
     target: String,
+    attachments: Option<Vec<crate::daemon::types::Attachment>>,
     sender: State<'_, DaemonSender>,
 ) -> Result<(), String> {
     if target != "auto" && !crate::daemon::is_valid_agent_role(&target) {
@@ -39,7 +40,11 @@ pub async fn daemon_send_user_input(
     }
     sender
         .0
-        .send(DaemonCmd::SendUserInput { content, target })
+        .send(DaemonCmd::SendUserInput {
+            content,
+            target,
+            attachments,
+        })
         .await
         .map_err(|e| e.to_string())
 }

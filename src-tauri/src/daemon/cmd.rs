@@ -1,12 +1,15 @@
 use crate::daemon::provider::shared::ProviderHistoryEntry;
 use crate::daemon::task_graph::types::{Provider, SessionRole, Task};
-use crate::daemon::types::{self, HistoryEntry, PermissionBehavior, SessionTreeSnapshot, TaskSnapshot};
+use crate::daemon::types::{
+    self, HistoryEntry, PermissionBehavior, SessionTreeSnapshot, TaskSnapshot,
+};
 use tokio::sync::{mpsc, oneshot};
 
 pub enum DaemonCmd {
     SendUserInput {
         content: String,
         target: String,
+        attachments: Option<Vec<crate::daemon::types::Attachment>>,
     },
     LaunchCodex {
         role_id: String,

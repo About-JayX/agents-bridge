@@ -11,10 +11,8 @@ use codex::auth::CodexProfile;
 use codex::models::CodexModel;
 use codex::oauth::OAuthHandle;
 use codex::usage::UsageSnapshot;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-};
 use tauri::{Manager, WindowEvent};
 use tauri_plugin_dialog::DialogExt;
 use tokio::sync::mpsc;
@@ -70,6 +68,15 @@ async fn pick_directory(app: tauri::AppHandle) -> Result<Option<String>, String>
     rx.await.map_err(|_| "dialog cancelled".to_string())
 }
 
+#[tauri::command]
+async fn pick_files(app: tauri::AppHandle) -> Result<Option<Vec<String>>, String> {
+    let (tx, rx) = tokio::sync::oneshot::channel::<Option<Vec<String>>>();
+    app.dialog().file().pick_files(move |paths| {
+        let _ = tx.send(paths.map(|ps| ps.into_iter().map(|p| p.to_string()).collect()));
+    });
+    rx.await.map_err(|_| "dialog cancelled".to_string())
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 fn main() {
@@ -105,6 +112,7 @@ fn main() {
             refresh_usage,
             list_codex_models,
             pick_directory,
+            pick_files,
             mcp::register_mcp,
             mcp::check_mcp_registered,
             commands::oauth::codex_login,

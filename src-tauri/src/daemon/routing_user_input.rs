@@ -1,4 +1,9 @@
-use crate::daemon::{gui, routing, state::DaemonState, types::BridgeMessage, SharedState};
+use crate::daemon::{
+    gui, routing,
+    state::DaemonState,
+    types::{Attachment, BridgeMessage},
+    SharedState,
+};
 use tauri::AppHandle;
 
 pub async fn route_user_input(
@@ -6,6 +11,7 @@ pub async fn route_user_input(
     app: &AppHandle,
     content: String,
     target: String,
+    attachments: Option<Vec<Attachment>>,
 ) {
     if content.trim().is_empty() {
         gui::emit_system_log(app, "warn", "[Route] ignoring empty user input");
@@ -25,14 +31,14 @@ pub async fn route_user_input(
         target
     };
     let now = chrono::Utc::now().timestamp_millis() as u64;
-    let mut display_msg = build_user_message(now, &display_to, &content);
+    let mut display_msg = build_user_message(now, &display_to, &content, &attachments);
     {
         let s = state.read().await;
         s.stamp_message_context("user", &mut display_msg);
     }
     gui::emit_agent_message(app, &display_msg);
     for role in targets {
-        let mut msg = build_user_message(now, &role, &content);
+        let mut msg = build_user_message(now, &role, &content, &attachments);
         {
             let s = state.read().await;
             s.stamp_message_context("user", &mut msg);
@@ -68,7 +74,12 @@ fn role_is_online(state: &DaemonState, role: &str) -> bool {
         || (state.is_agent_online("codex") && state.codex_role == role)
 }
 
-fn build_user_message(now: u64, to: &str, content: &str) -> BridgeMessage {
+fn build_user_message(
+    now: u64,
+    to: &str,
+    content: &str,
+    attachments: &Option<Vec<Attachment>>,
+) -> BridgeMessage {
     let suffix = if to == "user" {
         String::new()
     } else {
@@ -87,6 +98,6 @@ fn build_user_message(now: u64, to: &str, content: &str) -> BridgeMessage {
         task_id: None,
         session_id: None,
         sender_agent_id: None,
-        attachments: None,
+        attachments: attachments.clone(),
     }
 }
