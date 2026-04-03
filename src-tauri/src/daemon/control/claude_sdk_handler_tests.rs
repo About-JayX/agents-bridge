@@ -1,7 +1,6 @@
 use super::{
-    enqueue_events, nonce::current_launch_nonce, nonce::LaunchNonceError,
-    nonce::LaunchNonceQuery, processing::summarize_event_shape,
-    processing::summarize_events_batch, EventEnqueueError,
+    enqueue_events, nonce::current_launch_nonce, nonce::LaunchNonceError, nonce::LaunchNonceQuery,
+    processing::summarize_event_shape, processing::summarize_events_batch, EventEnqueueError,
 };
 use crate::daemon::claude_sdk::protocol::PostEventsBody as EventsBody;
 use crate::daemon::state::DaemonState;

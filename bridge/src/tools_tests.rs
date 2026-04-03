@@ -110,7 +110,10 @@ fn tool_list_contains_both_tools() {
 fn get_online_agents_schema_has_no_required_params() {
     let schema = get_online_agents_schema();
     assert_eq!(schema["name"], "get_online_agents");
-    assert!(schema["inputSchema"]["properties"].as_object().unwrap().is_empty());
+    assert!(schema["inputSchema"]["properties"]
+        .as_object()
+        .unwrap()
+        .is_empty());
 }
 
 #[test]

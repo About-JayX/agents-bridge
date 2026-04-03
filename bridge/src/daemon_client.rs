@@ -126,7 +126,9 @@ pub async fn run(
 async fn send_outbound(
     agent_id: &str,
     sink: &mut futures_util::stream::SplitSink<
-        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
         Message,
     >,
     pending: &mut Vec<BridgeOutbound>,
@@ -177,12 +179,20 @@ async fn handle_inbound(
     match serde_json::from_str::<DaemonMsg>(txt) {
         Ok(dm) => match dm {
             DaemonMsg::RoutedMessage { message } => {
-                if push_tx.send(DaemonInbound::RoutedMessage(message)).await.is_err() {
+                if push_tx
+                    .send(DaemonInbound::RoutedMessage(message))
+                    .await
+                    .is_err()
+                {
                     eprintln!("[Bridge/{agent_id}] push channel closed");
                 }
             }
             DaemonMsg::PermissionVerdict { verdict } => {
-                if push_tx.send(DaemonInbound::PermissionVerdict(verdict)).await.is_err() {
+                if push_tx
+                    .send(DaemonInbound::PermissionVerdict(verdict))
+                    .await
+                    .is_err()
+                {
                     eprintln!("[Bridge/{agent_id}] push channel closed");
                 }
             }

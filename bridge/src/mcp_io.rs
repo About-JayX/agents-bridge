@@ -36,7 +36,11 @@ async fn handle_get_online_agents(
     rpc_id: &Option<crate::mcp_protocol::RpcId>,
 ) -> serde_json::Value {
     let (tx, rx) = tokio::sync::oneshot::channel();
-    if reply_tx.send(BridgeOutbound::GetOnlineAgents(tx)).await.is_err() {
+    if reply_tx
+        .send(BridgeOutbound::GetOnlineAgents(tx))
+        .await
+        .is_err()
+    {
         return tool_error(rpc_id, -32001, "bridge outbound channel is closed");
     }
     match tokio::time::timeout(std::time::Duration::from_secs(5), rx).await {
@@ -58,7 +62,11 @@ fn tool_ok(id: &Option<crate::mcp_protocol::RpcId>, text: &str) -> serde_json::V
     })
 }
 
-fn tool_error(id: &Option<crate::mcp_protocol::RpcId>, code: i32, message: &str) -> serde_json::Value {
+fn tool_error(
+    id: &Option<crate::mcp_protocol::RpcId>,
+    code: i32,
+    message: &str,
+) -> serde_json::Value {
     serde_json::json!({
         "jsonrpc": "2.0",
         "id": id_to_value(id),
@@ -141,7 +149,9 @@ mod tests {
         };
         let response = tool_call_response("claude", &reply_tx, &msg).await;
         assert_eq!(response["error"]["code"], -32002);
-        assert!(response["error"]["message"].as_str().unwrap_or_default()
+        assert!(response["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
             .contains("Invalid status: \"waiting\""));
     }
 

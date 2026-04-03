@@ -6,13 +6,13 @@ use crate::daemon::{
     types::MessageStatus,
     SharedState,
 };
-use serde_json::Value;
-use tauri::AppHandle;
 use delivery::{
     begin_sdk_direct_text_turn_if_allowed, build_direct_sdk_gui_message,
     claim_sdk_terminal_delivery, finish_sdk_direct_text_turn,
 };
+use serde_json::Value;
 use stream::{extract_assistant_text, flush_pending_preview_batch, handle_stream_event};
+use tauri::AppHandle;
 
 #[path = "event_handler_delivery.rs"]
 mod delivery;
@@ -35,7 +35,8 @@ pub async fn handle_events(events: Vec<Value>, role: &str, state: SharedState, a
             "control_request" => handle_control_request(&event, &state, &app).await,
             "system" => handle_system(&event, &app),
             "result" => handle_result(&event, role, &state, &app).await,
-            "user" | "keep_alive" | "control_cancel_request" => { /* echo / heartbeat / cancel — ignore */ }
+            "user" | "keep_alive" | "control_cancel_request" => { /* echo / heartbeat / cancel — ignore */
+            }
             "stream_event" => handle_stream_event(&event, &state, &app).await,
             "rate_limit_event" => {
                 let status = event["rate_limit_info"]["status"].as_str().unwrap_or("?");
@@ -44,15 +45,27 @@ pub async fn handle_events(events: Vec<Value>, role: &str, state: SharedState, a
             "prompt_suggestion" => {
                 let suggestion = event["suggestion"].as_str().unwrap_or("");
                 if !suggestion.is_empty() {
-                    gui::emit_system_log(&app, "info", &format!("[Claude SDK] suggestion: {suggestion}"));
+                    gui::emit_system_log(
+                        &app,
+                        "info",
+                        &format!("[Claude SDK] suggestion: {suggestion}"),
+                    );
                 }
             }
             "auth_status" => {
                 let is_auth = event["isAuthenticating"].as_bool().unwrap_or(false);
-                gui::emit_system_log(&app, "info", &format!("[Claude SDK] auth_status: authenticating={is_auth}"));
+                gui::emit_system_log(
+                    &app,
+                    "info",
+                    &format!("[Claude SDK] auth_status: authenticating={is_auth}"),
+                );
             }
             other => {
-                gui::emit_system_log(&app, "info", &format!("[Claude SDK] unhandled event: {other}"));
+                gui::emit_system_log(
+                    &app,
+                    "info",
+                    &format!("[Claude SDK] unhandled event: {other}"),
+                );
             }
         }
     }

@@ -93,7 +93,9 @@ async fn handle_rpc_message(
                 "id": id_to_value(&msg.id),
                 "result": initialize_result(role, !sdk_mode)
             });
-            if !write_line(writer, &resp).await { return false; }
+            if !write_line(writer, &resp).await {
+                return false;
+            }
         }
         Some("tools/list") => {
             let resp = serde_json::json!({
@@ -101,11 +103,15 @@ async fn handle_rpc_message(
                 "id": id_to_value(&msg.id),
                 "result": { "tools": crate::tools::tool_list() }
             });
-            if !write_line(writer, &resp).await { return false; }
+            if !write_line(writer, &resp).await {
+                return false;
+            }
         }
         Some("tools/call") => {
             let resp = tool_call_response(agent_id, reply_tx, &msg).await;
-            if !write_line(writer, &resp).await { return false; }
+            if !write_line(writer, &resp).await {
+                return false;
+            }
         }
         Some("notifications/claude/channel/permission_request") => {
             if let Some(request) = msg.params.as_ref().and_then(parse_permission_request) {
@@ -114,15 +120,22 @@ async fn handle_rpc_message(
                     request.request_id, request.tool_name
                 );
                 channel_state.register_permission(request.clone());
-                if reply_tx.send(BridgeOutbound::PermissionRequest(request.clone())).await.is_err() {
-                    eprintln!("[Bridge/{agent_id}] daemon channel closed, auto-denying permission {}", request.request_id);
+                if reply_tx
+                    .send(BridgeOutbound::PermissionRequest(request.clone()))
+                    .await
+                    .is_err()
+                {
+                    eprintln!(
+                        "[Bridge/{agent_id}] daemon channel closed, auto-denying permission {}",
+                        request.request_id
+                    );
                     // Auto-deny so Claude doesn't hang forever
-                    if let Some(deny) = channel_state.permission_notification(
-                        crate::types::PermissionVerdict {
+                    if let Some(deny) =
+                        channel_state.permission_notification(crate::types::PermissionVerdict {
                             request_id: request.request_id,
                             behavior: crate::types::PermissionBehavior::Deny,
-                        },
-                    ) {
+                        })
+                    {
                         if !write_line(writer, &deny).await {
                             return false; // stdout dead — exit MCP loop
                         }

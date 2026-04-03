@@ -1,3 +1,4 @@
+use crate::daemon::claude_sdk::protocol::PostEventsBody as EventsBody;
 use crate::daemon::{
     gui::{self, ClaudeStreamPayload},
     SharedState,
@@ -8,11 +9,10 @@ use axum::{
         Query, State, WebSocketUpgrade,
     },
     http::StatusCode,
-    Json,
     response::IntoResponse,
+    Json,
 };
 use futures_util::{SinkExt, StreamExt};
-use crate::daemon::claude_sdk::protocol::PostEventsBody as EventsBody;
 use tauri::AppHandle;
 use tokio::sync::mpsc;
 
@@ -142,7 +142,8 @@ pub async fn events_handler(
     let parsed: Result<EventsBody, _> = serde_json::from_str(&body);
     match parsed {
         Ok(body) => {
-            let trace_nonce = crate::daemon::claude_sdk::process::redact_launch_nonce(&launch_nonce);
+            let trace_nonce =
+                crate::daemon::claude_sdk::process::redact_launch_nonce(&launch_nonce);
             gui::emit_system_log(
                 &app,
                 "info",
@@ -156,7 +157,9 @@ pub async fn events_handler(
                 Ok(()) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
                 Err(EventEnqueueError::QueueUnavailable) => (
                     StatusCode::SERVICE_UNAVAILABLE,
-                    Json(serde_json::json!({"ok": false, "error": "claude event queue unavailable"})),
+                    Json(
+                        serde_json::json!({"ok": false, "error": "claude event queue unavailable"}),
+                    ),
                 )
                     .into_response(),
                 Err(EventEnqueueError::QueueClosed) => (

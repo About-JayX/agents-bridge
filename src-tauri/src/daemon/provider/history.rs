@@ -64,7 +64,9 @@ async fn load_codex_history_entries<Remote, RemoteFut, Local>(
 ) -> Vec<ProviderHistoryEntry>
 where
     Remote: FnOnce() -> RemoteFut,
-    RemoteFut: std::future::Future<Output = Result<crate::daemon::provider::shared::ProviderHistoryPage, String>>,
+    RemoteFut: std::future::Future<
+        Output = Result<crate::daemon::provider::shared::ProviderHistoryPage, String>,
+    >,
     Local: FnOnce() -> Result<crate::daemon::provider::shared::ProviderHistoryPage, String>,
 {
     if remote_available {
@@ -79,9 +81,7 @@ where
     match local_list() {
         Ok(page) => page.entries,
         Err(local_err) => {
-            eprintln!(
-                "[Daemon] Codex local history fallback failed for {workspace}: {local_err}"
-            );
+            eprintln!("[Daemon] Codex local history fallback failed for {workspace}: {local_err}");
             Vec::new()
         }
     }

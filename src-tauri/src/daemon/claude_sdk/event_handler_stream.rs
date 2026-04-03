@@ -1,8 +1,8 @@
 use crate::daemon::gui::{self, ClaudeStreamPayload};
 use crate::daemon::SharedState;
 use serde_json::Value;
-use tauri::AppHandle;
 use std::time::Duration;
+use tauri::AppHandle;
 
 const CLAUDE_PREVIEW_BATCH_WINDOW_MS: u64 = 50;
 

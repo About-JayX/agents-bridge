@@ -64,7 +64,10 @@ fn allow_response_has_updated_input() {
     assert_eq!(v["response"]["request_id"], "req-1");
     let inner = &v["response"]["response"];
     assert_eq!(inner["behavior"], "allow");
-    assert!(inner["updatedInput"].is_object(), "TnY schema requires updatedInput");
+    assert!(
+        inner["updatedInput"].is_object(),
+        "TnY schema requires updatedInput"
+    );
 }
 
 #[test]
@@ -74,7 +77,10 @@ fn deny_response_has_message_and_updated_input() {
     let inner = &v["response"]["response"];
     assert_eq!(inner["behavior"], "deny");
     assert!(inner["message"].is_string(), "knY schema requires message");
-    assert!(inner["updatedInput"].is_object(), "deny payload keeps schema shape stable");
+    assert!(
+        inner["updatedInput"].is_object(),
+        "deny payload keeps schema shape stable"
+    );
 }
 
 #[test]

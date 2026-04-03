@@ -11,8 +11,8 @@ pub mod stdio;
 
 use crate::daemon::{gui, SharedState};
 use process::ClaudeLaunchOpts;
-use std::sync::Arc;
 use serde_json::Value;
+use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;

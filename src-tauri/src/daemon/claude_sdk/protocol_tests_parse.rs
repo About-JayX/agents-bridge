@@ -29,7 +29,10 @@ fn parse_control_request_can_use_tool() {
     });
     let event: NdjsonEvent = serde_json::from_value(raw).unwrap();
     match event {
-        NdjsonEvent::ControlRequest { request_id, request } => {
+        NdjsonEvent::ControlRequest {
+            request_id,
+            request,
+        } => {
             assert_eq!(request_id, "req-abc");
             assert_eq!(request.subtype, "can_use_tool");
             assert_eq!(request.tool_name.as_deref(), Some("Bash"));

@@ -322,10 +322,7 @@ fn session_serialization_round_trip() {
 use std::path::PathBuf;
 
 fn tmp_persist_path(name: &str) -> PathBuf {
-    std::env::temp_dir().join(format!(
-        "dimweave_test_{name}_{}.json",
-        std::process::id()
-    ))
+    std::env::temp_dir().join(format!("dimweave_test_{name}_{}.json", std::process::id()))
 }
 
 struct CleanupFile(PathBuf);

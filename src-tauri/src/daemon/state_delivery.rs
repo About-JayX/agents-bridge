@@ -3,7 +3,10 @@ use super::*;
 impl DaemonState {
     pub fn should_route_claude_sdk_text_directly(&self) -> bool {
         !self.attached_agents.contains_key("claude")
-            || matches!(self.claude_sdk_direct_text_state, ClaudeSdkDirectTextState::Active)
+            || matches!(
+                self.claude_sdk_direct_text_state,
+                ClaudeSdkDirectTextState::Active
+            )
     }
 
     pub fn prepare_claude_response_turn(&mut self) {
@@ -13,8 +16,7 @@ impl DaemonState {
     pub fn begin_claude_sdk_direct_text_turn(&mut self) -> bool {
         if matches!(
             self.claude_sdk_direct_text_state,
-            ClaudeSdkDirectTextState::CompletedBySdk
-                | ClaudeSdkDirectTextState::CompletedByBridge
+            ClaudeSdkDirectTextState::CompletedBySdk | ClaudeSdkDirectTextState::CompletedByBridge
         ) {
             self.claude_sdk_direct_text_state = ClaudeSdkDirectTextState::Inactive;
         }

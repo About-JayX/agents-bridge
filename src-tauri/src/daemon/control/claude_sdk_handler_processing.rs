@@ -11,11 +11,7 @@ pub(crate) async fn process_sdk_events(
     }
 }
 
-async fn process_sdk_event(
-    state: &SharedState,
-    app: &AppHandle,
-    event: serde_json::Value,
-) {
+async fn process_sdk_event(state: &SharedState, app: &AppHandle, event: serde_json::Value) {
     let role = state.read().await.claude_role.clone();
     gui::emit_system_log(
         app,

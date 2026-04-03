@@ -1,5 +1,5 @@
 use crate::daemon::{gui, SharedState};
-use axum::{http::StatusCode, Json, response::IntoResponse};
+use axum::{http::StatusCode, response::IntoResponse, Json};
 use tauri::AppHandle;
 
 #[derive(Debug, Default, serde::Deserialize)]

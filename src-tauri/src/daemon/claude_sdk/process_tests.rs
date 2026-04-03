@@ -31,15 +31,25 @@ fn build_claude_command_sets_sdk_args_and_env() {
             )
         })
         .collect();
-    assert_eq!(std_cmd.get_current_dir(), Some(std::path::Path::new("/tmp/workspace")));
-    assert!(
-        args.windows(2)
-            .any(|w| w[0] == "--sdk-url" && w[1] == "ws://127.0.0.1:4502/claude?launch_nonce=nonce-123")
+    assert_eq!(
+        std_cmd.get_current_dir(),
+        Some(std::path::Path::new("/tmp/workspace"))
     );
-    assert!(args.windows(2).any(|w| w[0] == "--append-system-prompt" && w[1].contains("reviewer")));
-    assert!(args.windows(2).any(|w| w[0] == "--model" && w[1] == "claude-sonnet-4-6"));
-    assert!(args.windows(2).any(|w| w[0] == "--effort" && w[1] == "high"));
-    assert!(args.windows(2).any(|w| w[0] == "--session-id" && w[1] == "session-123"));
+    assert!(args.windows(2).any(
+        |w| w[0] == "--sdk-url" && w[1] == "ws://127.0.0.1:4502/claude?launch_nonce=nonce-123"
+    ));
+    assert!(args
+        .windows(2)
+        .any(|w| w[0] == "--append-system-prompt" && w[1].contains("reviewer")));
+    assert!(args
+        .windows(2)
+        .any(|w| w[0] == "--model" && w[1] == "claude-sonnet-4-6"));
+    assert!(args
+        .windows(2)
+        .any(|w| w[0] == "--effort" && w[1] == "high"));
+    assert!(args
+        .windows(2)
+        .any(|w| w[0] == "--session-id" && w[1] == "session-123"));
     assert!(args
         .windows(2)
         .any(|w| w[0] == "--strict-mcp-config" && w[1] == "{\"mcpServers\":{}}"));
@@ -71,7 +81,9 @@ fn build_claude_command_uses_resume_without_new_session_id() {
         .get_args()
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect();
-    assert!(args.windows(2).any(|w| w[0] == "--resume" && w[1] == "resume-456"));
+    assert!(args
+        .windows(2)
+        .any(|w| w[0] == "--resume" && w[1] == "resume-456"));
     assert!(!args.iter().any(|arg| arg == "--session-id"));
 }
 
@@ -109,11 +121,13 @@ fn build_claude_command_includes_stream_and_permission_flags() {
         "missing --replay-user-messages"
     );
     assert!(
-        args.windows(2).any(|w| w[0] == "--input-format" && w[1] == "stream-json"),
+        args.windows(2)
+            .any(|w| w[0] == "--input-format" && w[1] == "stream-json"),
         "missing --input-format stream-json"
     );
     assert!(
-        args.windows(2).any(|w| w[0] == "--output-format" && w[1] == "stream-json"),
+        args.windows(2)
+            .any(|w| w[0] == "--output-format" && w[1] == "stream-json"),
         "missing --output-format stream-json"
     );
 }
@@ -136,7 +150,12 @@ fn build_claude_command_sets_all_required_env_vars() {
     let envs: Vec<(String, Option<String>)> = cmd
         .as_std()
         .get_envs()
-        .map(|(k, v)| (k.to_string_lossy().into(), v.map(|v| v.to_string_lossy().into())))
+        .map(|(k, v)| {
+            (
+                k.to_string_lossy().into(),
+                v.map(|v| v.to_string_lossy().into()),
+            )
+        })
         .collect();
 
     let get_env = |name: &str| -> Option<String> {
@@ -144,10 +163,23 @@ fn build_claude_command_sets_all_required_env_vars() {
             .find(|(k, _)| k == name)
             .and_then(|(_, v)| v.clone())
     };
-    assert_eq!(get_env("CLAUDE_CODE_ENVIRONMENT_KIND"), Some("bridge".into()));
-    assert_eq!(get_env("CLAUDE_CODE_SESSION_ACCESS_TOKEN"), Some("agentnexus-local".into()));
-    assert_eq!(get_env("CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2"), Some("1".into()));
-    assert_eq!(get_env("CLAUDE_CODE_OAUTH_TOKEN"), Some("".into()), "OAuth must be cleared");
+    assert_eq!(
+        get_env("CLAUDE_CODE_ENVIRONMENT_KIND"),
+        Some("bridge".into())
+    );
+    assert_eq!(
+        get_env("CLAUDE_CODE_SESSION_ACCESS_TOKEN"),
+        Some("agentnexus-local".into())
+    );
+    assert_eq!(
+        get_env("CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2"),
+        Some("1".into())
+    );
+    assert_eq!(
+        get_env("CLAUDE_CODE_OAUTH_TOKEN"),
+        Some("".into()),
+        "OAuth must be cleared"
+    );
 }
 
 #[test]

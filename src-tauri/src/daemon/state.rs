@@ -130,10 +130,10 @@ impl DaemonState {
     }
 }
 
-#[path = "state_permission.rs"]
-mod state_permission;
 #[path = "state_delivery.rs"]
 mod state_delivery;
+#[path = "state_permission.rs"]
+mod state_permission;
 #[path = "state_runtime.rs"]
 mod state_runtime;
 #[path = "state_snapshot.rs"]

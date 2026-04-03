@@ -86,8 +86,7 @@ fn build_project_mcp_config_preserves_existing_servers() {
     .unwrap();
 
     let raw =
-        build_project_mcp_config(temp.to_str().unwrap(), "/tmp/dimweave-bridge", "lead")
-            .unwrap();
+        build_project_mcp_config(temp.to_str().unwrap(), "/tmp/dimweave-bridge", "lead").unwrap();
     let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
     assert_eq!(value["mcpServers"]["other"]["command"], "/tmp/other-bridge");
     assert_eq!(
