@@ -143,6 +143,7 @@ struct Attachment { file_path: String, file_name: String }
 | 问题 | 根因 | 修复 | Commit |
 |------|------|------|--------|
 | 文件拖入输入区无反应 | Tauri 2 的 WebView 不通过浏览器 `File.path` 暴露本地路径，`dataTransfer.files` 拿到的 `File` 对象没有 `path` 属性 | 改用 Tauri 原生 `getCurrentWebview().onDragDropEvent()`，通过 `event.payload.paths` 直接获取本地文件路径数组 | `83f45afd` |
+| 拖入文件出现两份重复 | `addFiles` 作为 `useEffect` 依赖，回调引用变化导致 effect 重跑注册多个 `onDragDropEvent` 监听器，一次 drop 触发多个 handler | 用 `useRef` 持有最新 `addFiles` 引用，effect 依赖设为 `[]`，确保组件生命周期只注册一个监听器 | `1be59ad8` |
 
 ## 验证结果
 
