@@ -124,12 +124,25 @@ struct Attachment { file_path: String, file_name: String }
 | `0c855d97` | CLAUDE.md + tauri.md 文档更新 | 2 |
 | `c7de1bfd` | 计划+执行文档 | 1 |
 | `095ac038` | cargo fmt 全工作区格式化（无功能改动） | 19 |
+| `d2666a2c` | 更新计划文档，补全完整 commit 记录 | 1 |
+
+### Bugfix
+
+| Commit | 说明 | 文件数 |
+|--------|------|--------|
+| `83f45afd` | **[FIXED]** 文件拖放无反应：浏览器 `dataTransfer.files` 在 Tauri 2 中不提供文件路径，改用 `getCurrentWebview().onDragDropEvent()` 获取 `event.payload.paths` 本地路径 | 1 |
 
 ### 统计
 
-- **总 commit**: 13
-- **总改动文件**: ~155 次文件修改（含重复修改同一文件）
+- **总 commit**: 15
+- **总改动文件**: ~160 次文件修改（含重复修改同一文件）
 - **新建文件**: types_dto.rs, routing_format.rs, use-theme.ts, use-border-radius.ts, BrandIcons.tsx, ReplyInput/TargetPicker.tsx, ReplyInput/AttachmentStrip.tsx, ReplyInput/use-attachments.ts, 2026-04-03-file-attachment-support.md
+
+## 已修复问题
+
+| 问题 | 根因 | 修复 | Commit |
+|------|------|------|--------|
+| 文件拖入输入区无反应 | Tauri 2 的 WebView 不通过浏览器 `File.path` 暴露本地路径，`dataTransfer.files` 拿到的 `File` 对象没有 `path` 属性 | 改用 Tauri 原生 `getCurrentWebview().onDragDropEvent()`，通过 `event.payload.paths` 直接获取本地文件路径数组 | `83f45afd` |
 
 ## 验证结果
 
