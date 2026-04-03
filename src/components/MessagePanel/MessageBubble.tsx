@@ -1,4 +1,5 @@
 import { memo } from "react";
+import { Paperclip } from "lucide-react";
 import { MessageMarkdown } from "@/components/MessageMarkdown";
 import { SourceBadge } from "./SourceBadge";
 import type { BridgeMessage } from "@/types";
@@ -15,7 +16,8 @@ export function areMessageBubblePropsEqual(
     prev.msg.to === next.msg.to &&
     prev.msg.content === next.msg.content &&
     prev.msg.timestamp === next.msg.timestamp &&
-    prev.msg.displaySource === next.msg.displaySource
+    prev.msg.displaySource === next.msg.displaySource &&
+    prev.msg.attachments?.length === next.msg.attachments?.length
   );
 }
 
@@ -44,6 +46,19 @@ function MessageBubbleInner({ msg }: { msg: BridgeMessage }) {
           </span>
         </div>
         <MessageMarkdown content={msg.content} />
+        {msg.attachments && msg.attachments.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {msg.attachments.map((att, i) => (
+              <span
+                key={`${att.filePath}-${i}`}
+                className="inline-flex items-center gap-1 rounded-md border border-border/40 bg-muted/30 px-2 py-0.5 text-[11px] text-muted-foreground"
+              >
+                <Paperclip className="size-3" />
+                {att.fileName}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
