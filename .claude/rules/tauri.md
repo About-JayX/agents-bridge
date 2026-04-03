@@ -35,6 +35,7 @@ paths:
 - `refresh_usage`
 - `list_codex_models`
 - `pick_directory`
+- `pick_files`
 - `register_mcp`
 - `check_mcp_registered`
 - `stop_claude`

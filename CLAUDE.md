@@ -342,9 +342,11 @@ src-tauri/src/
     ├── mod.rs
     ├── gui.rs
     ├── routing.rs
+    ├── routing_format.rs        # agent-specific 消息格式化 + 附件上下文注入
     ├── session_manager.rs
     ├── state.rs
     ├── types.rs
+    ├── types_dto.rs             # 前端 DTO（TaskSnapshot, HistoryEntry 等）
     ├── control/
     │   ├── handler.rs
     │   ├── mod.rs
@@ -407,7 +409,11 @@ src/
 │   │   ├── PermissionQueue.tsx
 │   │   ├── SourceBadge.tsx
 │   │   └── TabBtn.tsx
-│   ├── ReplyInput.tsx
+│   ├── ReplyInput/
+│   │   ├── index.tsx          # 主输入组件（拖拽 + 附件按钮 + 发送）
+│   │   ├── TargetPicker.tsx   # 目标选择下拉
+│   │   ├── AttachmentStrip.tsx # 附件预览条
+│   │   └── use-attachments.ts # 附件状态管理 hook
 │   ├── MessageMarkdown.tsx
 │   └── ui/
 └── lib/
