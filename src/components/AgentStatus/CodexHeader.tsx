@@ -1,3 +1,4 @@
+import { CodexIcon } from "./BrandIcons";
 import { RoleSelect } from "./RoleSelect";
 import { StatusDot } from "./StatusDot";
 
@@ -9,21 +10,15 @@ interface CodexHeaderProps {
 export function CodexHeader({ running, connectionLabel }: CodexHeaderProps) {
   return (
     <>
-      <div className="flex items-center gap-2">
-        <StatusDot
-          status={running ? "connected" : "disconnected"}
-          variant="codex"
-        />
-        <span className="flex-1 text-[13px] font-medium text-card-foreground">
-          Codex
-        </span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <StatusDot
+            status={running ? "connected" : "disconnected"}
+            variant="codex"
+          />
+          <CodexIcon className="size-5 text-codex" />
+        </div>
         <RoleSelect agent="codex" disabled={running} />
-        <span
-          key={running ? "c" : "d"}
-          className="text-[11px] uppercase text-secondary-foreground status-flash"
-        >
-          {running ? "connected" : "disconnected"}
-        </span>
       </div>
 
       {connectionLabel && (

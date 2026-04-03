@@ -103,79 +103,82 @@ export function ReplyInput() {
   return (
     <div className="border-t border-border/45 px-4 py-3">
       <div className="rounded-2xl border border-input bg-card/85 focus-within:border-primary/35 focus-within:ring-1 focus-within:ring-primary/15 transition-colors">
-        <div className="flex items-start gap-3 px-3 py-3">
-          <div className="relative shrink-0 pt-1" ref={pickerRef}>
-            <button
-              onClick={() => setShowPicker(!showPicker)}
-              className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-medium transition-colors ${TARGET_COLORS[target]}`}
-            >
-              To {target}
-              <ChevronDown className="size-3 opacity-60" />
-            </button>
-            {showPicker && (
-              <div className="absolute bottom-full left-0 z-20 mb-2 min-w-[110px] rounded-xl border border-border bg-popover py-1 shadow-lg">
-                {TARGETS.map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => {
-                      setTarget(t);
-                      setShowPicker(false);
-                    }}
-                    className={`block w-full px-3 py-1.5 text-left text-[11px] transition-colors hover:bg-accent ${t === target ? "font-bold" : ""} ${TARGET_COLORS[t].split(" ")[0]}`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+        <textarea
+          ref={textareaRef}
+          className="block w-full min-h-[44px] resize-none bg-transparent px-4 py-3 text-[13px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onCompositionStart={() => {
+            composingRef.current = true;
+          }}
+          onCompositionEnd={() => {
+            composingRef.current = false;
+          }}
+          placeholder="Describe the next step, ask for a review, or route a task to an agent."
+          rows={MIN_ROWS}
+        />
 
-          <textarea
-            ref={textareaRef}
-            className="block min-h-[48px] flex-1 resize-none bg-transparent px-0 py-0.5 text-[13px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onCompositionStart={() => {
-              composingRef.current = true;
-            }}
-            onCompositionEnd={() => {
-              composingRef.current = false;
-            }}
-            placeholder="Describe the next step, ask for a review, or route a task to an agent."
-            rows={MIN_ROWS}
-          />
-
-          <Button
-            size="sm"
-            disabled={!connected || !draft.trim()}
-            onClick={handleSend}
-            className="mt-1 h-8 gap-1.5 px-3 text-[12px]"
-          >
-            <Send className="size-3" />
-            Send
-          </Button>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/35 px-3 py-2">
-          <div className="flex min-w-0 items-center gap-2 text-[10px]">
+        <div className="flex items-center justify-between gap-2 border-t border-border/35 px-3 py-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="relative shrink-0" ref={pickerRef}>
+              <button
+                onClick={() => setShowPicker(!showPicker)}
+                className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-medium transition-colors ${TARGET_COLORS[target]}`}
+              >
+                To {target}
+                <ChevronDown className="size-3 opacity-60" />
+              </button>
+              {showPicker && (
+                <div className="absolute bottom-full left-0 z-20 mb-2 min-w-[110px] rounded-xl border border-border bg-popover py-1 shadow-lg">
+                  {TARGETS.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => {
+                        setTarget(t);
+                        setShowPicker(false);
+                      }}
+                      className={`block w-full px-3 py-1.5 text-left text-[11px] transition-colors hover:bg-accent ${t === target ? "font-bold" : ""} ${TARGET_COLORS[t].split(" ")[0]}`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             {activeTask ? (
-              <>
-                <span className="truncate text-foreground/80">{activeTask.title}</span>
-                {reviewBadge && <ReviewGateBadge badge={reviewBadge} />}
-              </>
+              <span className="truncate text-[10px] text-foreground/80">
+                {activeTask.title}
+              </span>
             ) : (
-              <span className="text-muted-foreground/55">No active task</span>
+              <span className="text-[10px] text-muted-foreground/55">
+                No active task
+              </span>
+            )}
+            {activeTask && reviewBadge && (
+              <ReviewGateBadge badge={reviewBadge} />
             )}
             {!connected && (
-              <span className="rounded-full border border-destructive/25 bg-destructive/10 px-2 py-0.5 text-destructive">
+              <span className="rounded-full border border-destructive/25 bg-destructive/10 px-2 py-0.5 text-[10px] text-destructive">
                 Disconnected
               </span>
             )}
           </div>
-          <span className="text-[10px] text-muted-foreground">
-            {isMac ? "⌘" : "Ctrl"}+Enter
-          </span>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[10px] text-muted-foreground">
+              {isMac ? "⌘" : "Ctrl"}+Enter
+            </span>
+            <Button
+              size="sm"
+              disabled={!connected || !draft.trim()}
+              onClick={handleSend}
+              className="h-7 gap-1.5 rounded-full px-3 text-[11px]"
+            >
+              <Send className="size-3" />
+              Send
+            </Button>
+          </div>
         </div>
       </div>
     </div>

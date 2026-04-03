@@ -7,12 +7,12 @@ fn resolve_release_bridge_cmd() -> Result<String, String> {
     let exe_dir = exe.parent().unwrap_or(std::path::Path::new("."));
 
     // Tauri 2 puts externalBin in Contents/MacOS/ (same dir as main binary)
-    let candidate = exe_dir.join("agent-nexus-bridge");
+    let candidate = exe_dir.join("dimweave-bridge");
     if candidate.exists() {
         return Ok(candidate.to_string_lossy().to_string());
     }
     // Fallback: Contents/Resources/
-    let resources = exe_dir.join("../Resources/agent-nexus-bridge");
+    let resources = exe_dir.join("../Resources/dimweave-bridge");
     if resources.exists() {
         return Ok(resources.to_string_lossy().to_string());
     }
@@ -21,19 +21,19 @@ fn resolve_release_bridge_cmd() -> Result<String, String> {
         if let Ok(entries) = std::fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let name = entry.file_name();
-                if name.to_string_lossy().starts_with("agent-nexus-bridge") {
+                if name.to_string_lossy().starts_with("dimweave-bridge") {
                     return Ok(entry.path().to_string_lossy().to_string());
                 }
             }
         }
     }
     Err(format!(
-        "agent-nexus-bridge not found near {}",
+        "dimweave-bridge not found near {}",
         exe_dir.display()
     ))
 }
 
-pub(crate) fn resolve_agentnexus_bridge_cmd() -> Result<String, String> {
+pub(crate) fn resolve_dimweave_bridge_cmd() -> Result<String, String> {
     if cfg!(debug_assertions) {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let project_root = std::path::Path::new(manifest_dir)
@@ -42,7 +42,7 @@ pub(crate) fn resolve_agentnexus_bridge_cmd() -> Result<String, String> {
         let bridge_bin = project_root
             .join("target")
             .join("debug")
-            .join("agent-nexus-bridge");
+            .join("dimweave-bridge");
         Ok(bridge_bin.to_string_lossy().to_string())
     } else {
         resolve_release_bridge_cmd()
@@ -73,8 +73,8 @@ pub(crate) fn build_project_mcp_config(
     serde_json::to_string(&config).map_err(|e| format!("serialize error: {e}"))
 }
 
-pub(crate) fn build_agentnexus_mcp_config(project_dir: &str, role: &str) -> Result<String, String> {
-    let command = resolve_agentnexus_bridge_cmd()?;
+pub(crate) fn build_dimweave_mcp_config(project_dir: &str, role: &str) -> Result<String, String> {
+    let command = resolve_dimweave_bridge_cmd()?;
     let base = read_mcp_config(project_dir)?;
     let (config, _) = upsert_mcp_server(
         base,
@@ -91,7 +91,7 @@ pub async fn register_mcp(
     cwd: Option<String>,
     daemon_tx: State<'_, DaemonSender>,
 ) -> Result<bool, String> {
-    let bridge_cmd = resolve_agentnexus_bridge_cmd()?;
+    let bridge_cmd = resolve_dimweave_bridge_cmd()?;
     let project_dir = cwd.unwrap_or_else(|| ".".to_string());
     let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
     daemon_tx
@@ -103,7 +103,7 @@ pub async fn register_mcp(
         .await
         .map_err(|_| "daemon did not reply".to_string())?;
     eprintln!(
-        "[MCP] register agentnexus in {project_dir} using absolute command {} role={role}",
+        "[MCP] register dimweave in {project_dir} using absolute command {} role={role}",
         bridge_cmd,
     );
     write_mcp_config(&project_dir, &bridge_cmd, &[], &role)

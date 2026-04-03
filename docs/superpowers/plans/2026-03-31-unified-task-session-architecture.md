@@ -220,7 +220,7 @@
 - Modify: `UPDATE.md`
 - Modify: `docs/agents/codex-chain.md`
 - Modify: `docs/agents/claude-chain.md`
-- Modify: `docs/agentnexus-audit-summary.md`
+- Modify: `docs/dimweave-audit-summary.md`
 
 - [ ] **Step 1: Add or update tests for the final integrated task workflow if gaps remain**
 - [ ] **Step 2: Run `cargo test --manifest-path src-tauri/Cargo.toml`**

@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   Bot,
+  MessageSquare,
   TerminalSquare,
   Workflow,
 } from "lucide-react";
@@ -8,6 +9,7 @@ import type { ShellNavItem } from "./shell-layout-state";
 
 interface ShellContextBarProps {
   activeItem: ShellNavItem | null;
+  messageCount: number;
   onToggle: (item: ShellNavItem) => void;
 }
 
@@ -24,19 +26,12 @@ const NAV_ITEMS: Array<{
 
 export function ShellContextBar({
   activeItem,
+  messageCount,
   onToggle,
 }: ShellContextBarProps) {
   return (
-    <aside className="flex w-20 shrink-0 flex-col border-r border-border/45 bg-background/78 px-3 py-4 backdrop-blur-sm">
-      <div className="mb-4 flex h-12 items-center justify-center rounded-2xl border border-border/35 bg-card/55">
-        <img
-          src="/dimweave-mark.svg"
-          alt="Dimweave logo"
-          className="h-8 w-8 object-contain"
-        />
-      </div>
-
-      <nav className="flex flex-1 flex-col items-center gap-3">
+    <aside className="flex w-14 shrink-0 flex-col items-center border-r border-border/45 bg-background/78 px-2 py-4 backdrop-blur-sm">
+      <nav className="flex flex-1 flex-col items-center gap-2">
         {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -44,17 +39,22 @@ export function ShellContextBar({
             data-shell-pane-trigger="true"
             aria-label={`Open ${label.toLowerCase()}`}
             aria-pressed={activeItem === id}
-            className="group relative flex size-11 items-center justify-center rounded-2xl border border-transparent bg-background/35 text-muted-foreground/72 transition-colors hover:border-border/55 hover:bg-card/80 hover:text-foreground/88 aria-pressed:border-primary/40 aria-pressed:bg-card aria-pressed:text-foreground"
+            className="group relative flex size-10 items-center justify-center rounded-xl border border-transparent text-muted-foreground/72 transition-colors hover:border-border/55 hover:bg-card/80 hover:text-foreground/88 aria-pressed:border-primary/40 aria-pressed:bg-card aria-pressed:text-foreground"
             onClick={() => onToggle(id)}
           >
             <span className="sr-only">{label}</span>
             <Icon className="size-4" />
             {activeItem === id && (
-              <span className="absolute -left-3 h-6 w-1 rounded-full bg-primary" />
+              <span className="absolute -left-2 h-5 w-0.5 rounded-full bg-primary" />
             )}
           </button>
         ))}
       </nav>
+
+      <div className="mt-auto flex flex-col items-center gap-1 text-muted-foreground/50">
+        <MessageSquare className="size-3.5" />
+        <span className="text-[9px] tabular-nums">{messageCount}</span>
+      </div>
     </aside>
   );
 }

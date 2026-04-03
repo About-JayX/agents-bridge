@@ -131,7 +131,7 @@ fn is_terminal_chrome_line(line: &str) -> bool {
         || lower.starts_with("press esc")
         || lower.starts_with("ctrl+c to exit")
         || lower.starts_with("claude terminal exited")
-        || lower.starts_with("[agentnexus]")
+        || lower.starts_with("[dimweave]")
 }
 
 fn is_box_drawing_only(line: &str) -> bool {

@@ -557,7 +557,7 @@ pub async fn send_message(&mut self, content: &str) -> Result<(), String> {
 **Files:**
 - Test: `src-tauri/src/claude_session/stream_json.rs`
 - Modify: `CLAUDE.md`
-- Modify: `docs/agentnexus-audit-summary.md`
+- Modify: `docs/dimweave-audit-summary.md`
 
 - [ ] **Step 1: 补充 stream_json 边界测试**
 

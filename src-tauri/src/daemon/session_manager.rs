@@ -64,7 +64,7 @@ impl SessionManager {
 
     /// On startup, remove any leftover directories for the current PID.
     fn cleanup_stale() {
-        let prefix = format!("agentnexus-{}-", std::process::id());
+        let prefix = format!("dimweave-{}-", std::process::id());
         if let Ok(entries) = fs::read_dir("/tmp") {
             for entry in entries.flatten() {
                 let name = entry.file_name();
@@ -105,7 +105,7 @@ mod tests {
     #[test]
     fn create_session_reuses_stable_codex_home() {
         let root =
-            std::env::temp_dir().join(format!("agentnexus-codex-home-{}", std::process::id()));
+            std::env::temp_dir().join(format!("dimweave-codex-home-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
 

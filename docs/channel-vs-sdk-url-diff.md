@@ -19,7 +19,7 @@
 ```
 Claude Code (managed PTY, 假终端)
   ↓ MCP stdio (JSON-RPC 2.0)
-bridge sidecar (独立 Rust 二进制, agent-nexus-bridge)
+bridge sidecar (独立 Rust 二进制, dimweave-bridge)
   ↓ WebSocket :4502/ws
 daemon control server
   ↓ Tauri events

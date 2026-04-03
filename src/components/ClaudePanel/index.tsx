@@ -7,6 +7,7 @@ import { useCodexAccountStore } from "@/stores/codex-account-store";
 import { useBridgeStore } from "@/stores/bridge-store";
 import { useTaskStore } from "@/stores/task-store";
 import type { ProviderSessionInfo } from "@/types";
+import { ClaudeIcon } from "@/components/AgentStatus/BrandIcons";
 import { RoleSelect } from "@/components/AgentStatus/RoleSelect";
 import { StatusDot } from "@/components/AgentStatus/StatusDot";
 import {
@@ -31,10 +32,7 @@ interface ClaudePanelProps {
   providerSession?: ProviderSessionInfo;
 }
 
-export function ClaudePanel({
-  connected,
-  providerSession,
-}: ClaudePanelProps) {
+export function ClaudePanel({ connected, providerSession }: ClaudePanelProps) {
   const [cwd, setCwd] = useState("");
   const [model, setModel] = useState("");
   const [effort, setEffort] = useState("");
@@ -158,7 +156,9 @@ export function ClaudePanel({
 
   const summaryChips = useMemo(
     () => [
-      effectiveCwd ? effectiveCwd.split("/").pop() || effectiveCwd : "Project required",
+      effectiveCwd
+        ? effectiveCwd.split("/").pop() || effectiveCwd
+        : "Project required",
       model || "Default model",
       effort || "Default effort",
       selectedHistory
@@ -177,30 +177,18 @@ export function ClaudePanel({
           : "border-input hover:border-input/80",
       )}
     >
-      <div className="flex items-center gap-2">
-        <StatusDot
-          status={connected ? "connected" : "disconnected"}
-          variant="claude"
-        />
-        <span className="flex-1 text-[13px] font-medium text-card-foreground">
-          Claude Code
-        </span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <StatusDot
+            status={connected ? "connected" : "disconnected"}
+            variant="claude"
+          />
+          <ClaudeIcon className="size-5 text-claude" />
+        </div>
         <RoleSelect
           agent="claude"
           disabled={connected || connecting || disconnecting}
         />
-        <span
-          key={disconnecting ? "x" : connected ? "c" : "d"}
-          className="text-[11px] uppercase text-secondary-foreground status-flash"
-        >
-          {disconnecting
-            ? "disconnecting"
-            : connected
-              ? "connected"
-              : connecting
-                ? "starting"
-                : "disconnected"}
-        </span>
       </div>
 
       {connectionLabel && (
@@ -225,7 +213,7 @@ export function ClaudePanel({
           <Button
             size="sm"
             variant="secondary"
-            className="flex-1"
+            className="flex-1 rounded-full"
             disabled={disconnecting}
             onClick={handleDisconnect}
           >
@@ -235,34 +223,33 @@ export function ClaudePanel({
                 Disconnecting…
               </span>
             ) : (
-              "Disconnect Claude"
+              "Disconnect"
             )}
           </Button>
         ) : (
           <Button
             size="sm"
-            className="flex-1 bg-claude text-white hover:bg-claude/90"
+            className="flex-1 rounded-full bg-claude/15 text-claude border-claude/25 hover:bg-claude/25"
             disabled={!effectiveCwd || connecting || disconnecting}
             onClick={handleLaunch}
           >
             {connecting ? (
               <span className="flex items-center gap-2">
-                <span className="size-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                <span className="size-3 rounded-full border-2 border-claude/30 border-t-claude animate-spin" />
                 Connecting…
               </span>
             ) : (
-              "Connect Claude"
+              "Connect"
             )}
           </Button>
         )}
         <Button
           size="sm"
-          variant="outline"
-          className="shrink-0"
+          variant="ghost"
+          className="shrink-0 text-muted-foreground"
           onClick={() => setShowAdvanced((open) => !open)}
         >
           <SlidersHorizontal className="size-3.5" />
-          {showAdvanced ? "Hide" : "Details"}
           {showAdvanced ? (
             <ChevronUp className="size-3.5" />
           ) : (
@@ -297,10 +284,7 @@ export function ClaudePanel({
               options={historyOptions}
               onChange={setSelectedHistoryId}
               disabled={
-                connected ||
-                connecting ||
-                disconnecting ||
-                !effectiveCwd
+                connected || connecting || disconnecting || !effectiveCwd
               }
               placeholder="New session"
             />

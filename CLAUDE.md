@@ -1,4 +1,4 @@
-# AgentNexus
+# Dimweave
 
 通用 AI Agent 桥接桌面应用。当前实现把 **Tauri/Rust 主进程** 作为唯一常驻后端，把 **Claude Code** 和 **Codex app-server** 接到同一个消息路由层里，并由 daemon 维护标准化的 **task / session / artifact** 图，让用户在一个桌面界面里协调两个 agent、恢复历史会话并查看 review gate。
 
@@ -10,7 +10,7 @@
 | 主后端 | Rust 内嵌 async daemon（`src-tauri/src/daemon/`） |
 | Claude 接入 | `--sdk-url` + `stream-json` transport；bridge sidecar 仅保留为 MCP tools 提供者 |
 | Codex 接入 | Rust daemon 启动 `codex app-server` 并通过 WS 建立 session |
-| 桥接 sidecar | Rust 二进制 `agent-nexus-bridge`（`bridge/` crate），当前主要服务 Claude MCP tools |
+| 桥接 sidecar | Rust 二进制 `dimweave-bridge`（`bridge/` crate），当前主要服务 Claude MCP tools |
 | 会话记忆 | provider-native history + daemon `task_graph` + runtime resume |
 | 前端 | React 19 + Vite + TypeScript + Tailwind CSS v4 + Zustand + task-centric shell |
 
@@ -53,7 +53,7 @@
 └───────────────┬─────────────────────────────────────────────────┘
                 │ MCP stdio（tools only）
                 ▼
-┌─ bridge/agent-nexus-bridge ────────────────────────────────────┐
+┌─ bridge/dimweave-bridge ────────────────────────────────────┐
 │ tools.rs         → reply + get_online_agents tools             │
 │ mcp.rs           → MCP tools/list / call                        │
 │ channel_state.rs → legacy channel state + shared reply helpers  │
@@ -97,7 +97,7 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 
 1. `ClaudePanel` 先根据当前项目目录拉 Claude provider history；用户可选择 `New session` 或某个历史 `session_id`。
 2. 前端选择项目目录后调用 `register_mcp`。
-3. Tauri 在项目根写入 **`.mcp.json`**，注册 `agent-nexus-bridge`。
+3. Tauri 在项目根写入 **`.mcp.json`**，注册 `dimweave-bridge`。
 4. 前端调用 `daemon_launch_claude_sdk`，由 Tauri 直接启动 `claude --sdk-url ws://127.0.0.1:4502/claude?launch_nonce=...`。
 5. Claude Code 读取项目 `.mcp.json`，以 MCP stdio 方式启动 bridge sidecar；bridge 继续提供 `reply(to, text, status)` 和 `get_online_agents()`。
 6. Claude 通过 `WS /claude` 收取宿主 NDJSON，通过 `POST /claude/events` 回传 `system/user/assistant/result/control_request` 事件；`launch_nonce` 用于绑定当前 launch 并允许安全重连。
@@ -108,7 +108,7 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 
 1. `CodexPanel` 先根据当前项目目录拉 Codex provider history；用户可选择 `New session` 或某个历史 `thread_id`。
 2. 前端调用 `daemon_launch_codex`。
-3. `session_manager.rs` 创建 `/tmp/agentnexus-<pid>-<sessionId>/` 临时 `CODEX_HOME`。
+3. `session_manager.rs` 创建 `/tmp/dimweave-<pid>-<sessionId>/` 临时 `CODEX_HOME`。
 4. 当前实现会写入：
    - `auth.json` symlink → `$HOME/.codex/auth.json`
    - `config.toml` → `sandbox_mode` / `approval_policy` / `apply_patch_freeform=false`
@@ -200,7 +200,7 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 
 ```text
 创建会话
-  → /tmp/agentnexus-<pid>-<sessionId>/
+  → /tmp/dimweave-<pid>-<sessionId>/
   → auth.json symlink（如存在）
   → config.toml
   → 启动 codex app-server
@@ -223,9 +223,9 @@ Codex app-server ← WS :4500 → Rust daemon/codex/session.rs
 
 - Tauri command: `src-tauri/src/mcp.rs`
 - 配置文件位置: 项目根 **`.mcp.json`**
-- sidecar 命令: `agent-nexus-bridge`
+- sidecar 命令: `dimweave-bridge`
 
-当前仓库没有单独的 `agentnexus mcp register` CLI。
+当前仓库没有单独的 `dimweave mcp register` CLI。
 
 ## 常用命令
 

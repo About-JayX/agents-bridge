@@ -18,7 +18,7 @@ Tauri main.rs
 
 Claude Code
   ↕ MCP stdio
-bridge/agent-nexus-bridge
+bridge/dimweave-bridge
   ↕ WS :4502
 Rust daemon
 
@@ -46,7 +46,7 @@ Rust daemon
 - 前端调用 `daemon_launch_claude_sdk`
 - daemon 用 `resolve_claude_bin()` + `enriched_path()` 启动 `claude --print --sdk-url ... --strict-mcp-config <json>`
 - Claude 通过 WS `/claude` 接收 NDJSON 输入，通过 HTTP POST `/claude/events` 回传事件
-- Claude 会按 strict MCP config 启动 `agent-nexus-bridge`
+- Claude 会按 strict MCP config 启动 `dimweave-bridge`
 - bridge 用 WS 连内嵌 daemon
 - permission request 走 daemon → GUI → daemon → Claude SDK verdict / bridge 闭环返回 Claude
 

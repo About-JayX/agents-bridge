@@ -28,14 +28,17 @@ describe("ShellContextBar", () => {
     installTauriStub();
     const { ShellContextBar } = await import("./ShellContextBar");
     const html = renderToStaticMarkup(
-      <ShellContextBar activeItem={null} onToggle={() => {}} />,
+      <ShellContextBar
+        activeItem={null}
+        messageCount={0}
+        onToggle={() => {}}
+      />,
     );
 
     expect(html).toContain("Task context");
     expect(html).toContain("Agents");
     expect(html).toContain("Approvals");
     expect(html).toContain("Logs");
-    expect(html).toContain("Dimweave logo");
     expect(html).not.toContain("AgentNexus");
     expect(html).not.toContain("Daemon online");
   });

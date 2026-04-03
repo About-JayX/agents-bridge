@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { MessagePanel } from "./components/MessagePanel";
 import { ReplyInput } from "./components/ReplyInput";
 import { ShellContextBar } from "./components/ShellContextBar";
@@ -11,9 +11,10 @@ import {
   toggleShellNavItem,
 } from "./components/shell-layout-state";
 import { useBridgeStore } from "./stores/bridge-store";
-import { selectAgents } from "./stores/bridge-store/selectors";
+import { selectAgents, selectMessages } from "./stores/bridge-store/selectors";
 import { useTaskStore } from "./stores/task-store";
 import { selectActiveTask } from "./stores/task-store/selectors";
+import { filterRenderableChatMessages } from "./components/MessagePanel/view-model";
 
 export default function App() {
   const [shellLayout, setShellLayout] = useState(createShellLayoutState);
@@ -23,6 +24,18 @@ export default function App() {
     agents.claude?.providerSession?.cwd,
     agents.codex?.providerSession?.cwd,
   ]);
+
+  const messages = useBridgeStore(selectMessages);
+  const allTerminalLines = useBridgeStore((s) => s.terminalLines);
+  const clearMessages = useBridgeStore((s) => s.clearMessages);
+  const chatMessages = useMemo(
+    () => filterRenderableChatMessages(messages),
+    [messages],
+  );
+  const errorCount = useMemo(
+    () => allTerminalLines.filter((l) => l.kind === "error").length,
+    [allTerminalLines],
+  );
 
   return (
     <div
@@ -35,6 +48,7 @@ export default function App() {
       <div className="flex flex-1 min-h-0">
         <ShellContextBar
           activeItem={shellLayout.activeItem}
+          messageCount={chatMessages.length}
           onToggle={(item) =>
             setShellLayout((current) => toggleShellNavItem(current, item))
           }
@@ -47,9 +61,15 @@ export default function App() {
           task={activeTask}
         />
         <main className="flex min-w-0 flex-1 flex-col animate-in fade-in duration-500">
-          <ShellTopBar workspaceLabel={workspaceLabel} />
+          <ShellTopBar
+            workspaceLabel={workspaceLabel}
+            surfaceMode={shellLayout.mainSurface}
+            logLineCount={allTerminalLines.length}
+            errorCount={errorCount}
+            onClear={clearMessages}
+          />
           <MessagePanel surfaceMode={shellLayout.mainSurface} />
-          <ReplyInput />
+          {shellLayout.mainSurface === "chat" && <ReplyInput />}
         </main>
       </div>
     </div>

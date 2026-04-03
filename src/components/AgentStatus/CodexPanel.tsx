@@ -166,7 +166,8 @@ export function CodexPanel({
     [workspaceHistory],
   );
   const selectedHistory = useMemo(
-    () => findProviderHistoryEntry("codex", workspaceHistory, selectedHistoryId),
+    () =>
+      findProviderHistoryEntry("codex", workspaceHistory, selectedHistoryId),
     [selectedHistoryId, workspaceHistory],
   );
   const connectionLabel = useMemo(
@@ -232,7 +233,9 @@ export function CodexPanel({
 
   const summaryChips = useMemo(
     () => [
-      effectiveCwd ? effectiveCwd.split("/").pop() || effectiveCwd : "Project required",
+      effectiveCwd
+        ? effectiveCwd.split("/").pop() || effectiveCwd
+        : "Project required",
       selectedModel || "Select model",
       selectedReasoning || "Default reasoning",
       selectedHistory
@@ -281,14 +284,14 @@ export function CodexPanel({
           <Button
             size="sm"
             variant="secondary"
-            className="flex-1"
+            className="flex-1 rounded-full"
             onClick={stopCodexTui}
           >
-            Disconnect Codex
+            Disconnect
           </Button>
         ) : (
           <Button
-            className="flex-1 bg-codex text-white hover:bg-codex/90"
+            className="flex-1 rounded-full bg-codex/15 text-codex border-codex/25 hover:bg-codex/25"
             size="sm"
             disabled={
               !canConnectCodex({
@@ -301,22 +304,21 @@ export function CodexPanel({
           >
             {connecting ? (
               <span className="flex items-center gap-2">
-                <span className="size-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span className="size-3 border-2 border-codex/30 border-t-codex rounded-full animate-spin" />
                 Connecting…
               </span>
             ) : (
-              "Connect Codex"
+              "Connect"
             )}
           </Button>
         )}
         <Button
           size="sm"
-          variant="outline"
-          className="shrink-0"
+          variant="ghost"
+          className="shrink-0 text-muted-foreground"
           onClick={() => setShowAdvanced((open) => !open)}
         >
           <SlidersHorizontal className="size-3.5" />
-          {showAdvanced ? "Hide" : "Details"}
           {showAdvanced ? (
             <ChevronUp className="size-3.5" />
           ) : (

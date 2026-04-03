@@ -1,10 +1,10 @@
 [package]
-name = "agent-nexus-bridge"
+name = "dimweave-bridge"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "agent-nexus-bridge"
+name = "dimweave-bridge"
 path = "src/main.rs"
 
 [dependencies]

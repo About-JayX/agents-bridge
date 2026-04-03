@@ -111,7 +111,7 @@ async fn launch_claude_sdk(
     let claude_bin = crate::claude_cli::resolve_claude_bin()?;
     let session_id = uuid::Uuid::new_v4().to_string();
     let launch_nonce = uuid::Uuid::new_v4().to_string();
-    let mcp_config = crate::mcp::build_agentnexus_mcp_config(cwd, role_id)?;
+    let mcp_config = crate::mcp::build_dimweave_mcp_config(cwd, role_id)?;
 
     let opts = claude_sdk::process::ClaudeLaunchOpts {
         claude_bin,

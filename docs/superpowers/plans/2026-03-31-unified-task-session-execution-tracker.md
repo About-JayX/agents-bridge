@@ -216,7 +216,7 @@
    - `UPDATE.md`
    - `docs/agents/codex-chain.md`
    - `docs/agents/claude-chain.md`
-   - `docs/agentnexus-audit-summary.md`
+   - `docs/dimweave-audit-summary.md`
 4. 已同步 execution tracker 到最新实现状态
 
 **仍待后续阶段完成：**
