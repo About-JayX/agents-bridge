@@ -13,10 +13,24 @@ import { hasMessagePayload } from "@/lib/message-payload";
 import { TargetPicker, type Target } from "./TargetPicker";
 import { AttachmentStrip } from "./AttachmentStrip";
 import { createAsyncUnlistenCleanup } from "./async-unlisten";
+import {
+  REPLY_INPUT_HEIGHT_STORAGE_KEY,
+  REPLY_INPUT_MIN_ROWS,
+  getReplyInputHeightBounds,
+  normalizeReplyInputMinHeight,
+  resolveDraggedReplyInputMinHeight,
+  resolveReplyInputHeight,
+  type ReplyInputHeightBounds,
+} from "./height";
 import { useAttachments } from "./use-attachments";
 
-const MIN_ROWS = 2;
-const MAX_ROWS = 8;
+function measureBaseTextareaHeight(el: HTMLTextAreaElement): number {
+  const style = getComputedStyle(el);
+  const lineHeight = parseFloat(style.lineHeight) || 20;
+  const paddingTop = parseFloat(style.paddingTop) || 0;
+  const paddingBottom = parseFloat(style.paddingBottom) || 0;
+  return REPLY_INPUT_MIN_ROWS * lineHeight + paddingTop + paddingBottom;
+}
 
 export function ReplyInput() {
   const connected = useBridgeStore(selectAnyAgentConnected);
@@ -28,6 +42,9 @@ export function ReplyInput() {
   const [dragOver, setDragOver] = useState(false);
   const composingRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const minHeightRef = useRef<number | null>(null);
+  const baseMinHeightRef = useRef<number | null>(null);
+  const dragFrameRef = useRef(0);
   const activeTask = useTaskStore(selectActiveTask);
   const reviewBadge = getReviewBadge(activeTask?.reviewStatus);
   const { attachments, addFiles, removeAt, clear } = useAttachments();
@@ -66,32 +83,85 @@ export function ReplyInput() {
     [handleSend, sendOnEnter],
   );
 
-  const autosize = useCallback(() => {
+  const getHeightBounds = useCallback((): ReplyInputHeightBounds | null => {
     const el = textareaRef.current;
-    if (!el) return;
-    const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 20;
-    const pt = parseFloat(getComputedStyle(el).paddingTop) || 0;
-    const pb = parseFloat(getComputedStyle(el).paddingBottom) || 0;
-    const minH = MIN_ROWS * lineHeight + pt + pb;
-    const maxH = MAX_ROWS * lineHeight + pt + pb;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(Math.max(el.scrollHeight, minH), maxH)}px`;
+    if (!el) return null;
+    if (baseMinHeightRef.current == null) {
+      baseMinHeightRef.current = measureBaseTextareaHeight(el);
+    }
+    return getReplyInputHeightBounds(baseMinHeightRef.current, window.innerHeight);
   }, []);
+
+  const persistMinHeight = useCallback((nextMinHeight: number) => {
+    minHeightRef.current = nextMinHeight;
+    try {
+      localStorage.setItem(REPLY_INPUT_HEIGHT_STORAGE_KEY, String(nextMinHeight));
+    } catch {}
+  }, []);
+
+  const syncTextareaHeight = useCallback(
+    (requestedMinHeight?: number) => {
+      const el = textareaRef.current;
+      const bounds = getHeightBounds();
+      if (!el || !bounds) return null;
+      const nextMinHeight = Math.min(
+        Math.max(requestedMinHeight ?? minHeightRef.current ?? bounds.min, bounds.min),
+        bounds.max,
+      );
+      el.style.height = "auto";
+      const { height, overflowY } = resolveReplyInputHeight(
+        el.scrollHeight,
+        nextMinHeight,
+        bounds,
+      );
+      el.style.minHeight = `${bounds.min}px`;
+      el.style.height = `${height}px`;
+      el.style.overflowY = overflowY;
+      return { bounds, nextMinHeight };
+    },
+    [getHeightBounds],
+  );
+
   useEffect(() => {
-    autosize();
-  }, [draft, autosize]);
+    const bounds = getHeightBounds();
+    if (!bounds) return;
+    const persistedMinHeight = normalizeReplyInputMinHeight(
+      (() => {
+        try {
+          return localStorage.getItem(REPLY_INPUT_HEIGHT_STORAGE_KEY);
+        } catch {
+          return null;
+        }
+      })(),
+      bounds,
+    );
+    minHeightRef.current = persistedMinHeight;
+    syncTextareaHeight(persistedMinHeight);
+  }, [getHeightBounds, syncTextareaHeight]);
+
+  useEffect(() => {
+    syncTextareaHeight();
+  }, [draft, syncTextareaHeight]);
+
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const debounced = () => {
       clearTimeout(timer);
-      timer = setTimeout(autosize, 100);
+      timer = setTimeout(() => {
+        baseMinHeightRef.current = null;
+        const next = syncTextareaHeight();
+        if (!next) return;
+        if (next.nextMinHeight !== minHeightRef.current) {
+          persistMinHeight(next.nextMinHeight);
+        }
+      }, 100);
     };
     window.addEventListener("resize", debounced);
     return () => {
       clearTimeout(timer);
       window.removeEventListener("resize", debounced);
     };
-  }, [autosize]);
+  }, [persistMinHeight, syncTextareaHeight]);
 
   const handlePickFiles = useCallback(async () => {
     const paths = await invoke<string[] | null>("pick_files");
@@ -113,6 +183,73 @@ export function ReplyInput() {
     );
   }, []);
 
+  const handleResizePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      const bounds = getHeightBounds();
+      if (!bounds) return;
+      const startMinHeight = minHeightRef.current ?? bounds.min;
+      const startY = event.clientY;
+
+      const flushDragHeight = (nextMinHeight: number) => {
+        if (dragFrameRef.current) return;
+        dragFrameRef.current = requestAnimationFrame(() => {
+          dragFrameRef.current = 0;
+          syncTextareaHeight(nextMinHeight);
+        });
+      };
+
+      const finish = (nextMinHeight: number) => {
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        document.removeEventListener("pointercancel", onCancel);
+        document.body.style.userSelect = "";
+        if (dragFrameRef.current) {
+          cancelAnimationFrame(dragFrameRef.current);
+          dragFrameRef.current = 0;
+        }
+        const next = syncTextareaHeight(nextMinHeight);
+        if (!next) return;
+        persistMinHeight(next.nextMinHeight);
+      };
+
+      const onMove = (nextEvent: PointerEvent) => {
+        const nextBounds = getHeightBounds();
+        if (!nextBounds) return;
+        const nextMinHeight = resolveDraggedReplyInputMinHeight(
+          startMinHeight,
+          startY,
+          nextEvent.clientY,
+          nextBounds,
+        );
+        flushDragHeight(nextMinHeight);
+      };
+
+      const onUp = (nextEvent: PointerEvent) => {
+        const nextBounds = getHeightBounds();
+        if (!nextBounds) return finish(startMinHeight);
+        finish(
+          resolveDraggedReplyInputMinHeight(
+            startMinHeight,
+            startY,
+            nextEvent.clientY,
+            nextBounds,
+          ),
+        );
+      };
+
+      const onCancel = () => {
+        finish(startMinHeight);
+      };
+
+      document.body.style.userSelect = "none";
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      document.addEventListener("pointercancel", onCancel);
+    },
+    [getHeightBounds, persistMinHeight, syncTextareaHeight],
+  );
+
   const isMac =
     typeof navigator !== "undefined" &&
     /Mac|iPhone|iPad/.test(navigator.userAgent);
@@ -120,8 +257,20 @@ export function ReplyInput() {
   return (
     <div className="relative px-4 py-3">
       <div
-        className={`rounded-xl border bg-card/85 transition-colors focus-within:border-primary/35 focus-within:ring-1 focus-within:ring-primary/15 ${dragOver ? "border-primary/50 ring-2 ring-primary/20" : "border-border/50"}`}
+        className={`relative rounded-xl border bg-card/85 transition-colors focus-within:border-primary/35 focus-within:ring-1 focus-within:ring-primary/15 ${dragOver ? "border-primary/50 ring-2 ring-primary/20" : "border-border/50"}`}
       >
+        <div
+          data-reply-input-resize-handle="true"
+          onPointerDown={handleResizePointerDown}
+          className="group absolute left-1/2 top-0 z-10 flex h-3 w-14 -translate-x-1/2 touch-none items-start justify-center pt-1"
+          title="Resize input"
+          aria-label="Resize input"
+        >
+          <span
+            data-reply-input-resize-grip="true"
+            className="h-1 w-8 rounded-full bg-border/70 transition-colors group-hover:bg-muted-foreground/35 group-active:bg-primary/35"
+          />
+        </div>
         <textarea
           ref={textareaRef}
           className="block w-full min-h-[44px] resize-none bg-transparent px-5 py-3 text-[13px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
@@ -135,7 +284,7 @@ export function ReplyInput() {
             composingRef.current = false;
           }}
           placeholder="Describe the next step, ask for a review, or route a task to an agent."
-          rows={MIN_ROWS}
+          rows={REPLY_INPUT_MIN_ROWS}
         />
 
         <AttachmentStrip attachments={attachments} onRemove={removeAt} />
