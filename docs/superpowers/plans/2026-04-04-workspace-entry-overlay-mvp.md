@@ -99,6 +99,7 @@
 | 2026-04-04 | `9bf22390` | Verification polish | Added overlay branding, explicit `Continue` enablement coverage, fresh-task regression coverage, and synced the plan's final verification state. |
 | 2026-04-04 | `a5fd9b5a` | Agent panel UI cleanup | Removed duplicate project-path rows from Claude/Codex advanced panels now that workspace ownership is shell-level. |
 | 2026-04-04 | `e65832bb` | Recent selection styling | Restored visible selected-state styling for recent workspace entries in the startup overlay and top-right switcher. |
+| 2026-04-04 | `6b46f533` | Timeline documentation | Recorded the follow-up commits, runtime behavior notes, and final verification clarifications directly in this plan for future traceability. |
 
 ### Task 1: Workspace Selection State Helpers
 
