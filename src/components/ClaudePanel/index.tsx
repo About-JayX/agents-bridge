@@ -264,11 +264,10 @@ export function ClaudePanel({ connected, providerSession }: ClaudePanelProps) {
           <ClaudeConfigRows
             model={model}
             effort={effort}
-            cwd={effectiveCwd}
-          disabled={connected || connecting || disconnecting}
-          onModelChange={setModel}
-          onEffortChange={setEffort}
-        />
+            disabled={connected || connecting || disconnecting}
+            onModelChange={setModel}
+            onEffortChange={setEffort}
+          />
 
           <div className="mt-2 flex items-center justify-between">
             <span className="text-[10px] text-muted-foreground">History</span>

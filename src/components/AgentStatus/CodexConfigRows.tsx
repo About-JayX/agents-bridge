@@ -1,4 +1,3 @@
-import { shortenPath } from "@/lib/utils";
 import { CyberSelect } from "@/components/ui/cyber-select";
 
 interface CodexConfigRowsProps {
@@ -12,7 +11,6 @@ interface CodexConfigRowsProps {
   selectedReasoning: string;
   setSelectedReasoning: (v: string) => void;
   reasoningSelectOptions: { value: string; label: string }[];
-  cwd: string;
 }
 
 export function CodexConfigRows({
@@ -26,7 +24,6 @@ export function CodexConfigRows({
   selectedReasoning,
   setSelectedReasoning,
   reasoningSelectOptions,
-  cwd,
 }: CodexConfigRowsProps) {
   return (
     <div className="mt-2 space-y-1.5">
@@ -72,17 +69,6 @@ export function CodexConfigRows({
           />
         </div>
       )}
-
-      {/* Project / CWD */}
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] text-muted-foreground">Project</span>
-        <span
-          className="max-w-44 truncate font-mono text-[11px] text-secondary-foreground"
-          title={cwd || "Workspace required"}
-        >
-          {cwd ? shortenPath(cwd) : "Workspace required"}
-        </span>
-      </div>
     </div>
   );
 }

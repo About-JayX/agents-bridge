@@ -4,24 +4,23 @@ import { ClaudeConfigRows } from "../src/components/ClaudePanel/ClaudeConfigRows
 import { CodexConfigRows } from "../src/components/AgentStatus/CodexConfigRows";
 
 describe("agent workspace config rows", () => {
-  test("claude configuration rows no longer render Select project", () => {
+  test("claude configuration rows no longer render project labels or paths", () => {
     const html = renderToStaticMarkup(
       <ClaudeConfigRows
         model=""
         effort=""
-        cwd="/repo"
         disabled
         onModelChange={() => {}}
         onEffortChange={() => {}}
       />,
     );
 
-    expect(html).not.toContain('title="/repo"><svg');
+    expect(html).not.toContain("Project");
     expect(html).not.toContain("Select project...");
-    expect(html).toContain("/repo");
+    expect(html).not.toContain("/repo");
   });
 
-  test("codex configuration rows show a read-only workspace label", () => {
+  test("codex configuration rows no longer render project labels or paths", () => {
     const html = renderToStaticMarkup(
       <CodexConfigRows
         locked={false}
@@ -34,12 +33,11 @@ describe("agent workspace config rows", () => {
         selectedReasoning=""
         setSelectedReasoning={() => {}}
         reasoningSelectOptions={[]}
-        cwd="/repo"
       />,
     );
 
-    expect(html).not.toContain('title="/repo"><svg');
+    expect(html).not.toContain("Project");
     expect(html).not.toContain("Select project...");
-    expect(html).toContain("/repo");
+    expect(html).not.toContain("/repo");
   });
 });

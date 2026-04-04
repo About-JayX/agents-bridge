@@ -1,4 +1,3 @@
-import { shortenPath } from "@/lib/utils";
 import { CyberSelect } from "@/components/ui/cyber-select";
 
 const MODEL_OPTIONS = [
@@ -21,7 +20,6 @@ const EFFORT_OPTIONS = [
 interface ClaudeConfigRowsProps {
   model: string;
   effort: string;
-  cwd: string;
   disabled: boolean;
   onModelChange: (v: string) => void;
   onEffortChange: (v: string) => void;
@@ -30,7 +28,6 @@ interface ClaudeConfigRowsProps {
 export function ClaudeConfigRows({
   model,
   effort,
-  cwd,
   disabled,
   onModelChange,
   onEffortChange,
@@ -55,16 +52,6 @@ export function ClaudeConfigRows({
           onChange={onEffortChange}
           disabled={disabled}
         />
-      </div>
-
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] text-muted-foreground">Project</span>
-        <span
-          className="max-w-44 truncate font-mono text-[11px] text-secondary-foreground"
-          title={cwd || "Workspace required"}
-        >
-          {cwd ? shortenPath(cwd) : "Workspace required"}
-        </span>
       </div>
     </div>
   );

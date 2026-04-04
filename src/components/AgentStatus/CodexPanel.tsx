@@ -334,7 +334,6 @@ export function CodexPanel({
             selectedReasoning={selectedReasoning}
             setSelectedReasoning={setSelectedReasoning}
             reasoningSelectOptions={reasoningSelectOptions}
-            cwd={effectiveCwd}
           />
 
           <div className="mt-2 flex items-center justify-between">
