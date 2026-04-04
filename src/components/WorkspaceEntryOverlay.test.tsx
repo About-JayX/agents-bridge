@@ -45,6 +45,7 @@ describe("WorkspaceEntryOverlay", () => {
     expect(html).toContain(">Dimweave<");
     expect(html).toContain("/repo-a");
     expect(html).toContain("data-workspace-selected=\"true\"");
+    expect(html).toContain("border-primary/35 bg-primary/8");
     expect(html).not.toContain("disabled=\"\"");
   });
 

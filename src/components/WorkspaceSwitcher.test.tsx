@@ -40,5 +40,6 @@ describe("WorkspaceSwitcher", () => {
     expect(html).toContain("~/repo-a");
     expect(html).toContain("/repo-b");
     expect(html).toContain('data-workspace-selected="true"');
+    expect(html).toContain("border-primary/35 bg-primary/8");
   });
 });

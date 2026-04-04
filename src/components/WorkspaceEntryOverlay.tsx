@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { shortenPath } from "@/lib/utils";
+import { cn, shortenPath } from "@/lib/utils";
 import type { WorkspaceCandidate } from "./workspace-entry-state";
 
 interface WorkspaceEntryOverlayProps {
@@ -76,7 +76,12 @@ export function WorkspaceEntryOverlay({
                       key={workspace}
                       type="button"
                       data-workspace-selected={isSelected || undefined}
-                      className="flex w-full items-center justify-between rounded-2xl border border-border/50 bg-background/60 px-4 py-3 text-left transition-colors hover:border-border"
+                      className={cn(
+                        "flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition-colors",
+                        isSelected
+                          ? "border-primary/35 bg-primary/8"
+                          : "border-border/50 bg-background/60 hover:border-border",
+                      )}
                       onClick={() =>
                         onSelectRecent({ type: "recent", path: workspace })
                       }
