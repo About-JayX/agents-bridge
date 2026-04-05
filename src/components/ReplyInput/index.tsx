@@ -3,7 +3,10 @@ import { Button } from "@/components/ui/button";
 import { useBridgeStore } from "@/stores/bridge-store";
 import { selectAnyAgentConnected } from "@/stores/bridge-store/selectors";
 import { useTaskStore } from "@/stores/task-store";
-import { selectActiveTask } from "@/stores/task-store/selectors";
+import {
+  selectActiveTask,
+  selectActiveTaskSessions,
+} from "@/stores/task-store/selectors";
 import { ReviewGateBadge } from "@/components/TaskPanel/ReviewGateBadge";
 import { getReviewBadge } from "@/components/TaskPanel/view-model";
 import { Send, Paperclip } from "lucide-react";
@@ -22,6 +25,7 @@ import {
   resolveReplyInputHeight,
   type ReplyInputHeightBounds,
 } from "./height";
+import { getTaskSessionWarning } from "./task-session-guard";
 import { useAttachments } from "./use-attachments";
 
 function measureBaseTextareaHeight(el: HTMLTextAreaElement): number {
@@ -34,6 +38,9 @@ function measureBaseTextareaHeight(el: HTMLTextAreaElement): number {
 
 export function ReplyInput() {
   const connected = useBridgeStore(selectAnyAgentConnected);
+  const agents = useBridgeStore((s) => s.agents);
+  const claudeRole = useBridgeStore((s) => s.claudeRole);
+  const codexRole = useBridgeStore((s) => s.codexRole);
   const draft = useBridgeStore((s) => s.draft);
   const setDraft = useBridgeStore((s) => s.setDraft);
   const sendToCodex = useBridgeStore((s) => s.sendToCodex);
@@ -46,12 +53,23 @@ export function ReplyInput() {
   const baseMinHeightRef = useRef<number | null>(null);
   const dragFrameRef = useRef(0);
   const activeTask = useTaskStore(selectActiveTask);
+  const activeTaskSessions = useTaskStore(selectActiveTaskSessions);
   const reviewBadge = getReviewBadge(activeTask?.reviewStatus);
   const { attachments, addFiles, removeAt, clear } = useAttachments();
+  const taskSessionWarning = getTaskSessionWarning({
+    target,
+    activeTask,
+    sessions: activeTaskSessions,
+    agents,
+    claudeRole,
+    codexRole,
+  });
+  const canSend =
+    connected && !taskSessionWarning && hasMessagePayload(draft, attachments);
 
   const handleSend = useCallback(() => {
     const trimmed = draft.trim();
-    if (!hasMessagePayload(trimmed, attachments) || !connected) return;
+    if (!hasMessagePayload(trimmed, attachments) || !canSend) return;
     sendToCodex(
       trimmed,
       target,
@@ -59,7 +77,7 @@ export function ReplyInput() {
     );
     setDraft("");
     clear();
-  }, [draft, connected, sendToCodex, setDraft, target, attachments, clear]);
+  }, [attachments, canSend, clear, draft, sendToCodex, setDraft, target]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -311,7 +329,11 @@ export function ReplyInput() {
             {activeTask && reviewBadge && (
               <ReviewGateBadge badge={reviewBadge} />
             )}
-            {!connected && (
+            {taskSessionWarning ? (
+              <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-600">
+                {taskSessionWarning}
+              </span>
+            ) : !connected && (
               <span className="rounded-full border border-destructive/25 bg-destructive/10 px-2 py-0.5 text-[10px] text-destructive">
                 Disconnected
               </span>
@@ -331,7 +353,7 @@ export function ReplyInput() {
             </button>
             <Button
               size="sm"
-              disabled={!connected || !hasMessagePayload(draft, attachments)}
+              disabled={!canSend}
               onClick={handleSend}
               className="h-7 gap-1.5 rounded-full px-3 text-[11px]"
             >

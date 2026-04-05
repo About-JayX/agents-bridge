@@ -1,5 +1,37 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { getTaskSessionWarning } from "./task-session-guard";
+
+function makeTask(id: string, workspaceRoot: string) {
+  return {
+    taskId: id,
+    workspaceRoot,
+    title: `Task ${id}`,
+    status: "draft" as const,
+    reviewStatus: null,
+    leadSessionId: `${id}-lead`,
+    currentCoderSessionId: null,
+    createdAt: 100,
+    updatedAt: 200,
+  };
+}
+
+function makeClaudeLeadSession(taskId: string, externalSessionId: string, cwd: string) {
+  return {
+    sessionId: `${taskId}-lead`,
+    taskId,
+    parentSessionId: null,
+    provider: "claude" as const,
+    role: "lead" as const,
+    externalSessionId,
+    transcriptPath: null,
+    status: "active" as const,
+    cwd,
+    title: "Lead",
+    createdAt: 100,
+    updatedAt: 200,
+  };
+}
 
 function installTauriStub() {
   let callbackId = 0;
@@ -48,5 +80,69 @@ describe("ReplyInput", () => {
     expect(html).toContain("w-14");
     expect(html).not.toContain("hover:bg-primary/25");
     expect(html).not.toContain("cursor-row-resize");
+  });
+
+  test("returns a reconnect warning when the connected agent belongs to another task session", () => {
+    const task = makeTask("task-2", "/repo-b");
+    const session = makeClaudeLeadSession("task-2", "claude_current", "/repo-b");
+    expect(
+      getTaskSessionWarning({
+        target: "auto",
+        activeTask: task,
+        sessions: [session],
+        agents: {
+          claude: {
+            name: "claude",
+            displayName: "Claude Code",
+            status: "connected",
+            providerSession: {
+              provider: "claude",
+              externalSessionId: "claude_stale",
+              cwd: "/repo-a",
+              connectionMode: "resumed",
+            },
+          },
+          codex: {
+            name: "codex",
+            displayName: "Codex",
+            status: "disconnected",
+          },
+        },
+        claudeRole: "lead",
+        codexRole: "coder",
+      }),
+    ).toBe("Reconnect to this task");
+  });
+
+  test("returns no warning when the connected agent matches the active task session", () => {
+    const task = makeTask("task-2", "/repo-b");
+    const session = makeClaudeLeadSession("task-2", "claude_current", "/repo-b");
+    expect(
+      getTaskSessionWarning({
+        target: "auto",
+        activeTask: task,
+        sessions: [session],
+        agents: {
+          claude: {
+            name: "claude",
+            displayName: "Claude Code",
+            status: "connected",
+            providerSession: {
+              provider: "claude",
+              externalSessionId: "claude_current",
+              cwd: "/repo-b",
+              connectionMode: "resumed",
+            },
+          },
+          codex: {
+            name: "codex",
+            displayName: "Codex",
+            status: "disconnected",
+          },
+        },
+        claudeRole: "lead",
+        codexRole: "coder",
+      }),
+    ).toBeNull();
   });
 });

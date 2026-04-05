@@ -1,5 +1,9 @@
 use super::*;
-use crate::daemon::{state::DaemonState, types::BridgeMessage};
+use crate::daemon::{
+    state::DaemonState,
+    task_graph::types::{CreateSessionParams, Provider, SessionRole},
+    types::{BridgeMessage, ProviderConnectionMode, ProviderConnectionState},
+};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -162,6 +166,29 @@ fn auto_prefers_active_task_role_over_fanout() {
     let mut s = DaemonState::new();
     let task = s.task_graph.create_task("/ws", "Task");
     s.set_active_task(Some(task.task_id.clone()));
+    let lead = s.task_graph.create_session(CreateSessionParams {
+        task_id: &task.task_id,
+        parent_session_id: None,
+        provider: Provider::Claude,
+        role: SessionRole::Lead,
+        cwd: "/ws",
+        title: "Lead",
+    });
+    s.task_graph.set_lead_session(&task.task_id, &lead.session_id);
+    s.task_graph
+        .set_external_session_id(&lead.session_id, "claude_current");
+    let coder = s.task_graph.create_session(CreateSessionParams {
+        task_id: &task.task_id,
+        parent_session_id: None,
+        provider: Provider::Codex,
+        role: SessionRole::Coder,
+        cwd: "/ws",
+        title: "Coder",
+    });
+    s.task_graph
+        .set_coder_session(&task.task_id, &coder.session_id);
+    s.task_graph
+        .set_external_session_id(&coder.session_id, "codex_current");
     s.task_graph.update_task_status(
         &task.task_id,
         crate::daemon::task_graph::types::TaskStatus::Reviewing,
@@ -173,6 +200,24 @@ fn auto_prefers_active_task_role_over_fanout() {
         crate::daemon::state::AgentSender::new(claude_tx, 0),
     );
     s.codex_inject_tx = Some(codex_tx);
+    s.set_provider_connection(
+        "claude",
+        ProviderConnectionState {
+            provider: Provider::Claude,
+            external_session_id: "claude_current".into(),
+            cwd: "/ws".into(),
+            connection_mode: ProviderConnectionMode::Resumed,
+        },
+    );
+    s.set_provider_connection(
+        "codex",
+        ProviderConnectionState {
+            provider: Provider::Codex,
+            external_session_id: "codex_current".into(),
+            cwd: "/ws".into(),
+            connection_mode: ProviderConnectionMode::Resumed,
+        },
+    );
 
     assert_eq!(resolve_user_targets(&s, "auto"), vec!["lead"]);
 
