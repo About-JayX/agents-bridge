@@ -1,10 +1,23 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[allow(dead_code)]
 mod claude_cli;
 mod codex;
+mod commands_artifact;
+mod commands_history;
 mod commands;
 mod commands_task;
+// TODO(audit-wave-2): pay down the pre-existing daemon lint debt and remove
+// these daemon-scoped allow attributes once the legacy warnings are fixed.
+#[allow(
+    dead_code,
+    clippy::items_after_test_module,
+    clippy::large_enum_variant,
+    clippy::needless_option_as_deref,
+    clippy::too_many_arguments
+)]
 mod daemon;
+#[allow(dead_code)]
 mod mcp;
 
 use codex::auth::CodexProfile;
@@ -80,6 +93,7 @@ async fn pick_files(app: tauri::AppHandle) -> Result<Option<Vec<String>>, String
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 fn main() {
+    let _ = tracing_subscriber::fmt::try_init();
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -115,6 +129,7 @@ fn main() {
             pick_files,
             mcp::register_mcp,
             mcp::check_mcp_registered,
+            commands_artifact::daemon_get_artifact_detail,
             commands::oauth::codex_login,
             commands::oauth::codex_cancel_login,
             commands::oauth::codex_logout,
@@ -132,10 +147,10 @@ fn main() {
             commands_task::daemon_get_task_snapshot,
             commands_task::daemon_approve_review,
             commands_task::daemon_list_session_tree,
-            commands_task::daemon_list_history,
-            commands_task::daemon_list_provider_history,
-            commands_task::daemon_resume_session,
-            commands_task::daemon_attach_provider_history,
+            commands_history::daemon_list_history,
+            commands_history::daemon_list_provider_history,
+            commands_history::daemon_resume_session,
+            commands_history::daemon_attach_provider_history,
             commands::stop_claude,
             commands::daemon_launch_claude_sdk,
             commands::daemon_stop_claude_sdk,

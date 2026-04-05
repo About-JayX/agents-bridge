@@ -91,6 +91,8 @@ impl DaemonState {
             return true;
         }
 
+        // Legacy/system messages without stamped task context still rely on
+        // plain role routing until every caller carries task/session ownership.
         if message.session_id.is_none() && message.task_id.is_none() {
             return true;
         }

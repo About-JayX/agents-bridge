@@ -116,9 +116,7 @@ fn build_user_message(
 mod tests {
     use super::*;
     use crate::daemon::state::AgentSender;
-    use crate::daemon::task_graph::types::{
-        CreateSessionParams, Provider, SessionRole,
-    };
+    use crate::daemon::task_graph::types::{CreateSessionParams, Provider, SessionRole};
     use crate::daemon::types::{ProviderConnectionMode, ProviderConnectionState, ToAgent};
 
     fn file_attachment() -> Attachment {
@@ -132,7 +130,10 @@ mod tests {
 
     #[test]
     fn attachments_only_user_input_counts_as_payload() {
-        assert!(has_user_input_payload("   \n\t", &Some(vec![file_attachment()])));
+        assert!(has_user_input_payload(
+            "   \n\t",
+            &Some(vec![file_attachment()])
+        ));
         assert!(!has_user_input_payload("   \n\t", &None));
         assert!(!has_user_input_payload("   \n\t", &Some(vec![])));
     }
@@ -150,7 +151,9 @@ mod tests {
             cwd: "/repo-b",
             title: "Lead",
         });
-        state.task_graph.set_lead_session(&task.task_id, &lead.session_id);
+        state
+            .task_graph
+            .set_lead_session(&task.task_id, &lead.session_id);
         state
             .task_graph
             .set_external_session_id(&lead.session_id, "claude_current");

@@ -146,7 +146,8 @@ async fn stale_online_agent_for_same_role_is_buffered_when_task_session_does_not
             cwd: "/repo-b",
             title: "Lead",
         });
-        s.task_graph.set_lead_session(&task.task_id, &lead.session_id);
+        s.task_graph
+            .set_lead_session(&task.task_id, &lead.session_id);
         s.task_graph
             .set_external_session_id(&lead.session_id, "claude_current");
         s.claude_role = "lead".into();

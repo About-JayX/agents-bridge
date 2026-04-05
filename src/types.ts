@@ -1,11 +1,18 @@
 export type MessageStatus = "in_progress" | "done" | "error";
 export type ProviderConnectionMode = "new" | "resumed";
+export type RuntimeHealthLevel = "warning" | "error";
 
 export interface ProviderSessionInfo {
   provider: "claude" | "codex";
   externalSessionId: string;
   cwd: string;
   connectionMode: ProviderConnectionMode;
+}
+
+export interface RuntimeHealthInfo {
+  level: RuntimeHealthLevel;
+  source: string;
+  message: string;
 }
 
 export interface Attachment {
@@ -39,6 +46,11 @@ export interface PermissionPrompt {
   description: string;
   inputPreview?: string;
   createdAt: number;
+}
+
+export interface PermissionResolutionError {
+  requestId: string;
+  message: string;
 }
 
 export type AgentStatus = "disconnected" | "connecting" | "connected" | "error";

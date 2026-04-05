@@ -13,7 +13,10 @@ import {
   toggleShellNavItem,
 } from "./components/shell-layout-state";
 import { useBridgeStore } from "./stores/bridge-store";
-import { selectMessages } from "./stores/bridge-store/selectors";
+import {
+  selectMessages,
+  selectPermissionPromptCount,
+} from "./stores/bridge-store/selectors";
 import { useTaskStore } from "./stores/task-store";
 import { selectActiveTask } from "./stores/task-store/selectors";
 import { filterRenderableChatMessages } from "./components/MessagePanel/view-model";
@@ -23,7 +26,6 @@ import { useCodexAccountStore } from "./stores/codex-account-store";
 import {
   continueIntoSelectedWorkspace,
   loadRecentWorkspaces,
-  pushRecentWorkspace,
   selectWorkspaceCandidate,
   type WorkspaceCandidate,
 } from "./components/workspace-entry-state";
@@ -49,7 +51,9 @@ export default function App() {
   const workspaceLabel = resolveShellWorkspaceLabel(activeTask?.workspaceRoot);
 
   const messages = useBridgeStore(selectMessages);
+  const approvalCount = useBridgeStore(selectPermissionPromptCount);
   const allTerminalLines = useBridgeStore((s) => s.terminalLines);
+  const runtimeHealth = useBridgeStore((s) => s.runtimeHealth);
   const clearMessages = useBridgeStore((s) => s.clearMessages);
   const chatMessages = useMemo(
     () => filterRenderableChatMessages(messages),
@@ -141,7 +145,9 @@ export default function App() {
       <div className="flex flex-1 min-h-0">
         <ShellContextBar
           activeItem={shellLayout.activeItem}
+          approvalCount={approvalCount}
           messageCount={chatMessages.length}
+          runtimeHealth={runtimeHealth}
           themeMode={theme.mode}
           radiusMode={radius.mode}
           onToggle={(item) =>
